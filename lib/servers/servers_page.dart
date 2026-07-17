@@ -179,52 +179,51 @@ class ServersPage extends ConsumerWidget {
     final servers = ref.watch(serversProvider);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: servers.when(
-          data: (items) => items.isEmpty
-              ? _EmptyServers(onAdd: () => _add(context, ref))
-              : ListView.separated(
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final server = items[index];
-                    return ContextMenuWidget(
-                      menuProvider: (_) => Menu(
-                        children: [
-                          MenuAction(
-                            title: 'Edit server',
-                            callback: () => _edit(context, ref, server),
-                          ),
-                          MenuSeparator(),
-                          MenuAction(
-                            title: 'Delete server',
-                            attributes: const MenuActionAttributes(
-                              destructive: true,
-                            ),
-                            callback: () => _delete(ref, server),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        leading: const Icon(Icons.dns_outlined),
-                        title: Text(server.name),
-                        subtitle: Text(
-                          '${server.username}@${server.host}:${server.port}',
+      body: servers.when(
+        data: (items) => items.isEmpty
+            ? _EmptyServers(onAdd: () => _add(context, ref))
+            : ListView.builder(
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final server = items[index];
+                  return ContextMenuWidget(
+                    menuProvider: (_) => Menu(
+                      children: [
+                        MenuAction(
+                          title: 'Edit server',
+                          callback: () => _edit(context, ref, server),
                         ),
-                        trailing: FilledButton.tonalIcon(
-                          onPressed: () => _connect(context, ref, server),
-                          icon: const Icon(Icons.link),
-                          label: const Text('Connect'),
+                        MenuSeparator(),
+                        MenuAction(
+                          title: 'Delete server',
+                          attributes: const MenuActionAttributes(
+                            destructive: true,
+                          ),
+                          callback: () => _delete(ref, server),
                         ),
+                      ],
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 24,
                       ),
-                    );
-                  },
-                ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) =>
-              Center(child: Text('Could not load servers: $error')),
-        ),
+                      leading: const Icon(Icons.dns_outlined),
+                      title: Text(server.name),
+                      subtitle: Text(
+                        '${server.username}@${server.host}:${server.port}',
+                      ),
+                      trailing: FilledButton.tonalIcon(
+                        onPressed: () => _connect(context, ref, server),
+                        icon: const Icon(Icons.link),
+                        label: const Text('Connect'),
+                      ),
+                    ),
+                  );
+                },
+              ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) =>
+            Center(child: Text('Could not load servers: $error')),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _add(context, ref),

@@ -31,7 +31,6 @@ class SshConnectionManager {
     }
     final shell = await client.shell(
       pty: const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 36),
-      environment: const {'TERM': 'xterm-256color'},
     );
     final terminal = Terminal(maxLines: 10000);
     terminal.onOutput = (data) =>

@@ -44,57 +44,53 @@ class _SessionsPageState extends ConsumerState<SessionsPage> {
     final sessions = ref.watch(sessionsProvider);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: sessions.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) =>
-              Center(child: Text('Could not load sessions: $error')),
-          data: (items) =>
-              items
-                  .where((item) => item.status == SessionStatus.connected)
-                  .isEmpty
-              ? const Center(
-                  child: Text(
-                    'Connect to a server to open an interactive terminal.',
-                  ),
-                )
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final terminalPane = _TerminalPane(
-                      terminal: _terminal,
-                      opening: _openingTerminal,
-                      error: _terminalError,
-                      title: items
-                          .where((item) => item.serverId == _selectedServerId)
-                          .firstOrNull
-                          ?.serverName,
-                    );
-                    final sessionList = _SessionList(
-                      sessions: items,
-                      selectedServerId: _selectedServerId,
-                      onOpen: _openTerminal,
-                      onDisconnect: (id) =>
-                          ref.read(connectionManagerProvider).disconnect(id),
-                    );
-                    return constraints.maxWidth > 768
-                        ? Row(
-                            children: [
-                              SizedBox(width: 260, child: sessionList),
-                              const VerticalDivider(width: 25),
-                              Expanded(child: terminalPane),
-                            ],
-                          )
-                        : Column(
-                            children: [
-                              SizedBox(height: 160, child: sessionList),
-                              const SizedBox(height: 12),
-                              Expanded(child: terminalPane),
-                            ],
-                          );
-                  },
+      body: sessions.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) =>
+            Center(child: Text('Could not load sessions: $error')),
+        data: (items) =>
+            items
+                .where((item) => item.status == SessionStatus.connected)
+                .isEmpty
+            ? const Center(
+                child: Text(
+                  'Connect to a server to open an interactive terminal.',
                 ),
-        ),
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final terminalPane = _TerminalPane(
+                    terminal: _terminal,
+                    opening: _openingTerminal,
+                    error: _terminalError,
+                    title: items
+                        .where((item) => item.serverId == _selectedServerId)
+                        .firstOrNull
+                        ?.serverName,
+                  );
+                  final sessionList = _SessionList(
+                    sessions: items,
+                    selectedServerId: _selectedServerId,
+                    onOpen: _openTerminal,
+                    onDisconnect: (id) =>
+                        ref.read(connectionManagerProvider).disconnect(id),
+                  );
+                  return constraints.maxWidth > 768
+                      ? Row(
+                          children: [
+                            SizedBox(width: 260, child: sessionList),
+                            Expanded(child: terminalPane),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            SizedBox(height: 160, child: sessionList),
+                            const SizedBox(height: 12),
+                            Expanded(child: terminalPane),
+                          ],
+                        );
+                },
+              ),
       ),
     );
   }
@@ -113,9 +109,8 @@ class _SessionList extends StatelessWidget {
   final ValueChanged<int> onDisconnect;
 
   @override
-  Widget build(BuildContext context) => ListView.separated(
+  Widget build(BuildContext context) => ListView.builder(
     itemCount: sessions.length,
-    separatorBuilder: (_, _) => const Divider(height: 1),
     itemBuilder: (context, index) {
       final session = sessions[index];
       final connected = session.status == SessionStatus.connected;
@@ -125,6 +120,7 @@ class _SessionList extends StatelessWidget {
         leading: Icon(connected ? Icons.terminal : Icons.link_off),
         title: Text(session.serverName),
         subtitle: Text(session.error ?? session.status.name),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
         trailing: connected
             ? IconButton(
                 tooltip: 'Disconnect',
@@ -163,11 +159,7 @@ class _TerminalPane extends StatelessWidget {
       );
     }
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF111315),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF111315)),
       child: Column(
         children: [
           Padding(
