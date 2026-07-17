@@ -3,28 +3,23 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../data/local/app_database.dart';
 import '../shared/presentation/maidkit_alert.dart';
-import 'server_models.dart';
+import 'server_connection_actions.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';
 
 Future<void> showTerminalCommandPalette(BuildContext context, WidgetRef ref) {
   final tabs = ref.read(terminalTabsProvider);
-  final sessions =
-      ref.read(sessionsProvider).asData?.value ?? const <SshSessionInfo>[];
+  final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
   final activeTab = tabs.tabs.isEmpty ? null : tabs.tabs[tabs.selectedIndex];
-  final connected = sessions
-      .where((session) => session.status == SessionStatus.connected)
-      .toList();
   return showMaidKitCommandPalette<void>(
     builder: (context, close) => _TerminalCommandPalette(
       activeTab: activeTab,
-      connectedSessions: connected,
+      servers: servers,
       onDismiss: () => close(null),
-      onOpen: (session) async {
-        await ref
-            .read(terminalTabsProvider.notifier)
-            .open(session.serverId, session.serverName);
+      onOpen: (server) async {
+        await openTerminalSession(context, ref, server);
         close(null);
       },
       onClose: activeTab == null
@@ -39,9 +34,6 @@ Future<void> showTerminalCommandPalette(BuildContext context, WidgetRef ref) {
               await ref
                   .read(terminalTabsProvider.notifier)
                   .closeForServer(activeTab.serverId);
-              await ref
-                  .read(connectionManagerProvider)
-                  .disconnect(activeTab.serverId);
               close(null);
             },
     ),
@@ -51,7 +43,7 @@ Future<void> showTerminalCommandPalette(BuildContext context, WidgetRef ref) {
 class _TerminalCommandPalette extends StatefulWidget {
   const _TerminalCommandPalette({
     required this.activeTab,
-    required this.connectedSessions,
+    required this.servers,
     required this.onDismiss,
     required this.onOpen,
     required this.onClose,
@@ -59,9 +51,9 @@ class _TerminalCommandPalette extends StatefulWidget {
   });
 
   final TerminalTab? activeTab;
-  final List<SshSessionInfo> connectedSessions;
+  final List<Server> servers;
   final VoidCallback onDismiss;
-  final Future<void> Function(SshSessionInfo session) onOpen;
+  final Future<void> Function(Server server) onOpen;
   final Future<void> Function()? onClose;
   final Future<void> Function()? onDisconnect;
 
@@ -93,17 +85,17 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
   Widget build(BuildContext context) {
     final query = _searchController.text.trim().toLowerCase();
     final activeTab = widget.activeTab;
-    final activeSession = activeTab == null
+    final activeServer = activeTab == null
         ? null
-        : widget.connectedSessions
-              .where((session) => session.serverId == activeTab.serverId)
+        : widget.servers
+              .where((server) => server.id == activeTab.serverId)
               .firstOrNull;
     final actions = [
-      if (activeSession != null)
+      if (activeServer != null)
         _TerminalAction(
           label: 'New terminal on ${activeTab!.serverName}',
           icon: Symbols.add,
-          onSelect: () => widget.onOpen(activeSession),
+          onSelect: () => widget.onOpen(activeServer),
         ),
       if (widget.onClose != null)
         _TerminalAction(
@@ -113,16 +105,16 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
         ),
       if (widget.onDisconnect != null)
         _TerminalAction(
-          label: 'Disconnect ${activeTab!.serverName}',
+          label: 'Close all terminals on ${activeTab!.serverName}',
           icon: Symbols.link_off,
           onSelect: widget.onDisconnect!,
         ),
-      for (final session in widget.connectedSessions)
-        if (session.serverId != activeTab?.serverId)
+      for (final server in widget.servers)
+        if (server.id != activeTab?.serverId)
           _TerminalAction(
-            label: 'New terminal on ${session.serverName}',
+            label: 'New terminal on ${server.name}',
             icon: Symbols.terminal,
-            onSelect: () => widget.onOpen(session),
+            onSelect: () => widget.onOpen(server),
           ),
     ].where((action) => action.label.toLowerCase().contains(query)).toList();
 

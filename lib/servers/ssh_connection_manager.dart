@@ -18,6 +18,10 @@ class SshConnectionManager {
 
   final TerminalSessionAdapterFactory Function() _terminalAdapterFactory;
   final ServerMetricsCollector _metricsCollector;
+
+  /// These clients are used exclusively for collecting server information.
+  /// Terminal shells keep their own clients so reconnecting statistics never
+  /// interrupts an interactive session.
   final _sessions = <int, SSHClient>{};
   final _terminals = <String, _TerminalConnection>{};
   final _controller = StreamController<List<SshSessionInfo>>.broadcast();
@@ -47,14 +51,27 @@ class SshConnectionManager {
     return run(client);
   }
 
-  Future<TerminalSessionHandle> openTerminal(int serverId) async {
-    final client = clientFor(serverId);
-    if (client == null || client.isClosed) {
-      throw StateError('Connect to this server before opening a terminal.');
-    }
-    final shell = await client.shell(
-      pty: const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 36),
+  Future<TerminalSessionHandle> openTerminal(
+    Server server,
+    ServerCredential credential,
+    HostKeyApproval approve, {
+    String? knownHostKeyFingerprint,
+  }) async {
+    final client = await _createClient(
+      server,
+      credential,
+      approve,
+      knownHostKeyFingerprint: knownHostKeyFingerprint,
     );
+    late SSHSession shell;
+    try {
+      shell = await client.shell(
+        pty: const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 36),
+      );
+    } catch (_) {
+      client.close();
+      rethrow;
+    }
     final terminal = _terminalAdapterFactory().create();
     final terminalId = 'terminal-${_nextTerminalId++}';
     final binding = TerminalSessionBinding(
@@ -70,7 +87,8 @@ class SshConnectionManager {
       ),
     );
     _terminals[terminalId] = _TerminalConnection(
-      serverId: serverId,
+      serverId: server.id,
+      client: client,
       shell: shell,
       binding: binding,
     );
@@ -93,6 +111,7 @@ class SshConnectionManager {
     if (terminal == null) return;
     await terminal.shell.stdin.close();
     await terminal.binding.close();
+    terminal.client.close();
   }
 
   Future<void> refreshServerInfo(Server server) async {
@@ -159,44 +178,13 @@ class SshConnectionManager {
     );
     String? serverAuthMethods;
     try {
-      final identities = credential.type == CredentialType.privateKey
-          ? SSHKeyPair.fromPem(credential.privateKey!, credential.keyPassphrase)
-          : null;
-      final client = SSHClient(
-        await SSHSocket.connect(server.host, server.port),
-        username: server.username,
-        identities: identities,
-        onPasswordRequest: credential.type == CredentialType.password
-            ? () => credential.password
-            : null,
-        onUserInfoRequest: credential.type == CredentialType.password
-            ? (request) => List<String>.filled(
-                request.prompts.length,
-                credential.password!,
-              )
-            : null,
-        onVerifyHostKey: (algorithm, fingerprint) {
-          final presented =
-              'SHA256:${base64Encode(fingerprint).replaceAll('=', '')}';
-          if (knownHostKeyFingerprint == presented) return true;
-          return approve(
-            HostKeyPrompt(
-              algorithm: algorithm,
-              fingerprint: presented,
-              replacesExisting: knownHostKeyFingerprint != null,
-            ),
-          );
-        },
-        printTrace: (message) {
-          final match = RegExp(
-            r'SSH_Message_Userauth_Failure\(methodsLeft: \[(.*?)\]',
-          ).firstMatch(message ?? '');
-          if (match != null) serverAuthMethods = match.group(1);
-        },
-        handshakeTimeout: const Duration(seconds: 15),
-        authTimeout: const Duration(seconds: 15),
+      final client = await _createClient(
+        server,
+        credential,
+        approve,
+        knownHostKeyFingerprint: knownHostKeyFingerprint,
+        onAuthMethods: (methods) => serverAuthMethods = methods,
       );
-      await client.authenticated;
       _sessions[server.id] = client;
       _set(_states[server.id]!.copyWith(status: SessionStatus.connected));
       unawaited(refreshServerInfo(server));
@@ -228,7 +216,6 @@ class SshConnectionManager {
   }
 
   Future<void> disconnect(int serverId) async {
-    await _closeTerminalsFor(serverId);
     final client = _sessions.remove(serverId);
     client?.close();
     final state = _states[serverId];
@@ -259,6 +246,54 @@ class SshConnectionManager {
       await closeTerminal(terminalId);
     }
   }
+
+  Future<SSHClient> _createClient(
+    Server server,
+    ServerCredential credential,
+    HostKeyApproval approve, {
+    String? knownHostKeyFingerprint,
+    void Function(String? methods)? onAuthMethods,
+  }) async {
+    final identities = credential.type == CredentialType.privateKey
+        ? SSHKeyPair.fromPem(credential.privateKey!, credential.keyPassphrase)
+        : null;
+    final client = SSHClient(
+      await SSHSocket.connect(server.host, server.port),
+      username: server.username,
+      identities: identities,
+      onPasswordRequest: credential.type == CredentialType.password
+          ? () => credential.password
+          : null,
+      onUserInfoRequest: credential.type == CredentialType.password
+          ? (request) => List<String>.filled(
+              request.prompts.length,
+              credential.password!,
+            )
+          : null,
+      onVerifyHostKey: (algorithm, fingerprint) {
+        final presented =
+            'SHA256:${base64Encode(fingerprint).replaceAll('=', '')}';
+        if (knownHostKeyFingerprint == presented) return true;
+        return approve(
+          HostKeyPrompt(
+            algorithm: algorithm,
+            fingerprint: presented,
+            replacesExisting: knownHostKeyFingerprint != null,
+          ),
+        );
+      },
+      printTrace: (message) {
+        final match = RegExp(
+          r'SSH_Message_Userauth_Failure\(methodsLeft: \[(.*?)\]',
+        ).firstMatch(message ?? '');
+        if (match != null) onAuthMethods?.call(match.group(1));
+      },
+      handshakeTimeout: const Duration(seconds: 15),
+      authTimeout: const Duration(seconds: 15),
+    );
+    await client.authenticated;
+    return client;
+  }
 }
 
 class TerminalSessionHandle {
@@ -276,11 +311,13 @@ class TerminalSessionHandle {
 class _TerminalConnection {
   const _TerminalConnection({
     required this.serverId,
+    required this.client,
     required this.shell,
     required this.binding,
   });
 
   final int serverId;
+  final SSHClient client;
   final SSHSession shell;
   final TerminalSessionBinding binding;
 }

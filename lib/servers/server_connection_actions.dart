@@ -9,14 +9,13 @@ import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';
 
-Future<bool> connectAndOpenTerminal(
+Future<bool> connectForStatistics(
   BuildContext context,
   WidgetRef ref,
   Server server,
 ) async {
   HostKeyPrompt? approvedHostKey;
   try {
-    await ref.read(terminalTabsProvider.notifier).closeForServer(server.id);
     final credential = await ref
         .read(serverRepositoryProvider)
         .credentialFor(server);
@@ -45,8 +44,31 @@ Future<bool> connectAndOpenTerminal(
     return false;
   }
 
+  return true;
+}
+
+Future<bool> openTerminalSession(
+  BuildContext context,
+  WidgetRef ref,
+  Server server,
+) async {
+  HostKeyPrompt? approvedHostKey;
   try {
-    await ref.read(terminalTabsProvider.notifier).open(server.id, server.name);
+    final credential = await ref
+        .read(serverRepositoryProvider)
+        .credentialFor(server);
+    await ref.read(terminalTabsProvider.notifier).open(server, credential, (
+      prompt,
+    ) async {
+      final approved = await _approveHostKey(context, prompt);
+      if (approved) approvedHostKey = prompt;
+      return approved;
+    }, knownHostKeyFingerprint: server.hostKeyFingerprint);
+    if (approvedHostKey != null) {
+      await ref
+          .read(serverRepositoryProvider)
+          .rememberHostKey(server.id, approvedHostKey!);
+    }
     return true;
   } catch (error) {
     if (context.mounted) {

@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../data/local/app_database.dart';
+import 'server_models.dart';
 import 'server_providers.dart';
+import 'ssh_connection_manager.dart';
 import 'terminal_session_adapter.dart';
 
 class TerminalTab {
@@ -44,14 +47,24 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
   @override
   TerminalTabsState build() => const TerminalTabsState();
 
-  Future<void> open(int serverId, String serverName) async {
+  Future<void> open(
+    Server server,
+    ServerCredential credential,
+    HostKeyApproval approve, {
+    String? knownHostKeyFingerprint,
+  }) async {
     final handle = await ref
         .read(connectionManagerProvider)
-        .openTerminal(serverId);
+        .openTerminal(
+          server,
+          credential,
+          approve,
+          knownHostKeyFingerprint: knownHostKeyFingerprint,
+        );
     final tab = TerminalTab(
       id: handle.id,
-      serverId: serverId,
-      serverName: serverName,
+      serverId: server.id,
+      serverName: server.name,
       terminal: handle.adapter,
     );
     state = TerminalTabsState(tabs: [...state.tabs, tab], selectedId: tab.id);

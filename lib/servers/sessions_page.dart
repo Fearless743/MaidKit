@@ -28,13 +28,10 @@ class SessionsPage extends ConsumerWidget {
           Expanded(
             child: tabs.tabs.isEmpty
                 ? _ConnectedServers(
-                    sessions: sessions,
                     servers: servers,
-                    onOpen: (session) => ref
-                        .read(terminalTabsProvider.notifier)
-                        .open(session.serverId, session.serverName),
-                    onConnect: (server) =>
-                        connectAndOpenTerminal(context, ref, server),
+                    tabs: tabs,
+                    onOpen: (server) =>
+                        openTerminalSession(context, ref, server),
                   )
                 : _TerminalTabs(tabs: tabs, sessions: sessions),
           ),
@@ -165,7 +162,7 @@ class _TerminalStatusBar extends StatelessWidget {
         ? null
         : stats!.memoryTotalKb! - stats.memoryAvailableKb!;
     final items = <String>[
-      session?.status == SessionStatus.connected ? 'Connected' : 'Disconnected',
+      'Connected',
       if (stats?.loadAverage != null)
         'Load ${stats!.loadAverage!.toStringAsFixed(2)}',
       if (usedMemory != null && stats?.memoryTotalKb != null)
@@ -206,78 +203,93 @@ String _formatUptime(Duration uptime) {
 
 class _ConnectedServers extends StatelessWidget {
   const _ConnectedServers({
-    required this.sessions,
     required this.servers,
+    required this.tabs,
     required this.onOpen,
-    required this.onConnect,
   });
 
-  final AsyncValue<List<SshSessionInfo>> sessions;
   final AsyncValue<List<Server>> servers;
-  final ValueChanged<SshSessionInfo> onOpen;
-  final Future<void> Function(Server server) onConnect;
+  final TerminalTabsState tabs;
+  final Future<void> Function(Server server) onOpen;
 
   @override
-  Widget build(BuildContext context) => sessions.when(
+  Widget build(BuildContext context) => servers.when(
     loading: () => const Center(child: CircularProgressIndicator()),
-    error: (error, _) => Center(child: Text('Could not load sessions: $error')),
-    data: (items) {
-      final connected = items
-          .where((item) => item.status == SessionStatus.connected)
-          .toList();
-      if (connected.isEmpty) {
-        return servers.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) =>
-              Center(child: Text('Could not load saved servers: $error')),
-          data: (servers) => servers.isEmpty
-              ? Center(
-                  child: FilledButton.icon(
-                    onPressed: () =>
-                        AutoTabsRouter.of(context).setActiveIndex(0),
-                    icon: const Icon(Symbols.add),
-                    label: const Text('Add server'),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: servers.length,
-                  itemBuilder: (context, index) {
-                    final server = servers[index];
-                    return ListTile(
-                      leading: const Icon(Symbols.dns),
-                      title: Text(server.name),
-                      subtitle: Text(
-                        '${server.username}@${server.host}:${server.port}',
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                      ),
-                      trailing: FilledButton.tonalIcon(
-                        onPressed: () => onConnect(server),
-                        icon: const Icon(Symbols.link),
-                        label: const Text('Connect'),
-                      ),
-                    );
-                  },
-                ),
-        );
-      }
-      return ListView.builder(
-        itemCount: connected.length,
-        itemBuilder: (context, index) {
-          final session = connected[index];
-          return ListTile(
-            leading: const Icon(Symbols.terminal),
-            title: Text(session.serverName),
-            subtitle: const Text('Connected'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            trailing: FilledButton.tonalIcon(
-              onPressed: () => onOpen(session),
+    error: (error, _) =>
+        Center(child: Text('Could not load saved servers: $error')),
+    data: (servers) => servers.isEmpty
+        ? Center(
+            child: FilledButton.icon(
+              onPressed: () => AutoTabsRouter.of(context).setActiveIndex(0),
               icon: const Icon(Symbols.add),
-              label: const Text('New terminal'),
+              label: const Text('Add server'),
             ),
-          );
-        },
+          )
+        : _TerminalServerGrid(servers: servers, tabs: tabs, onOpen: onOpen),
+  );
+}
+
+class _TerminalServerGrid extends StatelessWidget {
+  const _TerminalServerGrid({
+    required this.servers,
+    required this.tabs,
+    required this.onOpen,
+  });
+
+  final List<Server> servers;
+  final TerminalTabsState tabs;
+  final Future<void> Function(Server server) onOpen;
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+    padding: const EdgeInsets.all(24),
+    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 380,
+      mainAxisExtent: 180,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+    ),
+    itemCount: servers.length,
+    itemBuilder: (context, index) {
+      final server = servers[index];
+      final terminalCount = tabs.tabs
+          .where((tab) => tab.serverId == server.id)
+          .length;
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Symbols.terminal, size: 22),
+              const SizedBox(height: 12),
+              Text(server.name, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text(
+                '${server.username}@${server.host}:${server.port}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Text(
+                    '$terminalCount open',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const Spacer(),
+                  FilledButton.tonalIcon(
+                    onPressed: () => onOpen(server),
+                    icon: const Icon(Symbols.add),
+                    label: const Text('New terminal'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       );
     },
   );

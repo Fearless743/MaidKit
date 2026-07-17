@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:styled_widget/styled_widget.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
 import '../data/local/app_database.dart';
@@ -45,8 +46,7 @@ class ServersPage extends ConsumerWidget {
     WidgetRef ref,
     Server server,
   ) async {
-    final opened = await connectAndOpenTerminal(context, ref, server);
-    if (opened && context.mounted) AutoTabsRouter.of(context).setActiveIndex(1);
+    await connectForStatistics(context, ref, server);
   }
 
   Future<void> _edit(BuildContext context, WidgetRef ref, Server server) async {
@@ -205,66 +205,71 @@ class _ServerCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Symbols.dns,
-                  fill: connected ? 1 : 0,
-                  size: 22,
-                  color: connected
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        server.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${server.username}@${server.host}:${server.port}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Symbols.dns,
+                    fill: connected ? 1 : 0,
+                    size: 22,
+                    color: connected
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Refresh statistics',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: connected ? onRefresh : null,
-                  icon: const Icon(Symbols.refresh),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          server.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${server.username}@${server.host}:${server.port}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Refresh statistics',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: connected ? onRefresh : null,
+                    icon: const Icon(Symbols.refresh),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: connected
-                  ? _ServerStats(
-                      stats: session?.stats,
-                      systemInfo: session?.systemInfo,
-                      collectStats: server.collectStats,
-                      collectSystemInfo: server.collectSystemInfo,
-                    )
-                  : _DisconnectedStats(
-                      connecting: connecting,
-                      error: session?.error,
-                    ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: connected
+                    ? _ServerStats(
+                        stats: session?.stats,
+                        systemInfo: session?.systemInfo,
+                        collectStats: server.collectStats,
+                        collectSystemInfo: server.collectSystemInfo,
+                      )
+                    : _DisconnectedStats(
+                        connecting: connecting,
+                        error: session?.error,
+                      ),
+              ),
             ),
-            const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 10),
             Row(
@@ -290,7 +295,7 @@ class _ServerCard extends StatelessWidget {
                     ),
                   ),
               ],
-            ),
+            ).padding(horizontal: 16),
           ],
         ),
       ),
@@ -485,16 +490,15 @@ class _ServerStats extends StatelessWidget {
             style: textTheme.labelSmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
-          ),
+          ).padding(horizontal: 4),
         ],
         if (stats?.updatedAt != null) ...[
-          const SizedBox(height: 4),
           Text(
             'Updated ${_formatRelative(stats!.updatedAt)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelSmall?.copyWith(color: colorScheme.outline),
-          ),
+          ).padding(horizontal: 4),
         ],
       ],
     );
@@ -765,7 +769,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
   }
 
   Future<void> _pickKey() async {
-    final result = await FilePicker.platform.pickFiles(withData: true);
+    final result = await FilePicker.pickFiles(withData: true);
     final bytes = result?.files.single.bytes;
     if (bytes != null) {
       setState(() => _secret.text = String.fromCharCodes(bytes));

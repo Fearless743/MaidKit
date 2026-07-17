@@ -32,14 +32,14 @@ dependencies:
     sdk: flutter
 
   auto_route: ^11.1.0
-  cryptography: ^2.7.0
-  dartssh2: ^2.11.0
-  drift: ^2.32.0
+  cryptography: ^2.9.0
+  dartssh2: ^2.22.2
+  drift: ^2.34.2
   drift_flutter: ^0.3.1
-  file_picker: ^10.3.8
+  file_picker: ^11.0.2
   flutter_hooks: ^0.21.3+1
-  flutter_secure_storage: ^10.0.0
-  hooks_riverpod: ^3.3.1
+  flutter_secure_storage: ^10.3.1
+  hooks_riverpod: ^3.3.2
   island_ui_foundation:
     git:
       url: https://src.solsynth.dev/SoSYS/Solian.git
@@ -49,22 +49,23 @@ dependencies:
       url: https://github.com/boyan01/window_manager.git
       path: packages/window_manager
       ref: 6fae92d21b4c80ce1b8f71c1190d7970cf722bd4
-  local_auth: ^3.0.0
+  local_auth: ^3.0.2
   libghostty: ^0.0.11
   shared_preferences: ^2.5.5
   super_context_menu: ^0.9.1
-  uuid: ^4.5.1
+  uuid: ^4.6.0
   xterm: ^4.0.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.9
   material_symbols_icons: ^4.2951.0
+  styled_widget: ^0.4.1
 
 dev_dependencies:
-  auto_route_generator: ^10.3.0
-  build_runner: ^2.10.4
-  drift_dev: ^2.32.0
+  auto_route_generator: ^10.5.0
+  build_runner: ^2.15.1
+  drift_dev: ^2.34.0
   flutter_test:
     sdk: flutter
 
