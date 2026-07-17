@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'servers/server_providers.dart';
+import 'servers/metrics_refresh_preferences.dart';
 import 'servers/terminal_adapter_preferences.dart';
 import 'servers/startup_connection_preferences.dart';
 
@@ -13,11 +14,13 @@ Future<void> main() async {
   final preferences = await Future.wait([
     TerminalAdapterPreferences.load(),
     StartupConnectionPreferences.load(),
+    MetricsRefreshPreferences.load(),
   ]);
   final terminalAdapterPreferences =
       preferences[0] as TerminalAdapterPreferences;
   final startupConnectionPreferences =
       preferences[1] as StartupConnectionPreferences;
+  final metricsRefreshPreferences = preferences[2] as MetricsRefreshPreferences;
 
   if (DesktopWindowFrame.isPlatformDesktop) {
     await windowManager.ensureInitialized();
@@ -42,6 +45,9 @@ Future<void> main() async {
         ),
         startupConnectionSettingsProvider.overrideWithValue(
           startupConnectionPreferences,
+        ),
+        metricsRefreshSettingsProvider.overrideWithValue(
+          metricsRefreshPreferences,
         ),
       ],
       child: const MaidKitApp(),

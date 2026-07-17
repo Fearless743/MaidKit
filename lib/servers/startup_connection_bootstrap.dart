@@ -24,7 +24,9 @@ class _StartupConnectionBootstrapState
     final enabled = ref.watch(connectOnStartupProvider);
     if (enabled && !_started) {
       _started = true;
-      unawaited(_connectSavedServers());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_connectSavedServers());
+      });
     }
     return widget.child;
   }

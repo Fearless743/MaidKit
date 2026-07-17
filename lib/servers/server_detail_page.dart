@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 
 import '../data/local/app_database.dart';
+import '../containers/container_management_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -21,30 +24,74 @@ class ServerDetailPage extends ConsumerStatefulWidget {
 
 class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
   AsyncValue<List<ServerProcess>> _processes = const AsyncValue.data([]);
+  Timer? _refreshTimer;
+  var _refreshing = false;
+  var _hasLoadedProcesses = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadProcesses());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(focusedServerIdProvider.notifier).focus(widget.server.id);
+      }
+    });
+    _startRefreshTimer(ref.read(focusedServerRefreshIntervalProvider));
+    ref.listenManual<Duration>(focusedServerRefreshIntervalProvider, (
+      _,
+      interval,
+    ) {
+      _startRefreshTimer(interval);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    final focusedServer = ref.read(focusedServerIdProvider.notifier);
+    final serverId = widget.server.id;
+    Future<void>.microtask(() => focusedServer.clear(serverId));
+    super.dispose();
+  }
+
+  void _startRefreshTimer(Duration interval) {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(interval, (_) => _refresh());
   }
 
   Future<void> _loadProcesses() async {
-    setState(() => _processes = const AsyncValue.loading());
+    if (!_hasLoadedProcesses) {
+      setState(() => _processes = const AsyncValue.loading());
+    }
     try {
       final processes = await ref
           .read(connectionManagerProvider)
           .listProcesses(widget.server.id);
-      if (mounted) setState(() => _processes = AsyncValue.data(processes));
-    } catch (error, stackTrace) {
       if (mounted) {
+        setState(() {
+          _hasLoadedProcesses = true;
+          _processes = AsyncValue.data(processes);
+        });
+      }
+    } catch (error, stackTrace) {
+      if (mounted && !_hasLoadedProcesses) {
         setState(() => _processes = AsyncValue.error(error, stackTrace));
       }
     }
   }
 
   Future<void> _refresh() async {
-    await ref.read(connectionManagerProvider).refreshServerInfo(widget.server);
-    await _loadProcesses();
+    if (_refreshing) return;
+    final manager = ref.read(connectionManagerProvider);
+    if (manager.clientFor(widget.server.id) == null) return;
+    _refreshing = true;
+    try {
+      await manager.refreshServerInfo(widget.server);
+      await _loadProcesses();
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<void> _connect() async {
@@ -59,6 +106,7 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
         .where((item) => item.serverId == widget.server.id)
         .firstOrNull;
     final connected = session?.status == SessionStatus.connected;
+    final refreshInterval = ref.watch(focusedServerRefreshIntervalProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -77,6 +125,7 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
         session: session,
         connected: connected,
         processes: _processes,
+        refreshInterval: refreshInterval,
         onConnect: _connect,
         onRefreshProcesses: _loadProcesses,
       ),
@@ -90,6 +139,7 @@ class _DetailWorkspace extends StatelessWidget {
     required this.session,
     required this.connected,
     required this.processes,
+    required this.refreshInterval,
     required this.onConnect,
     required this.onRefreshProcesses,
   });
@@ -98,6 +148,7 @@ class _DetailWorkspace extends StatelessWidget {
   final SshSessionInfo? session;
   final bool connected;
   final AsyncValue<List<ServerProcess>> processes;
+  final Duration refreshInterval;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshProcesses;
 
@@ -108,6 +159,8 @@ class _DetailWorkspace extends StatelessWidget {
       connected: connected,
       connectionError: session?.error,
       processes: processes,
+      server: server,
+      refreshInterval: refreshInterval,
       onConnect: onConnect,
       onRefreshProcesses: onRefreshProcesses,
     );
@@ -292,6 +345,8 @@ class _InspectorTabs extends StatelessWidget {
     required this.connected,
     required this.connectionError,
     required this.processes,
+    required this.server,
+    required this.refreshInterval,
     required this.onConnect,
     required this.onRefreshProcesses,
   });
@@ -299,12 +354,14 @@ class _InspectorTabs extends StatelessWidget {
   final bool connected;
   final String? connectionError;
   final AsyncValue<List<ServerProcess>> processes;
+  final Server server;
+  final Duration refreshInterval;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshProcesses;
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
+    length: 2,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -330,36 +387,16 @@ class _InspectorTabs extends StatelessWidget {
                           'Connect to collect live server data.',
                       onConnect: onConnect,
                     ),
-              const _PlannedIntegration(
-                icon: Symbols.deployed_code,
-                name: 'Contaienrs',
+              ContainerManagementTab(
+                server: server,
+                connected: connected,
+                connectionError: connectionError,
+                onConnect: onConnect,
+                refreshInterval: refreshInterval,
               ),
             ],
           ),
         ),
-      ],
-    ),
-  );
-}
-
-class _PlannedIntegration extends StatelessWidget {
-  const _PlannedIntegration({required this.icon, required this.name});
-
-  final IconData icon;
-  final String name;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 32,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(height: 12),
-        Text('$name integration is not available yet.'),
       ],
     ),
   );

@@ -3,7 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../data/local/app_database.dart';
 import 'ghostty_terminal_session_adapter.dart';
+import 'metrics_refresh_preferences.dart';
 import 'server_repository.dart';
+import 'server_metrics_refresh_scheduler.dart';
 import 'ssh_connection_manager.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
@@ -75,6 +77,58 @@ final terminalAdapterPreferencesProvider = Provider<TerminalAdapterSettings>(
 final startupConnectionSettingsProvider = Provider<StartupConnectionSettings>(
   (ref) => InMemoryStartupConnectionSettings(),
 );
+
+final metricsRefreshSettingsProvider = Provider<MetricsRefreshSettings>(
+  (ref) => InMemoryMetricsRefreshSettings(),
+);
+
+final serverMetricsRefreshIntervalProvider =
+    NotifierProvider<ServerMetricsRefreshIntervalNotifier, Duration>(
+      ServerMetricsRefreshIntervalNotifier.new,
+    );
+
+class ServerMetricsRefreshIntervalNotifier extends Notifier<Duration> {
+  @override
+  Duration build() =>
+      ref.read(metricsRefreshSettingsProvider).backgroundInterval;
+
+  Future<void> setInterval(Duration value) async {
+    await ref
+        .read(metricsRefreshSettingsProvider)
+        .saveBackgroundInterval(value);
+    state = value;
+  }
+}
+
+final focusedServerRefreshIntervalProvider =
+    NotifierProvider<FocusedServerRefreshIntervalNotifier, Duration>(
+      FocusedServerRefreshIntervalNotifier.new,
+    );
+
+class FocusedServerRefreshIntervalNotifier extends Notifier<Duration> {
+  @override
+  Duration build() => ref.read(metricsRefreshSettingsProvider).focusedInterval;
+
+  Future<void> setInterval(Duration value) async {
+    await ref.read(metricsRefreshSettingsProvider).saveFocusedInterval(value);
+    state = value;
+  }
+}
+
+final focusedServerIdProvider = NotifierProvider<FocusedServerNotifier, int?>(
+  FocusedServerNotifier.new,
+);
+
+class FocusedServerNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void focus(int serverId) => state = serverId;
+
+  void clear(int serverId) {
+    if (state == serverId) state = null;
+  }
+}
 
 final connectOnStartupProvider =
     NotifierProvider<ConnectOnStartupNotifier, bool>(
@@ -163,3 +217,24 @@ Stream<List<SshSessionInfo>> _watchSessions(
 final serversProvider = StreamProvider<List<Server>>((ref) {
   return ref.watch(serverRepositoryProvider).watchAll();
 });
+
+final serverMetricsRefreshSchedulerProvider =
+    Provider<ServerMetricsRefreshScheduler>((ref) {
+      final scheduler = ServerMetricsRefreshScheduler(
+        ref.watch(connectionManagerProvider),
+      );
+      final interval = ref.watch(serverMetricsRefreshIntervalProvider);
+      final focusedServerId = ref.watch(focusedServerIdProvider);
+      final servers =
+          ref.watch(serversProvider).asData?.value ?? const <Server>[];
+      final sessions =
+          ref.watch(sessionsProvider).asData?.value ?? const <SshSessionInfo>[];
+      scheduler.update(
+        interval: interval,
+        servers: servers,
+        sessions: sessions,
+        focusedServerId: focusedServerId,
+      );
+      ref.onDispose(scheduler.dispose);
+      return scheduler;
+    });

@@ -18,6 +18,7 @@ class MaidKitApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final appRouter = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
+    ref.watch(serverMetricsRefreshSchedulerProvider);
     IslandUIFoundation.configureOverlay(maidKitOverlayKey);
     return MaterialApp.router(
       title: 'MaidKit',

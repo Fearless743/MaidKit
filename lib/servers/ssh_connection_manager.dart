@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import '../containers/container_models.dart';
 import '../data/local/app_database.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
@@ -124,6 +126,15 @@ class SshConnectionManager {
     }
   }
 
+  /// Refreshes only the dynamic, low-cost metrics used by server lists and
+  /// background connections. Detail pages call [refreshServerInfo] instead.
+  Future<void> refreshBasicServerInfo(Server server) async {
+    final client = clientFor(server.id);
+    final state = _states[server.id];
+    if (client == null || client.isClosed || state == null) return;
+    if (server.collectStats) await _refreshStats(client, state);
+  }
+
   Future<List<ServerProcess>> listProcesses(int serverId) async {
     return withClient(serverId, (client) async {
       final session = await client.execute(
@@ -137,6 +148,145 @@ class SshConnectionManager {
           .whereType<ServerProcess>()
           .toList();
     });
+  }
+
+  /// Lists every installed Docker and Podman environment for both the SSH user
+  /// and root. Root is intentionally non-interactive: MaidKit never requests
+  /// or transports a sudo password.
+  Future<List<ContainerEnvironment>> listContainers(
+    int serverId, {
+    String? sudoPassword,
+  }) async {
+    return withClient(serverId, (client) async {
+      final environments = <ContainerEnvironment>[];
+      for (final runtime in ContainerRuntime.values) {
+        final available = await _runtimeAvailable(client, runtime);
+        if (!available) continue;
+        for (final scope in ContainerScope.values) {
+          environments.add(
+            await _listContainerEnvironment(
+              client,
+              runtime,
+              scope,
+              sudoPassword: sudoPassword,
+            ),
+          );
+        }
+      }
+      return environments;
+    });
+  }
+
+  Future<void> runContainerAction(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String containerId,
+    required ContainerAction action,
+    String? sudoPassword,
+  }) async {
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:-]*$').hasMatch(containerId)) {
+      throw ArgumentError.value(
+        containerId,
+        'containerId',
+        'Invalid container ID.',
+      );
+    }
+    await withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}${runtime.name} ${action.name} $containerId',
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) {
+        throw StateError(_commandError(result));
+      }
+    });
+  }
+
+  Future<bool> _runtimeAvailable(
+    SSHClient client,
+    ContainerRuntime runtime,
+  ) async {
+    final result = await _execute(client, 'command -v ${runtime.name}');
+    return result.exitCode == 0;
+  }
+
+  Future<ContainerEnvironment> _listContainerEnvironment(
+    SSHClient client,
+    ContainerRuntime runtime,
+    ContainerScope scope, {
+    String? sudoPassword,
+  }) async {
+    final result = await _execute(
+      client,
+      '${_scopePrefix(scope, sudoPassword)}${runtime.name} ps -a --format "{{.ID}}\\t{{.Names}}\\t{{.Image}}\\t{{.State}}\\t{{.Status}}"',
+      stdin: scope == ContainerScope.root ? sudoPassword : null,
+    );
+    if (result.exitCode != 0) {
+      return ContainerEnvironment(
+        runtime: runtime,
+        scope: scope,
+        error: _commandError(result),
+      );
+    }
+    return ContainerEnvironment(
+      runtime: runtime,
+      scope: scope,
+      containers: result.stdout
+          .split('\n')
+          .map(_parseContainer)
+          .whereType<ServerContainer>()
+          .toList(),
+    );
+  }
+
+  Future<_CommandResult> _execute(
+    SSHClient client,
+    String command, {
+    String? stdin,
+  }) async {
+    final session = await client.execute(command);
+    final stdout = utf8.decoder.bind(session.stdout).join();
+    final stderr = utf8.decoder.bind(session.stderr).join();
+    if (stdin != null) {
+      session.stdin.add(Uint8List.fromList(utf8.encode('$stdin\n')));
+      await session.stdin.close();
+    }
+    await session.done;
+    return _CommandResult(
+      stdout: await stdout,
+      stderr: await stderr,
+      exitCode: session.exitCode ?? 1,
+    );
+  }
+
+  ServerContainer? _parseContainer(String line) {
+    final fields = line.split('\t');
+    if (fields.length != 5 || fields.any((field) => field.isEmpty)) return null;
+    return ServerContainer(
+      id: fields[0],
+      name: fields[1],
+      image: fields[2],
+      state: fields[3],
+      status: fields[4],
+    );
+  }
+
+  String _scopePrefix(ContainerScope scope, String? sudoPassword) =>
+      switch (scope) {
+        ContainerScope.user => '',
+        ContainerScope.root =>
+          sudoPassword == null ? 'sudo -n ' : 'sudo -S -p "" ',
+      };
+
+  String _commandError(_CommandResult result) {
+    final message = result.stderr.trim().isNotEmpty
+        ? result.stderr.trim()
+        : result.stdout.trim();
+    return message.isEmpty
+        ? 'The command exited with code ${result.exitCode}.'
+        : message;
   }
 
   Future<void> _refreshStats(SSHClient client, SshSessionInfo state) async {
@@ -358,4 +508,16 @@ class _TerminalConnection {
   final SSHClient client;
   final SSHSession shell;
   final TerminalSessionBinding binding;
+}
+
+class _CommandResult {
+  const _CommandResult({
+    required this.stdout,
+    required this.stderr,
+    required this.exitCode,
+  });
+
+  final String stdout;
+  final String stderr;
+  final int exitCode;
 }

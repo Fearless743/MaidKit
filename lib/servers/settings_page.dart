@@ -17,6 +17,10 @@ class SettingsPage extends ConsumerWidget {
     final selectedAdapter = ref.watch(selectedTerminalSessionAdapterProvider);
     final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
     final connectOnStartup = ref.watch(connectOnStartupProvider);
+    final refreshInterval = ref.watch(serverMetricsRefreshIntervalProvider);
+    final focusedRefreshInterval = ref.watch(
+      focusedServerRefreshIntervalProvider,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -152,16 +156,74 @@ class SettingsPage extends ConsumerWidget {
         Text('Connections', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Card(
-          clipBehavior: Clip.antiAlias,
-          child: SwitchListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            title: const Text('Connect saved servers on startup'),
-            subtitle: const Text(
-              'Keep SSH connections ready to collect server statistics after the vault unlocks.',
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Connect saved servers on startup'),
+                  subtitle: const Text(
+                    'Keep SSH connections ready to collect server statistics after the vault unlocks.',
+                  ),
+                  value: connectOnStartup,
+                  onChanged: (value) => ref
+                      .read(connectOnStartupProvider.notifier)
+                      .setEnabled(value),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<Duration>(
+                  initialValue: _refreshIntervals.contains(refreshInterval)
+                      ? refreshInterval
+                      : _refreshIntervals[1],
+                  decoration: const InputDecoration(
+                    labelText: 'Background metrics refresh interval',
+                    helperText:
+                        'Connected servers not currently in detail view refresh metrics only.',
+                  ),
+                  items: [
+                    for (final interval in _refreshIntervals)
+                      DropdownMenuItem(
+                        value: interval,
+                        child: Text(_formatInterval(interval)),
+                      ),
+                  ],
+                  onChanged: (interval) {
+                    if (interval != null) {
+                      ref
+                          .read(serverMetricsRefreshIntervalProvider.notifier)
+                          .setInterval(interval);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<Duration>(
+                  initialValue:
+                      _focusedRefreshIntervals.contains(focusedRefreshInterval)
+                      ? focusedRefreshInterval
+                      : _focusedRefreshIntervals.first,
+                  decoration: const InputDecoration(
+                    labelText: 'Focused server detail refresh interval',
+                    helperText:
+                        'Refreshes metrics, processes, and container environments for the open server.',
+                  ),
+                  items: [
+                    for (final interval in _focusedRefreshIntervals)
+                      DropdownMenuItem(
+                        value: interval,
+                        child: Text(_formatInterval(interval)),
+                      ),
+                  ],
+                  onChanged: (interval) {
+                    if (interval != null) {
+                      ref
+                          .read(focusedServerRefreshIntervalProvider.notifier)
+                          .setInterval(interval);
+                    }
+                  },
+                ),
+              ],
             ),
-            value: connectOnStartup,
-            onChanged: (value) =>
-                ref.read(connectOnStartupProvider.notifier).setEnabled(value),
           ),
         ),
         const SizedBox(height: 24),
@@ -203,3 +265,23 @@ class SettingsPage extends ConsumerWidget {
     ref.invalidate(biometricUnlockEnabledProvider);
   }
 }
+
+const _refreshIntervals = [
+  Duration(seconds: 15),
+  Duration(seconds: 30),
+  Duration(minutes: 1),
+  Duration(minutes: 2),
+  Duration(minutes: 5),
+];
+
+const _focusedRefreshIntervals = [
+  Duration(seconds: 3),
+  Duration(seconds: 5),
+  Duration(seconds: 10),
+  Duration(seconds: 15),
+  Duration(seconds: 30),
+];
+
+String _formatInterval(Duration interval) => interval.inMinutes >= 1
+    ? '${interval.inMinutes} minute${interval.inMinutes == 1 ? '' : 's'}'
+    : '${interval.inSeconds} seconds';
