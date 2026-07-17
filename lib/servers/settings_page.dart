@@ -14,6 +14,7 @@ class SettingsPage extends ConsumerWidget {
     final biometricEnabled = ref.watch(biometricUnlockEnabledProvider);
     final adapterOptions = ref.watch(terminalSessionAdapterOptionsProvider);
     final selectedAdapter = ref.watch(selectedTerminalSessionAdapterProvider);
+    final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
     final connectOnStartup = ref.watch(connectOnStartupProvider);
 
     return ListView(
@@ -125,6 +126,22 @@ class SettingsPage extends ConsumerWidget {
                 Text(
                   'New terminals use the selected renderer. Reopen existing terminals to switch them.',
                   style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Animate cursor movement'),
+                  subtitle: const Text(
+                    'Smoothly move the Ghostty cursor between terminal cells.',
+                  ),
+                  value: cursorAnimationEnabled,
+                  onChanged: selectedAdapter == 'ghostty'
+                      ? (enabled) async {
+                          await ref
+                              .read(cursorAnimationEnabledProvider.notifier)
+                              .setEnabled(enabled);
+                        }
+                      : null,
                 ),
               ],
             ),

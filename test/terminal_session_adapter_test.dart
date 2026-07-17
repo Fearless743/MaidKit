@@ -59,6 +59,16 @@ void main() {
     await adapter.dispose();
   });
 
+  test('Ghostty adapter encodes backspace for the remote shell', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final output = adapter.outgoingBytes.first;
+
+    adapter.sendKey(ghostty.Key.backspace);
+
+    expect(utf8.decode(await output), '\u007f');
+    await adapter.dispose();
+  });
+
   test('forwards shell output, terminal input, and resize events', () async {
     final stdout = StreamController<Uint8List>();
     final stderr = StreamController<Uint8List>();

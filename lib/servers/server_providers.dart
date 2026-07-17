@@ -49,12 +49,15 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
 
 final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
-      return const [
+      final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
+      return [
         TerminalSessionAdapterOption(
           id: 'ghostty',
           label: 'Ghostty',
           description: 'The default libghostty-vt renderer for new terminals.',
-          factory: GhosttyTerminalSessionAdapterFactory(),
+          factory: GhosttyTerminalSessionAdapterFactory(
+            cursorAnimationEnabled: cursorAnimationEnabled,
+          ),
         ),
         TerminalSessionAdapterOption(
           id: 'xterm',
@@ -105,6 +108,24 @@ class SelectedTerminalSessionAdapterNotifier extends Notifier<String> {
         .read(terminalAdapterPreferencesProvider)
         .saveSelectedAdapterId(adapterId);
     state = adapterId;
+  }
+}
+
+final cursorAnimationEnabledProvider =
+    NotifierProvider<CursorAnimationEnabledNotifier, bool>(
+      CursorAnimationEnabledNotifier.new,
+    );
+
+class CursorAnimationEnabledNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref.read(terminalAdapterPreferencesProvider).cursorAnimationEnabled;
+
+  Future<void> setEnabled(bool enabled) async {
+    await ref
+        .read(terminalAdapterPreferencesProvider)
+        .saveCursorAnimationEnabled(enabled);
+    state = enabled;
   }
 }
 

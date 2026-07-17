@@ -103,11 +103,14 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   }
 
   @override
-  Widget buildView({bool autofocus = false}) => TerminalView(
-    _terminal,
-    autofocus: autofocus,
-    backgroundOpacity: 0,
-    padding: const EdgeInsets.all(12),
+  Widget buildView({bool autofocus = false}) => KeyedSubtree(
+    key: ObjectKey(this),
+    child: TerminalView(
+      _terminal,
+      autofocus: autofocus,
+      backgroundOpacity: 0,
+      padding: const EdgeInsets.all(12),
+    ),
   );
 
   @override

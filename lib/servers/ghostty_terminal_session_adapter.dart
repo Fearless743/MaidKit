@@ -16,14 +16,20 @@ import 'terminal_session_adapter.dart';
 /// selection, and styling parity are evaluated.
 class GhosttyTerminalSessionAdapterFactory
     implements TerminalSessionAdapterFactory {
-  const GhosttyTerminalSessionAdapterFactory();
+  const GhosttyTerminalSessionAdapterFactory({
+    required this.cursorAnimationEnabled,
+  });
+
+  final bool cursorAnimationEnabled;
 
   @override
-  TerminalSessionAdapter create() => GhosttyTerminalSessionAdapter();
+  TerminalSessionAdapter create() => GhosttyTerminalSessionAdapter(
+    cursorAnimationEnabled: cursorAnimationEnabled,
+  );
 }
 
 class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
-  GhosttyTerminalSessionAdapter()
+  GhosttyTerminalSessionAdapter({this.cursorAnimationEnabled = true})
     : _terminal = ghostty.Terminal(
         cols: _initialColumns,
         rows: _initialRows,
@@ -38,6 +44,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   static const _initialRows = 24;
 
   final ghostty.Terminal _terminal;
+  final bool cursorAnimationEnabled;
   final _keyEncoder = ghostty.KeyEncoder();
   final _outgoingBytes = StreamController<Uint8List>.broadcast();
   final _resizeEvents = StreamController<TerminalResize>.broadcast();
@@ -57,8 +64,12 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   }
 
   @override
-  Widget buildView({bool autofocus = false}) =>
-      _GhosttyTerminalView(adapter: this, autofocus: autofocus);
+  Widget buildView({bool autofocus = false}) => _GhosttyTerminalView(
+    key: ObjectKey(this),
+    adapter: this,
+    autofocus: autofocus,
+    cursorAnimationEnabled: cursorAnimationEnabled,
+  );
 
   void sendInput(String text) {
     if (!_disposed && text.isNotEmpty) {
@@ -116,16 +127,23 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
 }
 
 class _GhosttyTerminalView extends StatefulWidget {
-  const _GhosttyTerminalView({required this.adapter, required this.autofocus});
+  const _GhosttyTerminalView({
+    super.key,
+    required this.adapter,
+    required this.autofocus,
+    required this.cursorAnimationEnabled,
+  });
 
   final GhosttyTerminalSessionAdapter adapter;
   final bool autofocus;
+  final bool cursorAnimationEnabled;
 
   @override
   State<_GhosttyTerminalView> createState() => _GhosttyTerminalViewState();
 }
 
-class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
+class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
+    with SingleTickerProviderStateMixin {
   static const _horizontalPadding = 12.0;
   static const _verticalPadding = 12.0;
   static const _cellWidth = 8.4;
@@ -135,10 +153,16 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
   final _renderState = ghostty.RenderState();
   final _rows = ghostty.RowIterator();
   final _cells = ghostty.CellIterator();
+  late final _cursorAnimation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 90),
+  );
   var _resizeScheduled = false;
   String? _composingText;
   ghostty.Position? _selectionStart;
   var _draggingSelection = false;
+  Offset? _cursorFrom;
+  Offset? _cursorTo;
 
   @override
   void initState() {
@@ -152,6 +176,7 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
     _cells.dispose();
     _rows.dispose();
     _renderState.dispose();
+    _cursorAnimation.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -222,6 +247,32 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
     );
   }
 
+  void _animateCursor(ghostty.Cursor cursor) {
+    final target = Offset(
+      cursor.position.col.toDouble(),
+      cursor.position.row.toDouble(),
+    );
+    if (_cursorTo == null) {
+      _cursorFrom = target;
+      _cursorTo = target;
+      return;
+    }
+    if (!widget.cursorAnimationEnabled) {
+      _cursorAnimation.stop();
+      _cursorFrom = target;
+      _cursorTo = target;
+      return;
+    }
+    if (target == _cursorTo) return;
+    _cursorFrom = Offset.lerp(
+      _cursorFrom,
+      _cursorTo,
+      Curves.easeOutCubic.transform(_cursorAnimation.value),
+    )!;
+    _cursorTo = target;
+    _cursorAnimation.forward(from: 0);
+  }
+
   ghostty.Position _positionFor(Offset offset) {
     final column = ((offset.dx - _horizontalPadding) / _cellWidth)
         .floor()
@@ -289,6 +340,8 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
       LogicalKeyboardKey.arrowDown => ghostty.Key.arrowDown,
       LogicalKeyboardKey.arrowRight => ghostty.Key.arrowRight,
       LogicalKeyboardKey.arrowLeft => ghostty.Key.arrowLeft,
+      LogicalKeyboardKey.backspace => ghostty.Key.backspace,
+      LogicalKeyboardKey.delete => ghostty.Key.delete,
       _ => null,
     };
     if (ghosttyKey != null) {
@@ -298,11 +351,9 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
     final escape = switch (key) {
       LogicalKeyboardKey.enter => '\r',
       LogicalKeyboardKey.tab => '\t',
-      LogicalKeyboardKey.backspace => '\u007f',
       LogicalKeyboardKey.escape => '\u001b',
       LogicalKeyboardKey.home => '\u001b[H',
       LogicalKeyboardKey.end => '\u001b[F',
-      LogicalKeyboardKey.delete => '\u001b[3~',
       LogicalKeyboardKey.pageUp => '\u001b[5~',
       LogicalKeyboardKey.pageDown => '\u001b[6~',
       _ => null,
@@ -315,6 +366,7 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
   @override
   Widget build(BuildContext context) {
     final frame = _visibleFrame();
+    _animateCursor(frame.cursor);
     return ClipRect(
       child: ColoredBox(
         color: const Color(0xFF111315),
@@ -323,7 +375,7 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
           autofocus: widget.autofocus,
           onKeyEvent: _onKeyEvent,
           onInsert: widget.adapter.sendInput,
-          onDelete: () => widget.adapter.sendInput('\u007f'),
+          onDelete: () => widget.adapter.sendKey(ghostty.Key.backspace),
           onAction: () => widget.adapter.sendInput('\r'),
           onComposing: (text) {
             if (_composingText != text && mounted) {
@@ -366,7 +418,12 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView> {
                 builder: (context, constraints) {
                   _scheduleResize(constraints);
                   return CustomPaint(
-                    painter: _GhosttyTerminalPainter(frame),
+                    painter: _GhosttyTerminalPainter(
+                      frame,
+                      cursorAnimation: _cursorAnimation,
+                      cursorFrom: _cursorFrom!,
+                      cursorTo: _cursorTo!,
+                    ),
                     child: const SizedBox.expand(),
                   );
                 },
@@ -474,6 +531,17 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
     if (!_editingValue.composing.isCollapsed) {
       return KeyEventResult.skipRemainingHandlers;
     }
+    final isTerminalShortcut =
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+    if (!isTerminalShortcut &&
+        event.character != null &&
+        event.character!.isNotEmpty) {
+      // Let the platform text-input client receive printable keys. This is
+      // required for IMEs to build and commit a composed character instead of
+      // forwarding each composing keystroke to the remote shell.
+      return KeyEventResult.skipRemainingHandlers;
+    }
     return widget.onKeyEvent(node, event);
   }
 
@@ -529,7 +597,12 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
 }
 
 class _GhosttyTerminalPainter extends CustomPainter {
-  const _GhosttyTerminalPainter(this.frame);
+  _GhosttyTerminalPainter(
+    this.frame, {
+    required this.cursorAnimation,
+    required this.cursorFrom,
+    required this.cursorTo,
+  }) : super(repaint: cursorAnimation);
 
   static const _horizontalPadding = 12.0;
   static const _verticalPadding = 12.0;
@@ -538,6 +611,9 @@ class _GhosttyTerminalPainter extends CustomPainter {
   static const _selectionOverlay = Color(0x6638BDF8);
 
   final _GhosttyTerminalFrame frame;
+  final Animation<double> cursorAnimation;
+  final Offset cursorFrom;
+  final Offset cursorTo;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -549,23 +625,46 @@ class _GhosttyTerminalPainter extends CustomPainter {
       height: 1.2857,
     );
     for (var rowIndex = 0; rowIndex < frame.rows.length; rowIndex++) {
+      int? backgroundRunColor;
+      int? backgroundRunStart;
+      var backgroundRunEnd = 0;
+      for (final cell in frame.rows[rowIndex]) {
+        if (cell.spacer) continue;
+        final color = cell.backgroundArgb ?? frame.backgroundArgb;
+        final cellEnd = cell.column + (cell.wide ? 2 : 1);
+        if (backgroundRunColor == color && cell.column <= backgroundRunEnd) {
+          if (cellEnd > backgroundRunEnd) backgroundRunEnd = cellEnd;
+          continue;
+        }
+        if (backgroundRunColor != null) {
+          _paintBackgroundRun(
+            canvas,
+            rowIndex: rowIndex,
+            start: backgroundRunStart!,
+            end: backgroundRunEnd,
+            color: backgroundRunColor,
+          );
+        }
+        backgroundRunColor = color;
+        backgroundRunStart = cell.column;
+        backgroundRunEnd = cellEnd;
+      }
+      if (backgroundRunColor != null) {
+        _paintBackgroundRun(
+          canvas,
+          rowIndex: rowIndex,
+          start: backgroundRunStart!,
+          end: backgroundRunEnd,
+          color: backgroundRunColor,
+        );
+      }
+
       for (final cell in frame.rows[rowIndex]) {
         final x = _horizontalPadding + cell.column * _cellWidth;
         final y = _verticalPadding + rowIndex * _cellHeight;
-        final width = _cellWidth * (cell.wide ? 2 : 1);
-        final background = cell.backgroundArgb ?? frame.backgroundArgb;
-        canvas.drawRect(
-          Rect.fromLTWH(x, y, width, _cellHeight),
-          Paint()..color = Color(background),
-        );
-        if (cell.selected) {
-          canvas.drawRect(
-            Rect.fromLTWH(x, y, width, _cellHeight),
-            Paint()..color = _selectionOverlay,
-          );
-        }
-        // A wide glyph owns its trailing spacer cell. The spacer still paints
-        // a selection background, but must never repaint the glyph itself.
+        // A wide glyph owns its trailing spacer cell. Its leading cell paints
+        // the two-cell background and glyph, so the spacer must not repaint
+        // either half of it.
         if (cell.spacer) continue;
         if (cell.text.isEmpty) continue;
         final painter = TextPainter(
@@ -577,21 +676,53 @@ class _GhosttyTerminalPainter extends CustomPainter {
           ),
           textDirection: TextDirection.ltr,
           maxLines: 1,
-        )..layout(maxWidth: width);
+        )..layout();
         painter.paint(canvas, Offset(x, y));
+      }
+      int? selectionStart;
+      var selectionEnd = 0;
+      for (final cell in frame.rows[rowIndex]) {
+        final cellEnd = cell.column + (cell.wide ? 2 : 1);
+        if (!cell.selected) {
+          if (selectionStart != null) {
+            _paintSelectionRun(
+              canvas,
+              rowIndex: rowIndex,
+              start: selectionStart,
+              end: selectionEnd,
+            );
+            selectionStart = null;
+          }
+          continue;
+        }
+        selectionStart ??= cell.column;
+        if (cellEnd > selectionEnd) selectionEnd = cellEnd;
+      }
+      if (selectionStart != null) {
+        _paintSelectionRun(
+          canvas,
+          rowIndex: rowIndex,
+          start: selectionStart,
+          end: selectionEnd,
+        );
       }
     }
     final cursor = frame.cursor;
+    final cursorPosition = Offset.lerp(
+      cursorFrom,
+      cursorTo,
+      Curves.easeOutCubic.transform(cursorAnimation.value),
+    )!;
     if (cursor.visible &&
-        cursor.position.row >= 0 &&
-        cursor.position.row < frame.rows.length) {
+        cursorPosition.dy >= 0 &&
+        cursorPosition.dy < frame.rows.length) {
       final cursorPaint = Paint()
         ..color = Color(frame.cursorArgb ?? frame.foregroundArgb);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(
-            _horizontalPadding + cursor.position.col * _cellWidth,
-            _verticalPadding + cursor.position.row * _cellHeight + 2,
+            _horizontalPadding + cursorPosition.dx * _cellWidth,
+            _verticalPadding + cursorPosition.dy * _cellHeight + 2,
             2,
             _cellHeight - 4,
           ),
@@ -624,7 +755,44 @@ class _GhosttyTerminalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GhosttyTerminalPainter oldDelegate) =>
-      !identical(frame, oldDelegate.frame);
+      !identical(frame, oldDelegate.frame) ||
+      cursorFrom != oldDelegate.cursorFrom ||
+      cursorTo != oldDelegate.cursorTo;
+
+  void _paintSelectionRun(
+    Canvas canvas, {
+    required int rowIndex,
+    required int start,
+    required int end,
+  }) {
+    canvas.drawRect(
+      Rect.fromLTWH(
+        _horizontalPadding + start * _cellWidth,
+        _verticalPadding + rowIndex * _cellHeight,
+        (end - start) * _cellWidth,
+        _cellHeight,
+      ),
+      Paint()..color = _selectionOverlay,
+    );
+  }
+
+  void _paintBackgroundRun(
+    Canvas canvas, {
+    required int rowIndex,
+    required int start,
+    required int end,
+    required int color,
+  }) {
+    canvas.drawRect(
+      Rect.fromLTWH(
+        _horizontalPadding + start * _cellWidth,
+        _verticalPadding + rowIndex * _cellHeight,
+        (end - start) * _cellWidth,
+        _cellHeight,
+      ),
+      Paint()..color = Color(color),
+    );
+  }
 }
 
 class _GhosttyTerminalFrame {
