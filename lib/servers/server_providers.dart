@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../data/local/app_database.dart';
+import 'ghostty_terminal_session_adapter.dart';
 import 'server_repository.dart';
 import 'ssh_connection_manager.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
+import 'terminal_adapter_preferences.dart';
 import 'vault_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -53,8 +55,19 @@ final terminalSessionAdapterOptionsProvider =
           description: 'The built-in Flutter terminal renderer.',
           factory: XtermTerminalSessionAdapterFactory(),
         ),
+        TerminalSessionAdapterOption(
+          id: 'ghostty',
+          label: 'Ghostty (experimental)',
+          description:
+              'A libghostty-vt prototype with a lightweight Flutter renderer.',
+          factory: GhosttyTerminalSessionAdapterFactory(),
+        ),
       ];
     });
+
+final terminalAdapterPreferencesProvider = Provider<TerminalAdapterSettings>(
+  (ref) => InMemoryTerminalAdapterSettings(),
+);
 
 final selectedTerminalSessionAdapterProvider =
     NotifierProvider<SelectedTerminalSessionAdapterNotifier, String>(
@@ -63,9 +76,15 @@ final selectedTerminalSessionAdapterProvider =
 
 class SelectedTerminalSessionAdapterNotifier extends Notifier<String> {
   @override
-  String build() => 'xterm';
+  String build() =>
+      ref.read(terminalAdapterPreferencesProvider).selectedAdapterId;
 
-  void select(String adapterId) => state = adapterId;
+  Future<void> select(String adapterId) async {
+    await ref
+        .read(terminalAdapterPreferencesProvider)
+        .saveSelectedAdapterId(adapterId);
+    state = adapterId;
+  }
 }
 
 final terminalSessionAdapterFactoryProvider =

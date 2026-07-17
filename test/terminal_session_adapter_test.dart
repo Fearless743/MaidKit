@@ -3,9 +3,48 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:maid_kit/servers/ghostty_terminal_session_adapter.dart';
+import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/servers/terminal_adapter_preferences.dart';
 import 'package:maid_kit/servers/terminal_session_adapter.dart';
 
 void main() {
+  test(
+    'persists the selected terminal adapter through the settings store',
+    () async {
+      final settings = InMemoryTerminalAdapterSettings();
+      final container = ProviderContainer(
+        overrides: [
+          terminalAdapterPreferencesProvider.overrideWithValue(settings),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container
+          .read(selectedTerminalSessionAdapterProvider.notifier)
+          .select('ghostty');
+
+      expect(container.read(selectedTerminalSessionAdapterProvider), 'ghostty');
+      expect(settings.selectedAdapterId, 'ghostty');
+    },
+  );
+
+  test('Ghostty adapter reports terminal resize events', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final resize = adapter.resizeEvents.first;
+
+    adapter.resize(columns: 120, rows: 36, pixelWidth: 960, pixelHeight: 720);
+
+    expect(
+      await resize,
+      isA<TerminalResize>()
+          .having((event) => event.columns, 'columns', 120)
+          .having((event) => event.rows, 'rows', 36),
+    );
+    await adapter.dispose();
+  });
+
   test('forwards shell output, terminal input, and resize events', () async {
     final stdout = StreamController<Uint8List>();
     final stderr = StreamController<Uint8List>();

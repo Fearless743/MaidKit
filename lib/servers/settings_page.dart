@@ -99,9 +99,9 @@ class SettingsPage extends ConsumerWidget {
                   ],
                   onChanged: adapterOptions.length < 2
                       ? null
-                      : (adapterId) {
+                      : (adapterId) async {
                           if (adapterId != null) {
-                            ref
+                            await ref
                                 .read(
                                   selectedTerminalSessionAdapterProvider
                                       .notifier,
