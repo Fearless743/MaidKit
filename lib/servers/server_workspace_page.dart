@@ -1,5 +1,6 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../routing/app_router.gr.dart';
 
@@ -51,18 +52,18 @@ class _ServerTabsShell extends StatelessWidget {
                         child: IconButton(
                           tooltip: 'Settings',
                           onPressed: () => tabsRouter.setActiveIndex(2),
-                          icon: const Icon(Icons.settings_outlined),
+                          icon: const Icon(Symbols.settings),
                         ),
                       ),
                       destinations: const [
                         NavigationRailDestination(
-                          icon: Icon(Icons.dns_outlined),
-                          selectedIcon: Icon(Icons.dns),
+                          icon: Icon(Symbols.dns),
+                          selectedIcon: Icon(Symbols.dns, fill: 1),
                           label: Text('Servers'),
                         ),
                         NavigationRailDestination(
-                          icon: Icon(Icons.terminal_outlined),
-                          selectedIcon: Icon(Icons.terminal),
+                          icon: Icon(Symbols.terminal),
+                          selectedIcon: Icon(Symbols.terminal, fill: 1),
                           label: Text('Sessions'),
                         ),
                       ],
@@ -90,18 +91,18 @@ class _ServerTabsShell extends StatelessWidget {
                   onDestinationSelected: tabsRouter.setActiveIndex,
                   destinations: const [
                     NavigationDestination(
-                      icon: Icon(Icons.dns_outlined),
-                      selectedIcon: Icon(Icons.dns),
+                      icon: Icon(Symbols.dns),
+                      selectedIcon: Icon(Symbols.dns, fill: 1),
                       label: 'Servers',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.terminal_outlined),
-                      selectedIcon: Icon(Icons.terminal),
+                      icon: Icon(Symbols.terminal, fill: 1),
+                      selectedIcon: Icon(Symbols.terminal),
                       label: 'Sessions',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
+                      icon: Icon(Symbols.settings, fill: 1),
+                      selectedIcon: Icon(Symbols.settings),
                       label: 'Settings',
                     ),
                   ],

@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
 import '../data/local/app_database.dart';
@@ -32,7 +33,7 @@ class ServersPage extends ConsumerWidget {
         showStyledSnackBar(
           message: 'Could not save the server.',
           title: 'Server not saved',
-          icon: Icons.error_outline,
+          icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
       }
@@ -78,7 +79,7 @@ class ServersPage extends ConsumerWidget {
         showStyledSnackBar(
           message: error.toString(),
           title: 'Could not edit server',
-          icon: Icons.error_outline,
+          icon: Symbols.error_outline,
           accentColor: Theme.of(context).colorScheme.error,
         );
       }
@@ -116,7 +117,7 @@ class ServersPage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _add(context, ref),
-        icon: const Icon(Icons.add),
+        icon: const Icon(Symbols.add),
         label: const Text('Add server'),
       ),
     );
@@ -211,7 +212,8 @@ class _ServerCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  connected ? Icons.dns : Icons.dns_outlined,
+                  Symbols.dns,
+                  fill: connected ? 1 : 0,
                   size: 22,
                   color: connected
                       ? colorScheme.primary
@@ -244,7 +246,7 @@ class _ServerCard extends StatelessWidget {
                   tooltip: 'Refresh statistics',
                   visualDensity: VisualDensity.compact,
                   onPressed: connected ? onRefresh : null,
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Symbols.refresh),
                 ),
               ],
             ),
@@ -360,7 +362,7 @@ class _DisconnectedStats extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              connecting ? Icons.hourglass_top : Icons.insights_outlined,
+              connecting ? Symbols.hourglass_top : Symbols.insights,
               size: 20,
               color: colorScheme.onSurfaceVariant,
             ),
@@ -402,13 +404,13 @@ class _ServerStats extends StatelessWidget {
 
     if (!collectStats && !collectSystemInfo) {
       return _StatsMessage(
-        icon: Icons.visibility_off_outlined,
+        icon: Symbols.visibility_off,
         message: 'Information collection is disabled for this server.',
       );
     }
     if (stats == null && systemInfo == null) {
       return _StatsMessage(
-        icon: Icons.sync,
+        icon: Symbols.sync,
         message: 'Fetching server information…',
       );
     }
@@ -471,7 +473,7 @@ class _ServerStats extends StatelessWidget {
           )
         else if (collectStats)
           _StatsMessage(
-            icon: Icons.query_stats,
+            icon: Symbols.query_stats,
             message: 'Performance statistics are unavailable on this host.',
           ),
         if (systemLabel.isNotEmpty) ...[
@@ -687,7 +689,7 @@ class _EmptyServers extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            Icons.dns_outlined,
+            Symbols.dns,
             size: 36,
             color: Theme.of(context).colorScheme.primary,
           ),
@@ -701,7 +703,7 @@ class _EmptyServers extends StatelessWidget {
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: onAdd,
-            icon: const Icon(Icons.add),
+            icon: const Icon(Symbols.add),
             label: const Text('Add server'),
           ),
         ],
@@ -879,7 +881,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
                   labelText: 'Private key',
                   suffixIcon: IconButton(
                     onPressed: _pickKey,
-                    icon: const Icon(Icons.upload_file),
+                    icon: const Icon(Symbols.upload_file),
                   ),
                 ),
               ),

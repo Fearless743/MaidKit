@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../shared/presentation/maidkit_alert.dart';
 import 'server_models.dart';
@@ -101,26 +102,26 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
       if (activeSession != null)
         _TerminalAction(
           label: 'New terminal on ${activeTab!.serverName}',
-          icon: Icons.add,
+          icon: Symbols.add,
           onSelect: () => widget.onOpen(activeSession),
         ),
       if (widget.onClose != null)
         _TerminalAction(
           label: 'Close this terminal',
-          icon: Icons.close,
+          icon: Symbols.close,
           onSelect: widget.onClose!,
         ),
       if (widget.onDisconnect != null)
         _TerminalAction(
           label: 'Disconnect ${activeTab!.serverName}',
-          icon: Icons.link_off,
+          icon: Symbols.link_off,
           onSelect: widget.onDisconnect!,
         ),
       for (final session in widget.connectedSessions)
         if (session.serverId != activeTab?.serverId)
           _TerminalAction(
             label: 'New terminal on ${session.serverName}',
-            icon: Icons.terminal,
+            icon: Symbols.terminal,
             onSelect: () => widget.onOpen(session),
           ),
     ].where((action) => action.label.toLowerCase().contains(query)).toList();
@@ -148,7 +149,7 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
               leading: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: CircleAvatar(
-                  child: const Icon(Icons.keyboard_command_key),
+                  child: const Icon(Symbols.keyboard_command_key),
                 ),
               ),
               onChanged: (_) => setState(() {}),

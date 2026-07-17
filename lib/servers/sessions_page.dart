@@ -2,6 +2,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/gestures.dart' show kMiddleMouseButton;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/local/app_database.dart';
 import 'server_connection_actions.dart';
@@ -60,7 +61,7 @@ class _TerminalTabBar extends ConsumerWidget {
             child: IconButton(
               tooltip: 'Terminal actions (Shift+Tab)',
               onPressed: () => showTerminalCommandPalette(context, ref),
-              icon: const Icon(Icons.add),
+              icon: const Icon(Symbols.add),
             ),
           ),
         ),
@@ -95,7 +96,7 @@ class _TerminalTabBar extends ConsumerWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.terminal, size: 18),
+                            const Icon(Symbols.terminal, size: 18),
                             const SizedBox(width: 8),
                             Text(tab.serverName),
                             const SizedBox(width: 4),
@@ -104,7 +105,7 @@ class _TerminalTabBar extends ConsumerWidget {
                               onPressed: () => ref
                                   .read(terminalTabsProvider.notifier)
                                   .close(tab.id),
-                              icon: const Icon(Icons.close, size: 18),
+                              icon: const Icon(Symbols.close, size: 18),
                             ),
                           ],
                         ),
@@ -116,7 +117,7 @@ class _TerminalTabBar extends ConsumerWidget {
             IconButton(
               tooltip: 'Terminal actions (Shift+Tab)',
               onPressed: () => showTerminalCommandPalette(context, ref),
-              icon: const Icon(Icons.add),
+              icon: const Icon(Symbols.add),
             ),
           ],
         ),
@@ -234,7 +235,7 @@ class _ConnectedServers extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: () =>
                         AutoTabsRouter.of(context).setActiveIndex(0),
-                    icon: const Icon(Icons.add),
+                    icon: const Icon(Symbols.add),
                     label: const Text('Add server'),
                   ),
                 )
@@ -243,7 +244,7 @@ class _ConnectedServers extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final server = servers[index];
                     return ListTile(
-                      leading: const Icon(Icons.dns_outlined),
+                      leading: const Icon(Symbols.dns),
                       title: Text(server.name),
                       subtitle: Text(
                         '${server.username}@${server.host}:${server.port}',
@@ -253,7 +254,7 @@ class _ConnectedServers extends StatelessWidget {
                       ),
                       trailing: FilledButton.tonalIcon(
                         onPressed: () => onConnect(server),
-                        icon: const Icon(Icons.link),
+                        icon: const Icon(Symbols.link),
                         label: const Text('Connect'),
                       ),
                     );
@@ -266,13 +267,13 @@ class _ConnectedServers extends StatelessWidget {
         itemBuilder: (context, index) {
           final session = connected[index];
           return ListTile(
-            leading: const Icon(Icons.terminal),
+            leading: const Icon(Symbols.terminal),
             title: Text(session.serverName),
             subtitle: const Text('Connected'),
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
             trailing: FilledButton.tonalIcon(
               onPressed: () => onOpen(session),
-              icon: const Icon(Icons.add),
+              icon: const Icon(Symbols.add),
               label: const Text('New terminal'),
             ),
           );

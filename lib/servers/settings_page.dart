@@ -1,6 +1,7 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'server_providers.dart';
 
@@ -48,17 +49,17 @@ class SettingsPage extends ConsumerWidget {
                     ButtonSegment(
                       value: ThemeMode.system,
                       label: Text('System'),
-                      icon: Icon(Icons.brightness_auto_outlined),
+                      icon: Icon(Symbols.brightness_auto),
                     ),
                     ButtonSegment(
                       value: ThemeMode.light,
                       label: Text('Light'),
-                      icon: Icon(Icons.light_mode_outlined),
+                      icon: Icon(Symbols.light_mode),
                     ),
                     ButtonSegment(
                       value: ThemeMode.dark,
                       label: Text('Dark'),
-                      icon: Icon(Icons.dark_mode_outlined),
+                      icon: Icon(Symbols.dark_mode),
                     ),
                   ],
                   selected: {themeMode},

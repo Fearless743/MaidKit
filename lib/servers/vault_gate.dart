@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'server_providers.dart';
 
@@ -75,7 +76,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Icon(
-                    Icons.lock_outline,
+                    Symbols.lock,
                     size: 40,
                     color: Theme.of(context).colorScheme.primary,
                   ),

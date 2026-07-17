@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/local/app_database.dart';
 import '../shared/presentation/maidkit_alert.dart';
@@ -37,7 +38,7 @@ Future<bool> connectAndOpenTerminal(
       showStyledSnackBar(
         message: error.toString(),
         title: 'Could not connect',
-        icon: Icons.link_off,
+        icon: Symbols.link_off,
         accentColor: Theme.of(context).colorScheme.error,
       );
     }
@@ -52,7 +53,7 @@ Future<bool> connectAndOpenTerminal(
       showStyledSnackBar(
         message: error.toString(),
         title: 'Could not open terminal',
-        icon: Icons.terminal,
+        icon: Symbols.terminal,
         accentColor: Theme.of(context).colorScheme.error,
       );
     }
@@ -75,7 +76,7 @@ Future<bool> _approveHostKey(BuildContext context, HostKeyPrompt prompt) async {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.verified_user_outlined,
+                    Symbols.verified_user,
                     color: Theme.of(context).colorScheme.primary,
                     size: 36,
                   ),
