@@ -5,6 +5,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'routing/app_router.dart';
 import 'shared/presentation/maidkit_window_scaffold.dart';
 import 'servers/server_providers.dart';
+import 'servers/startup_connection_bootstrap.dart';
 import 'servers/vault_gate.dart';
 import 'theme.dart';
 
@@ -30,7 +31,11 @@ class MaidKitApp extends ConsumerWidget {
         initialEntries: [
           OverlayEntry(
             builder: (context) => MaidKitWindowScaffold(
-              child: VaultGate(child: child ?? const SizedBox.shrink()),
+              child: VaultGate(
+                child: StartupConnectionBootstrap(
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
             ),
           ),
         ],

@@ -6,10 +6,18 @@ import 'package:window_manager/window_manager.dart';
 import 'app.dart';
 import 'servers/server_providers.dart';
 import 'servers/terminal_adapter_preferences.dart';
+import 'servers/startup_connection_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final terminalAdapterPreferences = await TerminalAdapterPreferences.load();
+  final preferences = await Future.wait([
+    TerminalAdapterPreferences.load(),
+    StartupConnectionPreferences.load(),
+  ]);
+  final terminalAdapterPreferences =
+      preferences[0] as TerminalAdapterPreferences;
+  final startupConnectionPreferences =
+      preferences[1] as StartupConnectionPreferences;
 
   if (DesktopWindowFrame.isPlatformDesktop) {
     await windowManager.ensureInitialized();
@@ -31,6 +39,9 @@ Future<void> main() async {
       overrides: [
         terminalAdapterPreferencesProvider.overrideWithValue(
           terminalAdapterPreferences,
+        ),
+        startupConnectionSettingsProvider.overrideWithValue(
+          startupConnectionPreferences,
         ),
       ],
       child: const MaidKitApp(),

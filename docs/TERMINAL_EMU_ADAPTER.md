@@ -32,11 +32,12 @@ and must not import a concrete emulator package.
 `GhosttyTerminalSessionAdapter` uses libghostty for VT parsing, screen state,
 10,000-line scrollback, PTY callbacks, and resize handling. Its Flutter grid
 renderer uses a desktop monospace stack, reserves content padding, and renders
-the terminal cursor.
+the terminal cursor plus per-cell ANSI and truecolor foreground/background
+styles. It supports wheel scrollback, pointer text selection, Cmd/Ctrl+C copy,
+Cmd/Ctrl+V paste, and native IME composition/commit.
 
-It is not feature-parity complete: per-cell ANSI/truecolor styling, mouse
-input, selection, copy/paste, IME, bracketed paste, and full keyboard-protocol
-support remain to be implemented and evaluated.
+It is not feature-parity complete: terminal mouse reporting, bracketed paste,
+and full keyboard-protocol support remain to be implemented and evaluated.
 
 ### xterm (fallback)
 

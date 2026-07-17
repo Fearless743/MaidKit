@@ -16,6 +16,10 @@ class ServerRepository {
 
   Stream<List<Server>> watchAll() => _database.watchServers();
 
+  Future<List<Server>> all() => (_database.select(
+    _database.servers,
+  )..where((table) => table.deletedAt.isNull())).get();
+
   Future<Server> create(ServerDraft draft) async {
     final encrypted = await _vault.encrypt(
       draft.credential.encode(),
@@ -36,6 +40,8 @@ class ServerRepository {
             credentialType: Value(draft.credential.type.name),
             encryptedCredential: Value(encrypted.bytes),
             credentialNonce: Value(encrypted.nonce),
+            collectStats: Value(draft.collectStats),
+            collectSystemInfo: Value(draft.collectSystemInfo),
           ),
         );
     return (_database.select(
@@ -59,6 +65,8 @@ class ServerRepository {
         credentialType: Value(draft.credential.type.name),
         encryptedCredential: Value(encrypted.bytes),
         credentialNonce: Value(encrypted.nonce),
+        collectStats: Value(draft.collectStats),
+        collectSystemInfo: Value(draft.collectSystemInfo),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
@@ -123,6 +131,8 @@ class ServerRepository {
             'credentialType': server.credentialType,
             'encryptedCredential': server.encryptedCredential,
             'credentialNonce': server.credentialNonce,
+            'collectStats': server.collectStats,
+            'collectSystemInfo': server.collectSystemInfo,
           },
         )
         .toList();
@@ -161,6 +171,8 @@ class ServerRepository {
           credentialType: Value(value['credentialType'] as String?),
           encryptedCredential: Value(value['encryptedCredential'] as String?),
           credentialNonce: Value(value['credentialNonce'] as String?),
+          collectStats: Value(value['collectStats'] as bool? ?? true),
+          collectSystemInfo: Value(value['collectSystemInfo'] as bool? ?? true),
           createdAt: Value(DateTime.parse(value['createdAt'] as String)),
           updatedAt: Value(DateTime.parse(value['updatedAt'] as String)),
           deletedAt: Value(

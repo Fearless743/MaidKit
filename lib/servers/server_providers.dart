@@ -8,6 +8,7 @@ import 'ssh_connection_manager.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
 import 'terminal_adapter_preferences.dart';
+import 'startup_connection_preferences.dart';
 import 'vault_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -67,6 +68,27 @@ final terminalSessionAdapterOptionsProvider =
 final terminalAdapterPreferencesProvider = Provider<TerminalAdapterSettings>(
   (ref) => InMemoryTerminalAdapterSettings(),
 );
+
+final startupConnectionSettingsProvider = Provider<StartupConnectionSettings>(
+  (ref) => InMemoryStartupConnectionSettings(),
+);
+
+final connectOnStartupProvider =
+    NotifierProvider<ConnectOnStartupNotifier, bool>(
+      ConnectOnStartupNotifier.new,
+    );
+
+class ConnectOnStartupNotifier extends Notifier<bool> {
+  @override
+  bool build() => ref.read(startupConnectionSettingsProvider).connectOnStartup;
+
+  Future<void> setEnabled(bool value) async {
+    await ref
+        .read(startupConnectionSettingsProvider)
+        .saveConnectOnStartup(value);
+    state = value;
+  }
+}
 
 final selectedTerminalSessionAdapterProvider =
     NotifierProvider<SelectedTerminalSessionAdapterNotifier, String>(

@@ -50,6 +50,8 @@ class ServerDraft {
     required this.port,
     required this.username,
     required this.credential,
+    this.collectStats = true,
+    this.collectSystemInfo = true,
   });
 
   final String name;
@@ -57,9 +59,36 @@ class ServerDraft {
   final int port;
   final String username;
   final ServerCredential credential;
+  final bool collectStats;
+  final bool collectSystemInfo;
 }
 
 enum SessionStatus { connecting, connected, failed, closed }
+
+class ServerStats {
+  const ServerStats({
+    required this.collectorId,
+    required this.updatedAt,
+    this.loadAverage,
+    this.memoryTotalKb,
+    this.memoryAvailableKb,
+    this.uptime,
+  });
+
+  final String collectorId;
+  final DateTime updatedAt;
+  final double? loadAverage;
+  final int? memoryTotalKb;
+  final int? memoryAvailableKb;
+  final Duration? uptime;
+}
+
+class ServerSystemInfo {
+  const ServerSystemInfo({this.distribution, this.kernel});
+
+  final String? distribution;
+  final String? kernel;
+}
 
 class SshSessionInfo {
   const SshSessionInfo({
@@ -68,6 +97,8 @@ class SshSessionInfo {
     required this.connectedAt,
     required this.status,
     this.error,
+    this.stats,
+    this.systemInfo,
   });
 
   final int serverId;
@@ -75,15 +106,23 @@ class SshSessionInfo {
   final DateTime connectedAt;
   final SessionStatus status;
   final String? error;
+  final ServerStats? stats;
+  final ServerSystemInfo? systemInfo;
 
-  SshSessionInfo copyWith({SessionStatus? status, String? error}) =>
-      SshSessionInfo(
-        serverId: serverId,
-        serverName: serverName,
-        connectedAt: connectedAt,
-        status: status ?? this.status,
-        error: error ?? this.error,
-      );
+  SshSessionInfo copyWith({
+    SessionStatus? status,
+    String? error,
+    ServerStats? stats,
+    ServerSystemInfo? systemInfo,
+  }) => SshSessionInfo(
+    serverId: serverId,
+    serverName: serverName,
+    connectedAt: connectedAt,
+    status: status ?? this.status,
+    error: error ?? this.error,
+    stats: stats ?? this.stats,
+    systemInfo: systemInfo ?? this.systemInfo,
+  );
 }
 
 class HostKeyPrompt {

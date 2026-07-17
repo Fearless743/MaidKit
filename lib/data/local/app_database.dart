@@ -19,6 +19,9 @@ class Servers extends Table {
   TextColumn get credentialNonce => text().nullable()();
   TextColumn get hostKeyAlgorithm => text().nullable()();
   TextColumn get hostKeyFingerprint => text().nullable()();
+  BoolColumn get collectStats => boolean().withDefault(const Constant(true))();
+  BoolColumn get collectSystemInfo =>
+      boolean().withDefault(const Constant(true))();
 }
 
 class VaultMetadata extends Table {
@@ -37,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'maid_kit'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -64,6 +67,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await m.addColumn(servers, servers.hostKeyAlgorithm);
         await m.addColumn(servers, servers.hostKeyFingerprint);
+      }
+      if (from < 4) {
+        await m.addColumn(servers, servers.collectStats);
+        await m.addColumn(servers, servers.collectSystemInfo);
       }
     },
   );

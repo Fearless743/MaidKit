@@ -14,6 +14,7 @@ class SettingsPage extends ConsumerWidget {
     final biometricEnabled = ref.watch(biometricUnlockEnabledProvider);
     final adapterOptions = ref.watch(terminalSessionAdapterOptionsProvider);
     final selectedAdapter = ref.watch(selectedTerminalSessionAdapterProvider);
+    final connectOnStartup = ref.watch(connectOnStartupProvider);
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -127,6 +128,22 @@ class SettingsPage extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text('Connections', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text('Connect saved servers on startup'),
+            subtitle: const Text(
+              'Keep SSH connections ready to collect server statistics after the vault unlocks.',
+            ),
+            value: connectOnStartup,
+            onChanged: (value) =>
+                ref.read(connectOnStartupProvider.notifier).setEnabled(value),
           ),
         ),
         const SizedBox(height: 24),

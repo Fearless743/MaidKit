@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:libghostty/libghostty.dart' as ghostty;
 import 'package:maid_kit/servers/ghostty_terminal_session_adapter.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/servers/terminal_adapter_preferences.dart';
@@ -44,6 +46,16 @@ void main() {
           .having((event) => event.columns, 'columns', 120)
           .having((event) => event.rows, 'rows', 36),
     );
+    await adapter.dispose();
+  });
+
+  test('Ghostty adapter encodes cursor keys for the remote shell', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final output = adapter.outgoingBytes.first;
+
+    adapter.sendKey(ghostty.Key.arrowUp);
+
+    expect(utf8.decode(await output), '\u001b[A');
     await adapter.dispose();
   });
 

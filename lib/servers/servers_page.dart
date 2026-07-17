@@ -6,9 +6,10 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
 import '../data/local/app_database.dart';
-import '../shared/presentation/maidkit_alert.dart';
+import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'terminal_tabs_provider.dart';
 
 @RoutePage()
 class ServersPage extends ConsumerWidget {
@@ -43,34 +44,8 @@ class ServersPage extends ConsumerWidget {
     WidgetRef ref,
     Server server,
   ) async {
-    HostKeyPrompt? approvedHostKey;
-    try {
-      final credential = await ref
-          .read(serverRepositoryProvider)
-          .credentialFor(server);
-      await ref.read(connectionManagerProvider).connect(server, credential, (
-        prompt,
-      ) async {
-        final approved = await _approveHostKey(context, prompt);
-        if (approved) approvedHostKey = prompt;
-        return approved;
-      }, knownHostKeyFingerprint: server.hostKeyFingerprint);
-      await ref.read(serverRepositoryProvider).markConnected(server.id);
-      if (approvedHostKey != null) {
-        await ref
-            .read(serverRepositoryProvider)
-            .rememberHostKey(server.id, approvedHostKey!);
-      }
-    } catch (error) {
-      if (context.mounted) {
-        showStyledSnackBar(
-          message: error.toString(),
-          title: 'Could not connect',
-          icon: Icons.link_off,
-          accentColor: Theme.of(context).colorScheme.error,
-        );
-      }
-    }
+    final opened = await connectAndOpenTerminal(context, ref, server);
+    if (opened && context.mounted) AutoTabsRouter.of(context).setActiveIndex(1);
   }
 
   Future<void> _edit(BuildContext context, WidgetRef ref, Server server) async {
@@ -90,6 +65,8 @@ class ServersPage extends ConsumerWidget {
             port: server.port,
             username: server.username,
             credential: credential,
+            collectStats: server.collectStats,
+            collectSystemInfo: server.collectSystemInfo,
           ),
         ),
       );
@@ -109,117 +86,29 @@ class ServersPage extends ConsumerWidget {
   }
 
   Future<void> _delete(WidgetRef ref, Server server) async {
+    await ref.read(terminalTabsProvider.notifier).closeForServer(server.id);
     await ref.read(connectionManagerProvider).disconnect(server.id);
     await ref.read(serverRepositoryProvider).delete(server);
-  }
-
-  Future<bool> _approveHostKey(
-    BuildContext context,
-    HostKeyPrompt prompt,
-  ) async {
-    return await showMaidKitOverlayDialog<bool>(
-          barrierDismissible: false,
-          builder: (context, close) => ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Material(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 36,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Verify SSH host key',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      prompt.replacesExisting
-                          ? 'This host key changed. Confirm it only if you expected the server to be rebuilt or reconfigured.'
-                          : 'Confirm this fingerprint before sending credentials. MaidKit will remember it for future connections.',
-                    ),
-                    const SizedBox(height: 16),
-                    SelectableText(
-                      '${prompt.algorithm}\n${prompt.fingerprint}',
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => close(false),
-                          child: const Text('Reject'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () => close(true),
-                          child: const Text('Approve'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ) ??
-        false;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final servers = ref.watch(serversProvider);
+    final sessions = ref.watch(sessionsProvider).asData?.value ?? const [];
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: servers.when(
         data: (items) => items.isEmpty
             ? _EmptyServers(onAdd: () => _add(context, ref))
-            : ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final server = items[index];
-                  return ContextMenuWidget(
-                    menuProvider: (_) => Menu(
-                      children: [
-                        MenuAction(
-                          title: 'Edit server',
-                          callback: () => _edit(context, ref, server),
-                        ),
-                        MenuSeparator(),
-                        MenuAction(
-                          title: 'Delete server',
-                          attributes: const MenuActionAttributes(
-                            destructive: true,
-                          ),
-                          callback: () => _delete(ref, server),
-                        ),
-                      ],
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                      ),
-                      leading: const Icon(Icons.dns_outlined),
-                      title: Text(server.name),
-                      subtitle: Text(
-                        '${server.username}@${server.host}:${server.port}',
-                      ),
-                      trailing: FilledButton.tonalIcon(
-                        onPressed: () => _connect(context, ref, server),
-                        icon: const Icon(Icons.link),
-                        label: const Text('Connect'),
-                      ),
-                    ),
-                  );
-                },
+            : _ServerGrid(
+                servers: items,
+                sessions: sessions,
+                onConnect: (server) => _connect(context, ref, server),
+                onEdit: (server) => _edit(context, ref, server),
+                onDelete: (server) => _delete(ref, server),
+                onRefresh: (server) => ref
+                    .read(connectionManagerProvider)
+                    .refreshServerInfo(server),
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
@@ -232,6 +121,558 @@ class ServersPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _ServerGrid extends StatelessWidget {
+  const _ServerGrid({
+    required this.servers,
+    required this.sessions,
+    required this.onConnect,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onRefresh,
+  });
+
+  final List<Server> servers;
+  final List<SshSessionInfo> sessions;
+  final ValueChanged<Server> onConnect;
+  final ValueChanged<Server> onEdit;
+  final ValueChanged<Server> onDelete;
+  final ValueChanged<Server> onRefresh;
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+    padding: const EdgeInsets.all(24),
+    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 380,
+      mainAxisExtent: 268,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+    ),
+    itemCount: servers.length,
+    itemBuilder: (context, index) {
+      final server = servers[index];
+      final session = sessions
+          .where((item) => item.serverId == server.id)
+          .firstOrNull;
+      return ContextMenuWidget(
+        menuProvider: (_) => Menu(
+          children: [
+            MenuAction(title: 'Edit server', callback: () => onEdit(server)),
+            MenuSeparator(),
+            MenuAction(
+              title: 'Delete server',
+              attributes: const MenuActionAttributes(destructive: true),
+              callback: () => onDelete(server),
+            ),
+          ],
+        ),
+        child: _ServerCard(
+          server: server,
+          session: session,
+          onConnect: () => onConnect(server),
+          onRefresh: () => onRefresh(server),
+        ),
+      );
+    },
+  );
+}
+
+class _ServerCard extends StatelessWidget {
+  const _ServerCard({
+    required this.server,
+    required this.session,
+    required this.onConnect,
+    required this.onRefresh,
+  });
+
+  final Server server;
+  final SshSessionInfo? session;
+  final VoidCallback onConnect;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final connected = session?.status == SessionStatus.connected;
+    final connecting = session?.status == SessionStatus.connecting;
+    final failed = session?.status == SessionStatus.failed;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  connected ? Icons.dns : Icons.dns_outlined,
+                  size: 22,
+                  color: connected
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        server.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${server.username}@${server.host}:${server.port}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Refresh statistics',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: connected ? onRefresh : null,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: connected
+                  ? _ServerStats(
+                      stats: session?.stats,
+                      systemInfo: session?.systemInfo,
+                      collectStats: server.collectStats,
+                      collectSystemInfo: server.collectSystemInfo,
+                    )
+                  : _DisconnectedStats(
+                      connecting: connecting,
+                      error: session?.error,
+                    ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _ConnectionStatus(
+                  connected: connected,
+                  connecting: connecting,
+                  failed: failed,
+                ),
+                const Spacer(),
+                if (!connected && !connecting)
+                  FilledButton.tonal(
+                    onPressed: onConnect,
+                    child: const Text('Connect'),
+                  ),
+                if (connecting)
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectionStatus extends StatelessWidget {
+  const _ConnectionStatus({
+    required this.connected,
+    required this.connecting,
+    required this.failed,
+  });
+
+  final bool connected;
+  final bool connecting;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final (label, color) = switch ((connected, connecting, failed)) {
+      (true, _, _) => ('Connected', colorScheme.primary),
+      (_, true, _) => ('Connecting', colorScheme.tertiary),
+      (_, _, true) => ('Failed', colorScheme.error),
+      _ => ('Not connected', colorScheme.onSurfaceVariant),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: textTheme.labelLarge?.copyWith(color: colorScheme.onSurface),
+        ),
+      ],
+    );
+  }
+}
+
+class _DisconnectedStats extends StatelessWidget {
+  const _DisconnectedStats({required this.connecting, this.error});
+
+  final bool connecting;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final message = connecting
+        ? 'Establishing SSH session…'
+        : (error ?? 'Connect to view load, memory, and uptime.');
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        child: Row(
+          children: [
+            Icon(
+              connecting ? Icons.hourglass_top : Icons.insights_outlined,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ServerStats extends StatelessWidget {
+  const _ServerStats({
+    required this.stats,
+    required this.systemInfo,
+    required this.collectStats,
+    required this.collectSystemInfo,
+  });
+
+  final ServerStats? stats;
+  final ServerSystemInfo? systemInfo;
+  final bool collectStats;
+  final bool collectSystemInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    if (!collectStats && !collectSystemInfo) {
+      return _StatsMessage(
+        icon: Icons.visibility_off_outlined,
+        message: 'Information collection is disabled for this server.',
+      );
+    }
+    if (stats == null && systemInfo == null) {
+      return _StatsMessage(
+        icon: Icons.sync,
+        message: 'Fetching server information…',
+      );
+    }
+
+    final usedMemoryKb =
+        stats?.memoryTotalKb == null || stats?.memoryAvailableKb == null
+        ? null
+        : stats!.memoryTotalKb! - stats!.memoryAvailableKb!;
+    final memoryRatio =
+        usedMemoryKb == null ||
+            stats?.memoryTotalKb == null ||
+            stats!.memoryTotalKb == 0
+        ? null
+        : (usedMemoryKb / stats!.memoryTotalKb!).clamp(0.0, 1.0);
+    final memoryPercent = memoryRatio == null
+        ? null
+        : (memoryRatio * 100).round();
+    final systemLabel = [
+      systemInfo?.distribution,
+      systemInfo?.kernel,
+    ].whereType<String>().join(' · ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (stats != null)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _StatTile(
+                  label: 'Load',
+                  value: stats!.loadAverage?.toStringAsFixed(2) ?? '—',
+                  detail: _loadDetail(stats!.loadAverage),
+                  valueColor: _loadColor(stats!.loadAverage, colorScheme),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatTile(
+                  label: 'Memory',
+                  value: memoryPercent == null ? '—' : '$memoryPercent%',
+                  detail: usedMemoryKb == null || stats!.memoryTotalKb == null
+                      ? null
+                      : '${_formatBytes(usedMemoryKb * 1024)} / ${_formatBytes(stats!.memoryTotalKb! * 1024)}',
+                  progress: memoryRatio,
+                  progressColor: _memoryColor(memoryRatio, colorScheme),
+                  valueColor: _memoryColor(memoryRatio, colorScheme),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatTile(
+                  label: 'Uptime',
+                  value: _formatUptime(stats!.uptime),
+                  detail: _uptimeDetail(stats!.uptime),
+                ),
+              ),
+            ],
+          )
+        else if (collectStats)
+          _StatsMessage(
+            icon: Icons.query_stats,
+            message: 'Performance statistics are unavailable on this host.',
+          ),
+        if (systemLabel.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            systemLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (stats?.updatedAt != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Updated ${_formatRelative(stats!.updatedAt)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.labelSmall?.copyWith(color: colorScheme.outline),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String? _loadDetail(double? load) {
+    if (load == null) return null;
+    if (load < 1) return 'Idle';
+    if (load < 2) return 'Normal';
+    if (load < 4) return 'Busy';
+    return 'High';
+  }
+
+  static String? _uptimeDetail(Duration? uptime) {
+    if (uptime == null || uptime.inSeconds == 0) return null;
+    if (uptime.inDays >= 30) return 'Stable';
+    if (uptime.inHours < 1) return 'Recent';
+    return null;
+  }
+
+  static Color? _loadColor(double? load, ColorScheme scheme) {
+    if (load == null) return null;
+    if (load >= 4) return scheme.error;
+    if (load >= 2) return scheme.tertiary;
+    return null;
+  }
+
+  static Color? _memoryColor(double? ratio, ColorScheme scheme) {
+    if (ratio == null) return null;
+    if (ratio >= 0.9) return scheme.error;
+    if (ratio >= 0.75) return scheme.tertiary;
+    return null;
+  }
+}
+
+class _StatsMessage extends StatelessWidget {
+  const _StatsMessage({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    this.detail,
+    this.progress,
+    this.progressColor,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final String? detail;
+  final double? progress;
+  final Color? progressColor;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final resolvedValueColor = valueColor ?? colorScheme.onSurface;
+    final resolvedProgressColor = progressColor ?? colorScheme.primary;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.titleMedium?.copyWith(
+                color: resolvedValueColor,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (progress != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 4,
+                  backgroundColor: colorScheme.onSurface.withValues(
+                    alpha: 0.08,
+                  ),
+                  color: resolvedProgressColor,
+                ),
+              )
+            else
+              const SizedBox(height: 4),
+            const SizedBox(height: 6),
+            Text(
+              detail ?? ' ',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatBytes(int bytes) {
+  const megabyte = 1024 * 1024;
+  const gigabyte = 1024 * megabyte;
+  return bytes >= gigabyte
+      ? '${(bytes / gigabyte).toStringAsFixed(1)} GB'
+      : '${(bytes / megabyte).toStringAsFixed(0)} MB';
+}
+
+String _formatUptime(Duration? uptime) {
+  if (uptime == null || uptime.inSeconds == 0) return '—';
+  final days = uptime.inDays;
+  final hours = uptime.inHours.remainder(24);
+  final minutes = uptime.inMinutes.remainder(60);
+  if (days > 0) return '${days}d ${hours}h';
+  if (hours > 0) return '${hours}h ${minutes}m';
+  return '${minutes}m';
+}
+
+String _formatRelative(DateTime time) {
+  final delta = DateTime.now().difference(time);
+  if (delta.inSeconds < 15) return 'just now';
+  if (delta.inMinutes < 1) return '${delta.inSeconds}s ago';
+  if (delta.inHours < 1) return '${delta.inMinutes}m ago';
+  if (delta.inDays < 1) return '${delta.inHours}h ago';
+  return '${delta.inDays}d ago';
 }
 
 class _EmptyServers extends StatelessWidget {
@@ -286,6 +727,8 @@ class _AddServerDialogState extends State<_AddServerDialog> {
   final _secret = TextEditingController();
   final _passphrase = TextEditingController();
   CredentialType _type = CredentialType.password;
+  bool _collectStats = true;
+  bool _collectSystemInfo = true;
 
   @override
   void initState() {
@@ -300,6 +743,8 @@ class _AddServerDialogState extends State<_AddServerDialog> {
     _secret.text =
         initial.credential.password ?? initial.credential.privateKey ?? '';
     _passphrase.text = initial.credential.keyPassphrase ?? '';
+    _collectStats = initial.collectStats;
+    _collectSystemInfo = initial.collectSystemInfo;
   }
 
   @override
@@ -348,6 +793,8 @@ class _AddServerDialogState extends State<_AddServerDialog> {
         port: int.parse(_port.text),
         username: _user.text,
         credential: credential,
+        collectStats: _collectStats,
+        collectSystemInfo: _collectSystemInfo,
       ),
     );
   }
@@ -445,6 +892,23 @@ class _AddServerDialogState extends State<_AddServerDialog> {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Collect performance statistics'),
+              subtitle: const Text('Load average, memory use, and uptime.'),
+              value: _collectStats,
+              onChanged: (value) => setState(() => _collectStats = value),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Discover system information'),
+              subtitle: const Text(
+                'Distribution, operating system, and kernel.',
+              ),
+              value: _collectSystemInfo,
+              onChanged: (value) => setState(() => _collectSystemInfo = value),
+            ),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

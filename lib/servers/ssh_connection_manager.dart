@@ -4,31 +4,51 @@ import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 
 import '../data/local/app_database.dart';
+import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
 
 typedef HostKeyApproval = Future<bool> Function(HostKeyPrompt prompt);
 
 class SshConnectionManager {
-  SshConnectionManager(this._terminalAdapterFactory);
+  SshConnectionManager(
+    this._terminalAdapterFactory, {
+    ServerMetricsCollector? metricsCollector,
+  }) : _metricsCollector = metricsCollector ?? AutoServerMetricsCollector();
 
   final TerminalSessionAdapterFactory Function() _terminalAdapterFactory;
+  final ServerMetricsCollector _metricsCollector;
   final _sessions = <int, SSHClient>{};
-  final _shells = <int, SSHSession>{};
-  final _terminalBindings = <int, TerminalSessionBinding>{};
+  final _terminals = <String, _TerminalConnection>{};
   final _controller = StreamController<List<SshSessionInfo>>.broadcast();
   final _states = <int, SshSessionInfo>{};
+  var _nextTerminalId = 0;
 
   Stream<List<SshSessionInfo>> get sessions => _controller.stream;
   List<SshSessionInfo> get current => _states.values.toList();
 
-  TerminalSessionAdapter? terminalFor(int serverId) =>
-      _terminalBindings[serverId]?.adapter;
-
-  Future<TerminalSessionAdapter> openTerminal(int serverId) async {
-    final existing = _terminalBindings[serverId];
-    if (existing != null) return existing.adapter;
+  /// Returns the retained authenticated client for [serverId], if available.
+  ///
+  /// Feature code should reuse this client for remote operations instead of
+  /// opening a second transport connection.
+  SSHClient? clientFor(int serverId) {
     final client = _sessions[serverId];
+    return client == null || client.isClosed ? null : client;
+  }
+
+  Future<T> withClient<T>(
+    int serverId,
+    Future<T> Function(SSHClient client) run,
+  ) {
+    final client = clientFor(serverId);
+    if (client == null) {
+      throw StateError('Connect to this server before running an operation.');
+    }
+    return run(client);
+  }
+
+  Future<TerminalSessionHandle> openTerminal(int serverId) async {
+    final client = clientFor(serverId);
     if (client == null || client.isClosed) {
       throw StateError('Connect to this server before opening a terminal.');
     }
@@ -36,6 +56,7 @@ class SshConnectionManager {
       pty: const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 36),
     );
     final terminal = _terminalAdapterFactory().create();
+    final terminalId = 'terminal-${_nextTerminalId++}';
     final binding = TerminalSessionBinding(
       adapter: terminal,
       stdout: shell.stdout,
@@ -48,17 +69,77 @@ class SshConnectionManager {
         event.pixelHeight,
       ),
     );
-    _shells[serverId] = shell;
-    _terminalBindings[serverId] = binding;
+    _terminals[terminalId] = _TerminalConnection(
+      serverId: serverId,
+      shell: shell,
+      binding: binding,
+    );
     unawaited(
       shell.done.whenComplete(() {
-        if (identical(_shells[serverId], shell)) {
-          _shells.remove(serverId);
-          unawaited(_closeTerminal(serverId));
+        if (identical(_terminals[terminalId]?.shell, shell)) {
+          unawaited(closeTerminal(terminalId));
         }
       }),
     );
-    return terminal;
+    return TerminalSessionHandle(
+      id: terminalId,
+      adapter: terminal,
+      done: shell.done,
+    );
+  }
+
+  Future<void> closeTerminal(String terminalId) async {
+    final terminal = _terminals.remove(terminalId);
+    if (terminal == null) return;
+    await terminal.shell.stdin.close();
+    await terminal.binding.close();
+  }
+
+  Future<void> refreshServerInfo(Server server) async {
+    final client = clientFor(server.id);
+    final state = _states[server.id];
+    if (client == null || client.isClosed || state == null) return;
+    if (server.collectStats) await _refreshStats(client, state);
+    if (server.collectSystemInfo) {
+      await _refreshSystemInfo(client, _states[server.id] ?? state);
+    }
+  }
+
+  Future<void> _refreshStats(SSHClient client, SshSessionInfo state) async {
+    try {
+      final stats = await _metricsCollector.collect(client);
+      if (stats != null && identical(_sessions[state.serverId], client)) {
+        _set((_states[state.serverId] ?? state).copyWith(stats: stats));
+      }
+    } catch (_) {
+      // Statistics are optional and can be unavailable on non-Linux hosts.
+    }
+  }
+
+  Future<void> _refreshSystemInfo(
+    SSHClient client,
+    SshSessionInfo state,
+  ) async {
+    try {
+      final session = await client.execute(
+        "sh -c 'if [ -r /etc/os-release ]; then . /etc/os-release; printf \"%s\\n\" \"\$PRETTY_NAME\"; else uname -s; fi; uname -r'",
+      );
+      final output = await utf8.decoder.bind(session.stdout).join();
+      await session.done;
+      final values = output.trim().split('\n');
+      if (values.isNotEmpty && identical(_sessions[state.serverId], client)) {
+        _set(
+          (_states[state.serverId] ?? state).copyWith(
+            systemInfo: ServerSystemInfo(
+              distribution: values.firstOrNull,
+              kernel: values.length > 1 ? values[1] : null,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // System information is optional on restricted or non-POSIX hosts.
+    }
   }
 
   Future<void> connect(
@@ -110,9 +191,7 @@ class SshConnectionManager {
           final match = RegExp(
             r'SSH_Message_Userauth_Failure\(methodsLeft: \[(.*?)\]',
           ).firstMatch(message ?? '');
-          if (match != null) {
-            serverAuthMethods = match.group(1);
-          }
+          if (match != null) serverAuthMethods = match.group(1);
         },
         handshakeTimeout: const Duration(seconds: 15),
         authTimeout: const Duration(seconds: 15),
@@ -120,10 +199,12 @@ class SshConnectionManager {
       await client.authenticated;
       _sessions[server.id] = client;
       _set(_states[server.id]!.copyWith(status: SessionStatus.connected));
+      unawaited(refreshServerInfo(server));
       unawaited(
         client.done.whenComplete(() {
+          if (!identical(_sessions[server.id], client)) return;
           _sessions.remove(server.id);
-          unawaited(_closeShell(server.id));
+          unawaited(_closeTerminalsFor(server.id));
           final state = _states[server.id];
           if (state != null && state.status == SessionStatus.connected) {
             _set(state.copyWith(status: SessionStatus.closed));
@@ -147,7 +228,7 @@ class SshConnectionManager {
   }
 
   Future<void> disconnect(int serverId) async {
-    await _closeShell(serverId);
+    await _closeTerminalsFor(serverId);
     final client = _sessions.remove(serverId);
     client?.close();
     final state = _states[serverId];
@@ -160,8 +241,8 @@ class SshConnectionManager {
   }
 
   Future<void> dispose() async {
-    for (final serverId in _sessions.keys.toList()) {
-      await _closeShell(serverId);
+    for (final terminalId in _terminals.keys.toList()) {
+      await closeTerminal(terminalId);
     }
     for (final client in _sessions.values) {
       client.close();
@@ -169,13 +250,37 @@ class SshConnectionManager {
     await _controller.close();
   }
 
-  Future<void> _closeShell(int serverId) async {
-    final shell = _shells.remove(serverId);
-    await shell?.stdin.close();
-    await _closeTerminal(serverId);
+  Future<void> _closeTerminalsFor(int serverId) async {
+    final terminalIds = _terminals.entries
+        .where((entry) => entry.value.serverId == serverId)
+        .map((entry) => entry.key)
+        .toList();
+    for (final terminalId in terminalIds) {
+      await closeTerminal(terminalId);
+    }
   }
+}
 
-  Future<void> _closeTerminal(int serverId) async {
-    await _terminalBindings.remove(serverId)?.close();
-  }
+class TerminalSessionHandle {
+  const TerminalSessionHandle({
+    required this.id,
+    required this.adapter,
+    required this.done,
+  });
+
+  final String id;
+  final TerminalSessionAdapter adapter;
+  final Future<void> done;
+}
+
+class _TerminalConnection {
+  const _TerminalConnection({
+    required this.serverId,
+    required this.shell,
+    required this.binding,
+  });
+
+  final int serverId;
+  final SSHSession shell;
+  final TerminalSessionBinding binding;
 }

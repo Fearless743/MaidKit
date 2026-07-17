@@ -169,6 +169,36 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _collectStatsMeta = const VerificationMeta(
+    'collectStats',
+  );
+  @override
+  late final GeneratedColumn<bool> collectStats = GeneratedColumn<bool>(
+    'collect_stats',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("collect_stats" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _collectSystemInfoMeta = const VerificationMeta(
+    'collectSystemInfo',
+  );
+  @override
+  late final GeneratedColumn<bool> collectSystemInfo = GeneratedColumn<bool>(
+    'collect_system_info',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("collect_system_info" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -186,6 +216,8 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     credentialNonce,
     hostKeyAlgorithm,
     hostKeyFingerprint,
+    collectStats,
+    collectSystemInfo,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -310,6 +342,24 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         ),
       );
     }
+    if (data.containsKey('collect_stats')) {
+      context.handle(
+        _collectStatsMeta,
+        collectStats.isAcceptableOrUnknown(
+          data['collect_stats']!,
+          _collectStatsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('collect_system_info')) {
+      context.handle(
+        _collectSystemInfoMeta,
+        collectSystemInfo.isAcceptableOrUnknown(
+          data['collect_system_info']!,
+          _collectSystemInfoMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -379,6 +429,14 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         DriftSqlType.string,
         data['${effectivePrefix}host_key_fingerprint'],
       ),
+      collectStats: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}collect_stats'],
+      )!,
+      collectSystemInfo: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}collect_system_info'],
+      )!,
     );
   }
 
@@ -404,6 +462,8 @@ class Server extends DataClass implements Insertable<Server> {
   final String? credentialNonce;
   final String? hostKeyAlgorithm;
   final String? hostKeyFingerprint;
+  final bool collectStats;
+  final bool collectSystemInfo;
   const Server({
     required this.id,
     required this.name,
@@ -420,6 +480,8 @@ class Server extends DataClass implements Insertable<Server> {
     this.credentialNonce,
     this.hostKeyAlgorithm,
     this.hostKeyFingerprint,
+    required this.collectStats,
+    required this.collectSystemInfo,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -459,6 +521,8 @@ class Server extends DataClass implements Insertable<Server> {
     if (!nullToAbsent || hostKeyFingerprint != null) {
       map['host_key_fingerprint'] = Variable<String>(hostKeyFingerprint);
     }
+    map['collect_stats'] = Variable<bool>(collectStats);
+    map['collect_system_info'] = Variable<bool>(collectSystemInfo);
     return map;
   }
 
@@ -499,6 +563,8 @@ class Server extends DataClass implements Insertable<Server> {
       hostKeyFingerprint: hostKeyFingerprint == null && nullToAbsent
           ? const Value.absent()
           : Value(hostKeyFingerprint),
+      collectStats: Value(collectStats),
+      collectSystemInfo: Value(collectSystemInfo),
     );
   }
 
@@ -527,6 +593,8 @@ class Server extends DataClass implements Insertable<Server> {
       hostKeyFingerprint: serializer.fromJson<String?>(
         json['hostKeyFingerprint'],
       ),
+      collectStats: serializer.fromJson<bool>(json['collectStats']),
+      collectSystemInfo: serializer.fromJson<bool>(json['collectSystemInfo']),
     );
   }
   @override
@@ -548,6 +616,8 @@ class Server extends DataClass implements Insertable<Server> {
       'credentialNonce': serializer.toJson<String?>(credentialNonce),
       'hostKeyAlgorithm': serializer.toJson<String?>(hostKeyAlgorithm),
       'hostKeyFingerprint': serializer.toJson<String?>(hostKeyFingerprint),
+      'collectStats': serializer.toJson<bool>(collectStats),
+      'collectSystemInfo': serializer.toJson<bool>(collectSystemInfo),
     };
   }
 
@@ -567,6 +637,8 @@ class Server extends DataClass implements Insertable<Server> {
     Value<String?> credentialNonce = const Value.absent(),
     Value<String?> hostKeyAlgorithm = const Value.absent(),
     Value<String?> hostKeyFingerprint = const Value.absent(),
+    bool? collectStats,
+    bool? collectSystemInfo,
   }) => Server(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -595,6 +667,8 @@ class Server extends DataClass implements Insertable<Server> {
     hostKeyFingerprint: hostKeyFingerprint.present
         ? hostKeyFingerprint.value
         : this.hostKeyFingerprint,
+    collectStats: collectStats ?? this.collectStats,
+    collectSystemInfo: collectSystemInfo ?? this.collectSystemInfo,
   );
   Server copyWithCompanion(ServersCompanion data) {
     return Server(
@@ -625,6 +699,12 @@ class Server extends DataClass implements Insertable<Server> {
       hostKeyFingerprint: data.hostKeyFingerprint.present
           ? data.hostKeyFingerprint.value
           : this.hostKeyFingerprint,
+      collectStats: data.collectStats.present
+          ? data.collectStats.value
+          : this.collectStats,
+      collectSystemInfo: data.collectSystemInfo.present
+          ? data.collectSystemInfo.value
+          : this.collectSystemInfo,
     );
   }
 
@@ -645,7 +725,9 @@ class Server extends DataClass implements Insertable<Server> {
           ..write('encryptedCredential: $encryptedCredential, ')
           ..write('credentialNonce: $credentialNonce, ')
           ..write('hostKeyAlgorithm: $hostKeyAlgorithm, ')
-          ..write('hostKeyFingerprint: $hostKeyFingerprint')
+          ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
+          ..write('collectStats: $collectStats, ')
+          ..write('collectSystemInfo: $collectSystemInfo')
           ..write(')'))
         .toString();
   }
@@ -667,6 +749,8 @@ class Server extends DataClass implements Insertable<Server> {
     credentialNonce,
     hostKeyAlgorithm,
     hostKeyFingerprint,
+    collectStats,
+    collectSystemInfo,
   );
   @override
   bool operator ==(Object other) =>
@@ -686,7 +770,9 @@ class Server extends DataClass implements Insertable<Server> {
           other.encryptedCredential == this.encryptedCredential &&
           other.credentialNonce == this.credentialNonce &&
           other.hostKeyAlgorithm == this.hostKeyAlgorithm &&
-          other.hostKeyFingerprint == this.hostKeyFingerprint);
+          other.hostKeyFingerprint == this.hostKeyFingerprint &&
+          other.collectStats == this.collectStats &&
+          other.collectSystemInfo == this.collectSystemInfo);
 }
 
 class ServersCompanion extends UpdateCompanion<Server> {
@@ -705,6 +791,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
   final Value<String?> credentialNonce;
   final Value<String?> hostKeyAlgorithm;
   final Value<String?> hostKeyFingerprint;
+  final Value<bool> collectStats;
+  final Value<bool> collectSystemInfo;
   const ServersCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -721,6 +809,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.credentialNonce = const Value.absent(),
     this.hostKeyAlgorithm = const Value.absent(),
     this.hostKeyFingerprint = const Value.absent(),
+    this.collectStats = const Value.absent(),
+    this.collectSystemInfo = const Value.absent(),
   });
   ServersCompanion.insert({
     this.id = const Value.absent(),
@@ -738,6 +828,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.credentialNonce = const Value.absent(),
     this.hostKeyAlgorithm = const Value.absent(),
     this.hostKeyFingerprint = const Value.absent(),
+    this.collectStats = const Value.absent(),
+    this.collectSystemInfo = const Value.absent(),
   }) : name = Value(name),
        host = Value(host),
        username = Value(username);
@@ -757,6 +849,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Expression<String>? credentialNonce,
     Expression<String>? hostKeyAlgorithm,
     Expression<String>? hostKeyFingerprint,
+    Expression<bool>? collectStats,
+    Expression<bool>? collectSystemInfo,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -776,6 +870,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
       if (hostKeyAlgorithm != null) 'host_key_algorithm': hostKeyAlgorithm,
       if (hostKeyFingerprint != null)
         'host_key_fingerprint': hostKeyFingerprint,
+      if (collectStats != null) 'collect_stats': collectStats,
+      if (collectSystemInfo != null) 'collect_system_info': collectSystemInfo,
     });
   }
 
@@ -795,6 +891,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Value<String?>? credentialNonce,
     Value<String?>? hostKeyAlgorithm,
     Value<String?>? hostKeyFingerprint,
+    Value<bool>? collectStats,
+    Value<bool>? collectSystemInfo,
   }) {
     return ServersCompanion(
       id: id ?? this.id,
@@ -812,6 +910,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
       credentialNonce: credentialNonce ?? this.credentialNonce,
       hostKeyAlgorithm: hostKeyAlgorithm ?? this.hostKeyAlgorithm,
       hostKeyFingerprint: hostKeyFingerprint ?? this.hostKeyFingerprint,
+      collectStats: collectStats ?? this.collectStats,
+      collectSystemInfo: collectSystemInfo ?? this.collectSystemInfo,
     );
   }
 
@@ -863,6 +963,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     if (hostKeyFingerprint.present) {
       map['host_key_fingerprint'] = Variable<String>(hostKeyFingerprint.value);
     }
+    if (collectStats.present) {
+      map['collect_stats'] = Variable<bool>(collectStats.value);
+    }
+    if (collectSystemInfo.present) {
+      map['collect_system_info'] = Variable<bool>(collectSystemInfo.value);
+    }
     return map;
   }
 
@@ -883,7 +989,9 @@ class ServersCompanion extends UpdateCompanion<Server> {
           ..write('encryptedCredential: $encryptedCredential, ')
           ..write('credentialNonce: $credentialNonce, ')
           ..write('hostKeyAlgorithm: $hostKeyAlgorithm, ')
-          ..write('hostKeyFingerprint: $hostKeyFingerprint')
+          ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
+          ..write('collectStats: $collectStats, ')
+          ..write('collectSystemInfo: $collectSystemInfo')
           ..write(')'))
         .toString();
   }
@@ -1444,6 +1552,8 @@ typedef $$ServersTableCreateCompanionBuilder =
       Value<String?> credentialNonce,
       Value<String?> hostKeyAlgorithm,
       Value<String?> hostKeyFingerprint,
+      Value<bool> collectStats,
+      Value<bool> collectSystemInfo,
     });
 typedef $$ServersTableUpdateCompanionBuilder =
     ServersCompanion Function({
@@ -1462,6 +1572,8 @@ typedef $$ServersTableUpdateCompanionBuilder =
       Value<String?> credentialNonce,
       Value<String?> hostKeyAlgorithm,
       Value<String?> hostKeyFingerprint,
+      Value<bool> collectStats,
+      Value<bool> collectSystemInfo,
     });
 
 class $$ServersTableFilterComposer
@@ -1545,6 +1657,16 @@ class $$ServersTableFilterComposer
 
   ColumnFilters<String> get hostKeyFingerprint => $composableBuilder(
     column: $table.hostKeyFingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get collectStats => $composableBuilder(
+    column: $table.collectStats,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get collectSystemInfo => $composableBuilder(
+    column: $table.collectSystemInfo,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1632,6 +1754,16 @@ class $$ServersTableOrderingComposer
     column: $table.hostKeyFingerprint,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get collectStats => $composableBuilder(
+    column: $table.collectStats,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get collectSystemInfo => $composableBuilder(
+    column: $table.collectSystemInfo,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ServersTableAnnotationComposer
@@ -1699,6 +1831,16 @@ class $$ServersTableAnnotationComposer
     column: $table.hostKeyFingerprint,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get collectStats => $composableBuilder(
+    column: $table.collectStats,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get collectSystemInfo => $composableBuilder(
+    column: $table.collectSystemInfo,
+    builder: (column) => column,
+  );
 }
 
 class $$ServersTableTableManager
@@ -1744,6 +1886,8 @@ class $$ServersTableTableManager
                 Value<String?> credentialNonce = const Value.absent(),
                 Value<String?> hostKeyAlgorithm = const Value.absent(),
                 Value<String?> hostKeyFingerprint = const Value.absent(),
+                Value<bool> collectStats = const Value.absent(),
+                Value<bool> collectSystemInfo = const Value.absent(),
               }) => ServersCompanion(
                 id: id,
                 name: name,
@@ -1760,6 +1904,8 @@ class $$ServersTableTableManager
                 credentialNonce: credentialNonce,
                 hostKeyAlgorithm: hostKeyAlgorithm,
                 hostKeyFingerprint: hostKeyFingerprint,
+                collectStats: collectStats,
+                collectSystemInfo: collectSystemInfo,
               ),
           createCompanionCallback:
               ({
@@ -1778,6 +1924,8 @@ class $$ServersTableTableManager
                 Value<String?> credentialNonce = const Value.absent(),
                 Value<String?> hostKeyAlgorithm = const Value.absent(),
                 Value<String?> hostKeyFingerprint = const Value.absent(),
+                Value<bool> collectStats = const Value.absent(),
+                Value<bool> collectSystemInfo = const Value.absent(),
               }) => ServersCompanion.insert(
                 id: id,
                 name: name,
@@ -1794,6 +1942,8 @@ class $$ServersTableTableManager
                 credentialNonce: credentialNonce,
                 hostKeyAlgorithm: hostKeyAlgorithm,
                 hostKeyFingerprint: hostKeyFingerprint,
+                collectStats: collectStats,
+                collectSystemInfo: collectSystemInfo,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
