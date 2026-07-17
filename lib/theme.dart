@@ -1,0 +1,34 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+
+/// The application-wide Material theme. Keep feature widgets dependent on this
+/// shared foundation instead of creating local colour schemes or chrome.
+ThemeData createMaidKitTheme(Brightness brightness) {
+  const seedColor = Color(0xFF0F766E);
+  final colorScheme = ColorScheme.fromSeed(
+    seedColor: seedColor,
+    brightness: brightness,
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: colorScheme,
+    brightness: brightness,
+    appBarTheme: const AppBarTheme(centerTitle: false),
+    navigationRailTheme: const NavigationRailThemeData(
+      groupAlignment: -1,
+      labelType: NavigationRailLabelType.all,
+    ),
+    inputDecorationTheme: InputDecorationThemeData(
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+      },
+    ),
+  );
+}

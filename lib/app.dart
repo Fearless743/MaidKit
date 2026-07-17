@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 
 import 'routing/app_router.dart';
 import 'shared/presentation/maidkit_window_scaffold.dart';
+import 'servers/vault_gate.dart';
+import 'theme.dart';
+
+final maidKitOverlayKey = GlobalKey<OverlayState>();
 
 class MaidKitApp extends ConsumerWidget {
   const MaidKitApp({super.key});
@@ -10,26 +15,23 @@ class MaidKitApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appRouter = ref.watch(appRouterProvider);
-    const seedColor = Color(0xFF0F766E);
-
+    IslandUIFoundation.configureOverlay(maidKitOverlayKey);
     return MaterialApp.router(
       title: 'MaidKit',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: seedColor,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(centerTitle: false),
-        navigationRailTheme: const NavigationRailThemeData(
-          groupAlignment: -1,
-          labelType: NavigationRailLabelType.all,
-        ),
-      ),
+      theme: createMaidKitTheme(Brightness.light),
+      darkTheme: createMaidKitTheme(Brightness.dark),
       routerConfig: appRouter.config(),
-      builder: (context, child) =>
-          MaidKitWindowScaffold(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => Overlay(
+        key: maidKitOverlayKey,
+        initialEntries: [
+          OverlayEntry(
+            builder: (context) => MaidKitWindowScaffold(
+              child: VaultGate(child: child ?? const SizedBox.shrink()),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
