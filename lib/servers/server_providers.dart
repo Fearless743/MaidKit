@@ -50,17 +50,16 @@ final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
       return const [
         TerminalSessionAdapterOption(
-          id: 'xterm',
-          label: 'xterm',
-          description: 'The built-in Flutter terminal renderer.',
-          factory: XtermTerminalSessionAdapterFactory(),
+          id: 'ghostty',
+          label: 'Ghostty',
+          description: 'The default libghostty-vt renderer for new terminals.',
+          factory: GhosttyTerminalSessionAdapterFactory(),
         ),
         TerminalSessionAdapterOption(
-          id: 'ghostty',
-          label: 'Ghostty (experimental)',
-          description:
-              'A libghostty-vt prototype with a lightweight Flutter renderer.',
-          factory: GhosttyTerminalSessionAdapterFactory(),
+          id: 'xterm',
+          label: 'xterm',
+          description: 'The built-in Flutter fallback renderer.',
+          factory: XtermTerminalSessionAdapterFactory(),
         ),
       ];
     });

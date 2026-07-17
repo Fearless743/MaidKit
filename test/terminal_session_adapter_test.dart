@@ -21,12 +21,14 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      expect(container.read(selectedTerminalSessionAdapterProvider), 'ghostty');
+
       await container
           .read(selectedTerminalSessionAdapterProvider.notifier)
-          .select('ghostty');
+          .select('xterm');
 
-      expect(container.read(selectedTerminalSessionAdapterProvider), 'ghostty');
-      expect(settings.selectedAdapterId, 'ghostty');
+      expect(container.read(selectedTerminalSessionAdapterProvider), 'xterm');
+      expect(settings.selectedAdapterId, 'xterm');
     },
   );
 

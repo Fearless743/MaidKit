@@ -1,12 +1,11 @@
-# Terminal emulator adapter plan
+# Terminal emulator adapters
 
 ## Purpose
 
-MaidKit currently uses `xterm` for its Flutter terminal widget and
-`dartssh2` for the SSH transport. Keep SSH lifecycle, PTY ownership, and
-terminal rendering separable so another emulator core—such as
-`libghostty`—can be evaluated without changing saved servers or live SSH
-session behavior.
+MaidKit uses `dartssh2` for SSH transport and a selectable terminal-emulator
+adapter for rendering. Ghostty (`libghostty-vt`) is the default adapter; xterm
+remains available as a fallback in Settings. The selected adapter is saved in
+`shared_preferences` and applies to newly opened terminals.
 
 ## Target boundary
 
@@ -26,39 +25,32 @@ Introduce a small terminal adapter contract in `lib/servers/`:
 parent SSH client disconnects. `SessionsPage` receives an adapter-backed view
 and must not import a concrete emulator package.
 
-## First extraction: xterm adapter
+## Current adapters
 
-When terminal work resumes, move the current `Terminal`, `TerminalView`,
-output callback, and resize callback behind `XtermTerminalSessionAdapter`.
+### Ghostty (default)
 
-- Preserve `xterm-256color`, 10,000 scrollback lines, UTF-8 decoding, and
-  the current in-memory lifecycle.
-- Move `TerminalView` out of `SessionsPage`; the page renders the adapter’s
-  supplied view instead.
-- Keep the adapter factory in a Riverpod provider so tests can substitute a
-  fake terminal without SSH or Flutter rendering.
-- Do not change the Drift schema, credential vault, server records, or host
-  fingerprint behavior.
+`GhosttyTerminalSessionAdapter` uses libghostty for VT parsing, screen state,
+10,000-line scrollback, PTY callbacks, and resize handling. Its Flutter grid
+renderer uses a desktop monospace stack, reserves content padding, and renders
+the terminal cursor.
 
-## Future libghostty evaluation
+It is not feature-parity complete: per-cell ANSI/truecolor styling, mouse
+input, selection, copy/paste, IME, bracketed paste, and full keyboard-protocol
+support remain to be implemented and evaluated.
 
-`libghostty` supplies Ghostty VT state and PTY/input callbacks, but not a
-drop-in Flutter renderer. Before adopting it, implement a prototype adapter
-and renderer with the same contract as the xterm adapter.
+### xterm (fallback)
 
-Compare both implementations using representative workloads:
+`XtermTerminalSessionAdapter` preserves the established Flutter xterm
+renderer, `xterm-256color` PTY type, UTF-8 decoding, and 10,000-line
+scrollback. Select it in Settings → Terminal renderer before opening a new
+terminal.
 
-- Interactive shell startup, `vim`/`htop`-style full-screen updates, ANSI
-  colour, Unicode/CJK, resize handling, mouse input, selection, copy/paste,
-  and scrollback.
-- Frame time, memory at 10,000+ lines, CPU while idle and under output load,
-  and behavior on macOS, Windows, and Linux.
-- Input correctness for modifiers, IME, bracketed paste, and terminal escape
-  sequences.
+## Adding an adapter
 
-Adopt libghostty only if its renderer reaches feature parity and demonstrates
-a material performance or correctness improvement on the supported desktop
-platforms. Keep `xterm` as the production fallback until then.
+Implement `TerminalSessionAdapter`, create a `TerminalSessionAdapterFactory`,
+and register a `TerminalSessionAdapterOption` in
+`terminalSessionAdapterOptionsProvider`. The option appears in Settings
+automatically. Adapter factories can also be overridden in Riverpod tests.
 
 ## Acceptance criteria for the extraction
 

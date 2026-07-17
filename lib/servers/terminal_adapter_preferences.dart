@@ -21,7 +21,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
     final store = preferences ?? SharedPreferencesAsync();
     return TerminalAdapterPreferences(
       store,
-      await store.getString(_adapterIdKey) ?? 'xterm',
+      await store.getString(_adapterIdKey) ?? 'ghostty',
     );
   }
 
@@ -31,7 +31,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
 }
 
 class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
-  InMemoryTerminalAdapterSettings([this.selectedAdapterId = 'xterm']);
+  InMemoryTerminalAdapterSettings([this.selectedAdapterId = 'ghostty']);
 
   @override
   String selectedAdapterId;
