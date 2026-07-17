@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart' show kMiddleMouseButton;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:styled_widget/styled_widget.dart';
 
 import '../data/local/app_database.dart';
 import 'server_connection_actions.dart';
@@ -71,7 +72,7 @@ class _TerminalTabBar extends ConsumerWidget {
               onPressed: () => showTerminalCommandPalette(context, ref),
               icon: const Icon(Symbols.add),
             ),
-          ),
+          ).padding(right: 8),
         ),
       );
     }

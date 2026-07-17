@@ -174,14 +174,19 @@ class _ContainerManagementTabState
   @override
   Widget build(BuildContext context) {
     if (!widget.connected) {
-      return _ContainerConnectionPrompt(
+      return _ContainerEmptyPanel(
+        icon: Symbols.link_off,
         message: widget.connectionError ?? 'Connect to manage containers.',
-        onConnect: widget.onConnect,
+        actionLabel: 'Connect',
+        onAction: widget.onConnect,
+        filledAction: true,
+        actionIcon: Symbols.link,
       );
     }
     return _environments.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _ContainerEmptyState(
+      error: (error, _) => _ContainerEmptyPanel(
+        icon: Symbols.error_outline,
         message: 'Could not retrieve containers: $error',
         actionLabel: 'Try again',
         onAction: _load,
@@ -213,31 +218,63 @@ class _ContainerEnvironments extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     if (environments.isEmpty) {
-      return _ContainerEmptyState(
+      return _ContainerEmptyPanel(
+        icon: Symbols.deployed_code,
         message: 'Docker and Podman are not installed for this server user.',
         actionLabel: 'Refresh',
         onAction: onRefresh,
       );
     }
-    return ListView(
-      padding: const EdgeInsets.all(16),
+
+    final totalContainers = environments
+        .where((env) => env.isAvailable)
+        .fold<int>(0, (sum, env) => sum + env.containers.length);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            tooltip: 'Refresh containers',
-            onPressed: onRefresh,
-            icon: const Icon(Symbols.refresh),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Text(
+                totalContainers == 1
+                    ? '1 container'
+                    : '$totalContainers containers',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Refresh containers',
+                visualDensity: VisualDensity.compact,
+                onPressed: onRefresh,
+                icon: const Icon(Symbols.refresh),
+              ),
+            ],
           ),
         ),
-        for (final environment in environments) ...[
-          _ContainerEnvironmentSection(
-            environment: environment,
-            onAction: onAction,
+        Divider(height: 1, color: scheme.outlineVariant),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            itemCount: environments.length,
+            itemBuilder: (context, index) => Padding(
+              padding: EdgeInsets.only(
+                bottom: index == environments.length - 1 ? 0 : 16,
+              ),
+              child: _ContainerEnvironmentSection(
+                environment: environments[index],
+                onAction: onAction,
+              ),
+            ),
           ),
-          const SizedBox(height: 24),
-        ],
+        ),
       ],
     );
   }
@@ -257,156 +294,318 @@ class _ContainerEnvironmentSection extends StatelessWidget {
   )
   onAction;
 
+  String get _runtimeLabel {
+    final name = environment.runtime.name;
+    return '${name[0].toUpperCase()}${name.substring(1)}';
+  }
+
+  String get _scopeLabel =>
+      environment.scope == ContainerScope.root ? 'Root' : 'User';
+
+  IconData get _runtimeIcon => switch (environment.runtime) {
+    ContainerRuntime.docker => Symbols.deployed_code,
+    ContainerRuntime.podman => Symbols.package_2,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final title =
-        '${environment.runtime.name[0].toUpperCase()}${environment.runtime.name.substring(1)} · ${environment.scope == ContainerScope.root ? 'Root' : 'User'}';
-    if (!environment.isAvailable) {
-      return _ContainerUnavailable(title: title, message: environment.error!);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        if (environment.containers.isEmpty)
-          Text(
-            'No containers found.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          )
-        else
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('Name')),
-                DataColumn(label: Text('Image')),
-                DataColumn(label: Text('State')),
-                DataColumn(label: Text('Status')),
-                DataColumn(label: Text('')),
-              ],
-              rows: [
-                for (final container in environment.containers)
-                  DataRow(
-                    cells: [
-                      DataCell(Text(container.name)),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 260),
-                          child: Text(
-                            container.image,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(container.state)),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 240),
-                          child: Text(
-                            container.status,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        _ContainerActions(
-                          container: container,
-                          onAction: (action) =>
-                              onAction(environment, container, action),
-                        ),
-                      ),
-                    ],
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
+              children: [
+                Icon(_runtimeIcon, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_runtimeLabel, style: theme.textTheme.titleSmall),
+                ),
+                _MetaChip(label: _scopeLabel),
+                if (environment.isAvailable) ...[
+                  const SizedBox(width: 8),
+                  _MetaChip(
+                    label: environment.containers.isEmpty
+                        ? 'Empty'
+                        : '${environment.containers.length}',
                   ),
+                ],
               ],
             ),
           ),
-      ],
+          if (!environment.isAvailable)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Symbols.info, size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      environment.error ?? 'Unavailable',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (environment.containers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Text(
+                'No containers in this environment.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else ...[
+            Divider(height: 1, color: scheme.outlineVariant),
+            for (var i = 0; i < environment.containers.length; i++) ...[
+              _ContainerRow(
+                container: environment.containers[i],
+                onAction: (action) =>
+                    onAction(environment, environment.containers[i], action),
+              ),
+              if (i != environment.containers.length - 1)
+                Divider(
+                  height: 1,
+                  indent: 12,
+                  endIndent: 12,
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _ContainerActions extends StatelessWidget {
-  const _ContainerActions({required this.container, required this.onAction});
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+class _ContainerRow extends StatelessWidget {
+  const _ContainerRow({required this.container, required this.onAction});
 
   final ServerContainer container;
   final Future<void> Function(ContainerAction action) onAction;
 
-  @override
-  Widget build(BuildContext context) => PopupMenuButton<ContainerAction>(
-    tooltip: 'Container actions',
-    onSelected: onAction,
-    itemBuilder: (context) => const [
-      PopupMenuItem(value: ContainerAction.start, child: Text('Start')),
-      PopupMenuItem(value: ContainerAction.stop, child: Text('Stop')),
-      PopupMenuItem(value: ContainerAction.restart, child: Text('Restart')),
-    ],
-    icon: const Icon(Symbols.more_vert),
-  );
-}
-
-class _ContainerUnavailable extends StatelessWidget {
-  const _ContainerUnavailable({required this.title, required this.message});
-
-  final String title;
-  final String message;
+  bool get _isRunning {
+    final state = container.state.toLowerCase();
+    return state.contains('running') || state == 'up';
+  }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title, style: Theme.of(context).textTheme.titleSmall),
-      const SizedBox(height: 8),
-      Text(
-        'Unavailable: $message',
-        style: Theme.of(context).textTheme.bodyMedium,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: _isRunning ? scheme.primary : scheme.outline,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  container.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  container.image,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  container.status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _StateChip(state: container.state, running: _isRunning),
+          PopupMenuButton<ContainerAction>(
+            tooltip: 'Container actions',
+            onSelected: onAction,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: ContainerAction.start,
+                enabled: !_isRunning,
+                child: const Row(
+                  children: [
+                    Icon(Symbols.play_arrow, size: 20),
+                    SizedBox(width: 12),
+                    Text('Start'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: ContainerAction.stop,
+                enabled: _isRunning,
+                child: const Row(
+                  children: [
+                    Icon(Symbols.stop, size: 20),
+                    SizedBox(width: 12),
+                    Text('Stop'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: ContainerAction.restart,
+                child: Row(
+                  children: [
+                    Icon(Symbols.restart_alt, size: 20),
+                    SizedBox(width: 12),
+                    Text('Restart'),
+                  ],
+                ),
+              ),
+            ],
+            icon: const Icon(Symbols.more_vert),
+          ),
+        ],
       ),
-    ],
-  );
+    );
+  }
 }
 
-class _ContainerConnectionPrompt extends StatelessWidget {
-  const _ContainerConnectionPrompt({
-    required this.message,
-    required this.onConnect,
-  });
+class _StateChip extends StatelessWidget {
+  const _StateChip({required this.state, required this.running});
 
-  final String message;
-  final Future<void> Function() onConnect;
+  final String state;
+  final bool running;
 
   @override
-  Widget build(BuildContext context) => _ContainerEmptyState(
-    message: message,
-    actionLabel: 'Connect',
-    onAction: onConnect,
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final label = state.isEmpty ? 'unknown' : state;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: running
+            ? scheme.secondaryContainer
+            : scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: running
+              ? scheme.onSecondaryContainer
+              : scheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }
 
-class _ContainerEmptyState extends StatelessWidget {
-  const _ContainerEmptyState({
+class _ContainerEmptyPanel extends StatelessWidget {
+  const _ContainerEmptyPanel({
+    required this.icon,
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.actionIcon,
+    this.filledAction = false,
   });
 
+  final IconData icon;
   final String message;
   final String? actionLabel;
   final Future<void> Function()? onAction;
+  final IconData? actionIcon;
+  final bool filledAction;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          if (actionLabel != null) ...[
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 32, color: scheme.onSurfaceVariant),
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              if (filledAction)
+                FilledButton.icon(
+                  onPressed: onAction,
+                  icon: Icon(actionIcon ?? Symbols.refresh),
+                  label: Text(actionLabel!),
+                )
+              else
+                OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

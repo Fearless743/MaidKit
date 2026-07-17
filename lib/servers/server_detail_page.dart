@@ -133,6 +133,45 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
   }
 }
 
+/// Shared surface used by overview and inspector so both columns read as one
+/// Material 3 layout rather than a freeform left rail and a carded right pane.
+class _PanelSurface extends StatelessWidget {
+  const _PanelSurface({required this.child, this.padding});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: padding == null ? child : Padding(padding: padding!, child: child),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      label,
+      style: theme.textTheme.titleSmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
 class _DetailWorkspace extends StatelessWidget {
   const _DetailWorkspace({
     required this.server,
@@ -170,26 +209,32 @@ class _DetailWorkspace extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              overview,
-              const SizedBox(height: 24),
-              SizedBox(height: 560, child: inspector),
+              _PanelSurface(padding: const EdgeInsets.all(16), child: overview),
+              const SizedBox(height: 16),
+              SizedBox(height: 560, child: _PanelSurface(child: inspector)),
             ],
           );
         }
         return Row(
-          spacing: 24,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
               width: 360,
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                children: [overview],
+                children: [
+                  _PanelSurface(
+                    padding: const EdgeInsets.all(16),
+                    child: overview,
+                  ),
+                ],
               ),
             ),
+            const SizedBox(width: 16),
             Expanded(
-              child: Card(
-                margin: const EdgeInsets.symmetric(vertical: 16),
-                child: inspector,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: _PanelSurface(child: inspector),
               ),
             ),
           ],
@@ -207,20 +252,19 @@ class _OverviewPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Overview', style: theme.textTheme.titleMedium),
+        const _SectionLabel('Overview'),
         const SizedBox(height: 12),
         _ServerIdentity(server: server, session: session),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         _ServerSpecifications(
           stats: session?.stats,
           systemInfo: session?.systemInfo,
         ),
         const SizedBox(height: 24),
-        Text('Performance', style: theme.textTheme.titleMedium),
+        const _SectionLabel('Performance'),
         const SizedBox(height: 12),
         _MetricGrid(stats: session?.stats),
       ],
@@ -237,6 +281,7 @@ class _ServerSpecifications extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final specs = [
       _SpecItem(
         icon: Symbols.memory,
@@ -268,8 +313,7 @@ class _ServerSpecifications extends StatelessWidget {
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -277,11 +321,16 @@ class _ServerSpecifications extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Server specifications', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
+            Text(
+              'Specifications',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
             for (final spec in specs) ...[
               _SpecificationRow(spec: spec),
-              if (spec != specs.last) const SizedBox(height: 8),
+              if (spec != specs.last) const SizedBox(height: 10),
             ],
           ],
         ),
@@ -312,27 +361,24 @@ class _SpecificationRow extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
+        Icon(spec.icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 12),
         SizedBox(
-          width: 104,
-          child: Row(
-            children: [
-              Icon(
-                spec.icon,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Text(spec.label, style: theme.textTheme.bodySmall),
-            ],
+          width: 72,
+          child: Text(
+            spec.label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
-        Flexible(
+        Expanded(
           child: Text(
             spec.value.isEmpty ? '—' : spec.value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.end,
-            style: theme.textTheme.labelMedium,
+            style: theme.textTheme.bodyMedium,
           ),
         ),
       ],
@@ -360,46 +406,53 @@ class _InspectorTabs extends StatelessWidget {
   final Future<void> Function() onRefreshProcesses;
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const TabBar(
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: [
-            Tab(text: 'Processes'),
-            Tab(text: 'Containers'),
-          ],
-        ),
-        Expanded(
-          child: TabBarView(
-            children: [
-              connected
-                  ? _ProcessTable(
-                      processes: processes,
-                      onRefresh: onRefreshProcesses,
-                    )
-                  : _ConnectionPrompt(
-                      message:
-                          connectionError ??
-                          'Connect to collect live server data.',
-                      onConnect: onConnect,
-                    ),
-              ContainerManagementTab(
-                server: server,
-                connected: connected,
-                connectionError: connectionError,
-                onConnect: onConnect,
-                refreshInterval: refreshInterval,
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            dividerColor: scheme.outlineVariant,
+            tabs: const [
+              Tab(icon: Icon(Symbols.terminal, size: 18), text: 'Processes'),
+              Tab(
+                icon: Icon(Symbols.deployed_code, size: 18),
+                text: 'Containers',
               ),
             ],
           ),
-        ),
-      ],
-    ),
-  );
+          Expanded(
+            child: TabBarView(
+              children: [
+                connected
+                    ? _ProcessTable(
+                        processes: processes,
+                        onRefresh: onRefreshProcesses,
+                      )
+                    : _ConnectionPrompt(
+                        message:
+                            connectionError ??
+                            'Connect to collect live server data.',
+                        onConnect: onConnect,
+                      ),
+                ContainerManagementTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                  refreshInterval: refreshInterval,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ServerIdentity extends StatelessWidget {
@@ -410,41 +463,53 @@ class _ServerIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final connected = session?.status == SessionStatus.connected;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Icon(
-              Symbols.dns,
-              size: 20,
-              color: connected ? scheme.primary : null,
-            ),
-            Text(
-              '${server.username}@${server.host}:${server.port}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            _StatusLabel(connected: connected, status: session?.status),
-            if (session?.stats?.updatedAt != null)
-              Text('Updated ${_formatTimestamp(session!.stats!.updatedAt)}'),
-          ],
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Symbols.dns,
+          size: 22,
+          fill: connected ? 1 : 0,
+          color: connected ? scheme.primary : scheme.onSurfaceVariant,
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${server.username}@${server.host}:${server.port}',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _StatusChip(connected: connected, status: session?.status),
+                  if (session?.stats?.updatedAt != null)
+                    Text(
+                      'Updated ${_formatTimestamp(session!.stats!.updatedAt)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _StatusLabel extends StatelessWidget {
-  const _StatusLabel({required this.connected, required this.status});
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.connected, required this.status});
 
   final bool connected;
   final SessionStatus? status;
@@ -452,29 +517,54 @@ class _StatusLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final label = connected
-        ? 'Connected'
-        : status == SessionStatus.connecting
-        ? 'Connecting'
-        : status == SessionStatus.failed
-        ? 'Failed'
-        : 'Not connected';
-    final color = connected
-        ? scheme.primary
-        : status == SessionStatus.failed
-        ? scheme.error
-        : scheme.onSurfaceVariant;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: color)),
-      ],
+    final (label, color, bg) = switch (status) {
+      SessionStatus.connected => (
+        'Connected',
+        scheme.onSecondaryContainer,
+        scheme.secondaryContainer,
+      ),
+      SessionStatus.connecting => (
+        'Connecting',
+        scheme.onTertiaryContainer,
+        scheme.tertiaryContainer,
+      ),
+      SessionStatus.failed => (
+        'Failed',
+        scheme.onErrorContainer,
+        scheme.errorContainer,
+      ),
+      _ => (
+        'Not connected',
+        scheme.onSurfaceVariant,
+        scheme.surfaceContainerHighest,
+      ),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: connected ? scheme.primary : color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelMedium?.copyWith(color: color),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -486,24 +576,13 @@ class _ConnectionPrompt extends StatelessWidget {
   final Future<void> Function() onConnect;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.only(top: 56),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Symbols.insights, size: 32),
-          const SizedBox(height: 16),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: onConnect,
-            icon: const Icon(Symbols.link),
-            label: const Text('Connect for metrics'),
-          ),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => _EmptyPanel(
+    icon: Symbols.link_off,
+    message: message,
+    actionLabel: 'Connect for metrics',
+    onAction: onConnect,
+    actionIcon: Symbols.link,
+    filledAction: true,
   );
 }
 
@@ -515,7 +594,11 @@ class _MetricGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (stats == null) {
-      return const _NoDataMessage(message: 'Metrics are being collected…');
+      return const _EmptyPanel(
+        icon: Symbols.monitoring,
+        message: 'Metrics are being collected…',
+        compact: true,
+      );
     }
     final memoryUsed =
         stats!.memoryTotalKb == null || stats!.memoryAvailableKb == null
@@ -528,12 +611,7 @@ class _MetricGrid extends StatelessWidget {
     final swapUsed = stats!.swapTotalKb == null || stats!.swapFreeKb == null
         ? null
         : stats!.swapTotalKb! - stats!.swapFreeKb!;
-    return GridView.count(
-      crossAxisCount: 1,
-      mainAxisSpacing: 8,
-      childAspectRatio: 4.1,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return Column(
       children: [
         _MetricCard(
           icon: Symbols.speed,
@@ -541,6 +619,7 @@ class _MetricGrid extends StatelessWidget {
           value: _loadLabel(stats!),
           detail: stats!.cpuCount == null ? null : '${stats!.cpuCount} CPUs',
         ),
+        const SizedBox(height: 8),
         _MetricCard(
           icon: Symbols.memory,
           label: 'Memory',
@@ -550,6 +629,7 @@ class _MetricGrid extends StatelessWidget {
               : 'of ${_formatKb(stats!.memoryTotalKb!)}',
           progress: _ratio(memoryUsed, stats!.memoryTotalKb),
         ),
+        const SizedBox(height: 8),
         _MetricCard(
           icon: Symbols.storage,
           label: 'Root disk',
@@ -559,6 +639,7 @@ class _MetricGrid extends StatelessWidget {
               : 'of ${_formatKb(stats!.diskTotalKb!)}',
           progress: _ratio(diskUsed, stats!.diskTotalKb),
         ),
+        const SizedBox(height: 8),
         _MetricCard(
           icon: Symbols.timer,
           label: 'Uptime',
@@ -590,10 +671,10 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -603,21 +684,35 @@ class _MetricCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                Icon(icon, size: 18, color: scheme.onSurfaceVariant),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(label, style: theme.textTheme.labelMedium),
+                  child: Text(
+                    label,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
-                Text(value, style: theme.textTheme.titleMedium),
+                Text(value, style: theme.textTheme.titleSmall),
               ],
             ),
             if (progress != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(value: progress, minHeight: 4),
+              ),
+            ],
+            if (detail != null) ...[
               const SizedBox(height: 6),
-              LinearProgressIndicator(value: progress, minHeight: 4),
-            ] else
-              const SizedBox(height: 4),
-            const SizedBox(height: 4),
-            Text(detail ?? ' ', style: theme.textTheme.labelSmall),
+              Text(
+                detail!,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -633,82 +728,271 @@ class _ProcessTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => processes.when(
-    loading: () => const Padding(
-      padding: EdgeInsets.all(24),
-      child: Center(child: CircularProgressIndicator()),
-    ),
-    error: (error, _) => _NoDataMessage(
+    loading: () => const Center(child: CircularProgressIndicator()),
+    error: (error, _) => _EmptyPanel(
+      icon: Symbols.error_outline,
       message: 'Could not retrieve processes: $error',
       actionLabel: 'Try again',
       onAction: onRefresh,
     ),
     data: (items) => items.isEmpty
-        ? const _NoDataMessage(message: 'No process information is available.')
-        : SingleChildScrollView(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('PID'), numeric: true),
-                  DataColumn(label: Text('User')),
-                  DataColumn(label: Text('CPU'), numeric: true),
-                  DataColumn(label: Text('Memory'), numeric: true),
-                  DataColumn(label: Text('RSS'), numeric: true),
-                  DataColumn(label: Text('Command')),
-                ],
-                rows: [
-                  for (final process in items)
-                    DataRow(
-                      cells: [
-                        DataCell(Text('${process.pid}')),
-                        DataCell(Text(process.user)),
-                        DataCell(
-                          Text('${process.cpuPercent.toStringAsFixed(1)}%'),
-                        ),
-                        DataCell(
-                          Text('${process.memoryPercent.toStringAsFixed(1)}%'),
-                        ),
-                        DataCell(Text(_formatKb(process.rssKb))),
-                        DataCell(
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 320),
-                            child: Text(
-                              process.command,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-          ),
+        ? _EmptyPanel(
+            icon: Symbols.terminal,
+            message: 'No process information is available.',
+            actionLabel: 'Refresh',
+            onAction: onRefresh,
+          )
+        : _ProcessList(items: items, onRefresh: onRefresh),
   );
 }
 
-class _NoDataMessage extends StatelessWidget {
-  const _NoDataMessage({this.message = '', this.actionLabel, this.onAction});
+class _ProcessList extends StatelessWidget {
+  const _ProcessList({required this.items, required this.onRefresh});
 
+  final List<ServerProcess> items;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Text(
+                '${items.length} processes',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Refresh processes',
+                visualDensity: VisualDensity.compact,
+                onPressed: onRefresh,
+                icon: const Icon(Symbols.refresh),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: scheme.outlineVariant),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 640;
+              return Column(
+                children: [
+                  _ProcessHeaderRow(wide: wide),
+                  Divider(height: 1, color: scheme.outlineVariant),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => Divider(
+                        height: 1,
+                        color: scheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                      itemBuilder: (context, index) =>
+                          _ProcessRow(process: items[index], wide: wide),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProcessHeaderRow extends StatelessWidget {
+  const _ProcessHeaderRow({required this.wide});
+
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelMedium?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(width: 64, child: Text('PID', style: style)),
+          SizedBox(width: 88, child: Text('User', style: style)),
+          if (wide) ...[
+            SizedBox(
+              width: 64,
+              child: Text('CPU', style: style, textAlign: TextAlign.end),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 64,
+              child: Text('Mem', style: style, textAlign: TextAlign.end),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 72,
+              child: Text('RSS', style: style, textAlign: TextAlign.end),
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(child: Text('Command', style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProcessRow extends StatelessWidget {
+  const _ProcessRow({required this.process, required this.wide});
+
+  final ServerProcess process;
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final mono = theme.textTheme.bodySmall?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(width: 64, child: Text('${process.pid}', style: mono)),
+          SizedBox(
+            width: 88,
+            child: Text(
+              process.user,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          if (wide) ...[
+            SizedBox(
+              width: 64,
+              child: Text(
+                '${process.cpuPercent.toStringAsFixed(1)}%',
+                textAlign: TextAlign.end,
+                style: mono,
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 64,
+              child: Text(
+                '${process.memoryPercent.toStringAsFixed(1)}%',
+                textAlign: TextAlign.end,
+                style: mono,
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 72,
+              child: Text(
+                _formatKb(process.rssKb),
+                textAlign: TextAlign.end,
+                style: mono,
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  process.command,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (!wide) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'CPU ${process.cpuPercent.toStringAsFixed(1)}% · '
+                    'Mem ${process.memoryPercent.toStringAsFixed(1)}% · '
+                    'RSS ${_formatKb(process.rssKb)}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyPanel extends StatelessWidget {
+  const _EmptyPanel({
+    required this.icon,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+    this.actionIcon,
+    this.filledAction = false,
+    this.compact = false,
+  });
+
+  final IconData icon;
   final String message;
   final String? actionLabel;
   final Future<void> Function()? onAction;
+  final IconData? actionIcon;
+  final bool filledAction;
+  final bool compact;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Column(
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(message, textAlign: TextAlign.center),
-        if (actionLabel != null) ...[
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+        Icon(icon, size: compact ? 24 : 32, color: scheme.onSurfaceVariant),
+        SizedBox(height: compact ? 8 : 12),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        if (actionLabel != null && onAction != null) ...[
+          const SizedBox(height: 16),
+          if (filledAction)
+            FilledButton.icon(
+              onPressed: onAction,
+              icon: Icon(actionIcon ?? Symbols.refresh),
+              label: Text(actionLabel!),
+            )
+          else
+            OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
         ],
       ],
-    ),
-  );
+    );
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: content,
+      );
+    }
+    return Center(
+      child: Padding(padding: const EdgeInsets.all(24), child: content),
+    );
+  }
 }
 
 double? _ratio(int? value, int? total) =>
