@@ -70,17 +70,49 @@ class ServerStats {
     required this.collectorId,
     required this.updatedAt,
     this.loadAverage,
+    this.loadAverage5,
+    this.loadAverage15,
+    this.cpuCount,
     this.memoryTotalKb,
     this.memoryAvailableKb,
+    this.swapTotalKb,
+    this.swapFreeKb,
+    this.diskTotalKb,
+    this.diskAvailableKb,
     this.uptime,
   });
 
   final String collectorId;
   final DateTime updatedAt;
   final double? loadAverage;
+  final double? loadAverage5;
+  final double? loadAverage15;
+  final int? cpuCount;
   final int? memoryTotalKb;
   final int? memoryAvailableKb;
+  final int? swapTotalKb;
+  final int? swapFreeKb;
+  final int? diskTotalKb;
+  final int? diskAvailableKb;
   final Duration? uptime;
+}
+
+class ServerProcess {
+  const ServerProcess({
+    required this.pid,
+    required this.user,
+    required this.cpuPercent,
+    required this.memoryPercent,
+    required this.rssKb,
+    required this.command,
+  });
+
+  final int pid;
+  final String user;
+  final double cpuPercent;
+  final double memoryPercent;
+  final int rssKb;
+  final String command;
 }
 
 class ServerSystemInfo {

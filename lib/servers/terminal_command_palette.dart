@@ -50,7 +50,7 @@ class _TerminalCommandPalette extends StatefulWidget {
     required this.onDisconnect,
   });
 
-  final TerminalTab? activeTab;
+  final SessionTab? activeTab;
   final List<Server> servers;
   final VoidCallback onDismiss;
   final Future<void> Function(Server server) onOpen;

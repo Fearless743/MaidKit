@@ -124,6 +124,21 @@ class SshConnectionManager {
     }
   }
 
+  Future<List<ServerProcess>> listProcesses(int serverId) async {
+    return withClient(serverId, (client) async {
+      final session = await client.execute(
+        'LC_ALL=C ps -eo pid=,user=,%cpu=,%mem=,rss=,comm= --sort=-%cpu | head -n 20',
+      );
+      final output = await utf8.decoder.bind(session.stdout).join();
+      await session.done;
+      return output
+          .split('\n')
+          .map(_parseProcess)
+          .whereType<ServerProcess>()
+          .toList();
+    });
+  }
+
   Future<void> _refreshStats(SSHClient client, SshSessionInfo state) async {
     try {
       final stats = await _metricsCollector.collect(client);
@@ -245,6 +260,29 @@ class SshConnectionManager {
     for (final terminalId in terminalIds) {
       await closeTerminal(terminalId);
     }
+  }
+
+  ServerProcess? _parseProcess(String line) {
+    final fields = line.trim().split(RegExp(r'\s+'));
+    if (fields.length < 6) return null;
+    final pid = int.tryParse(fields[0]);
+    final cpuPercent = double.tryParse(fields[2]);
+    final memoryPercent = double.tryParse(fields[3]);
+    final rssKb = int.tryParse(fields[4]);
+    if (pid == null ||
+        cpuPercent == null ||
+        memoryPercent == null ||
+        rssKb == null) {
+      return null;
+    }
+    return ServerProcess(
+      pid: pid,
+      user: fields[1],
+      cpuPercent: cpuPercent,
+      memoryPercent: memoryPercent,
+      rssKb: rssKb,
+      command: fields.sublist(5).join(' '),
+    );
   }
 
   Future<SSHClient> _createClient(

@@ -8,24 +8,50 @@ import 'server_providers.dart';
 import 'ssh_connection_manager.dart';
 import 'terminal_session_adapter.dart';
 
-class TerminalTab {
-  const TerminalTab({
+enum SessionTabType { terminal, fileManagement }
+
+sealed class SessionTab {
+  const SessionTab({
     required this.id,
     required this.serverId,
     required this.serverName,
-    required this.terminal,
   });
 
   final String id;
   final int serverId;
   final String serverName;
+  SessionTabType get type;
+}
+
+class TerminalTab extends SessionTab {
+  const TerminalTab({
+    required super.id,
+    required super.serverId,
+    required super.serverName,
+    required this.terminal,
+  });
+
   final TerminalSessionAdapter terminal;
+
+  @override
+  SessionTabType get type => SessionTabType.terminal;
+}
+
+class FileManagementTab extends SessionTab {
+  const FileManagementTab({
+    required super.id,
+    required super.serverId,
+    required super.serverName,
+  });
+
+  @override
+  SessionTabType get type => SessionTabType.fileManagement;
 }
 
 class TerminalTabsState {
   const TerminalTabsState({this.tabs = const [], this.selectedId});
 
-  final List<TerminalTab> tabs;
+  final List<SessionTab> tabs;
   final String? selectedId;
 
   int get selectedIndex {
@@ -76,6 +102,15 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     );
   }
 
+  void openFileManagement(Server server) {
+    final tab = FileManagementTab(
+      id: 'files-${DateTime.now().microsecondsSinceEpoch}',
+      serverId: server.id,
+      serverName: server.name,
+    );
+    state = TerminalTabsState(tabs: [...state.tabs, tab], selectedId: tab.id);
+  }
+
   void select(String terminalId) {
     if (state.tabs.any((tab) => tab.id == terminalId)) {
       state = TerminalTabsState(tabs: state.tabs, selectedId: terminalId);
@@ -83,16 +118,19 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
   }
 
   Future<void> close(String terminalId) async {
-    await ref.read(connectionManagerProvider).closeTerminal(terminalId);
+    final tab = state.tabs.where((tab) => tab.id == terminalId).firstOrNull;
+    if (tab is TerminalTab) {
+      await ref.read(connectionManagerProvider).closeTerminal(terminalId);
+    }
     _remove(terminalId);
   }
 
   Future<void> closeForServer(int serverId) async {
-    final terminalIds = state.tabs
+    final tabIds = state.tabs
         .where((tab) => tab.serverId == serverId)
         .map((tab) => tab.id)
         .toList();
-    await Future.wait(terminalIds.map(close));
+    await Future.wait(tabIds.map(close));
   }
 
   void _remove(String terminalId) {

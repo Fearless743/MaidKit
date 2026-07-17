@@ -18,5 +18,6 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: SettingsRoute.page, path: 'settings'),
       ],
     ),
+    AutoRoute(page: ServerDetailRoute.page, path: '/server-detail'),
   ];
 }

@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/local/app_database.dart';
 import 'server_connection_actions.dart';
+import 'file_management_tab.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_command_palette.dart';
@@ -30,8 +31,18 @@ class SessionsPage extends ConsumerWidget {
                 ? _ConnectedServers(
                     servers: servers,
                     tabs: tabs,
-                    onOpen: (server) =>
+                    onOpenTerminal: (server) =>
                         openTerminalSession(context, ref, server),
+                    onOpenFiles: (server) async {
+                      final manager = ref.read(connectionManagerProvider);
+                      if (manager.clientFor(server.id) == null &&
+                          !await connectForStatistics(context, ref, server)) {
+                        return;
+                      }
+                      ref
+                          .read(terminalTabsProvider.notifier)
+                          .openFileManagement(server);
+                    },
                   )
                 : _TerminalTabs(tabs: tabs, sessions: sessions),
           ),
@@ -76,6 +87,7 @@ class _TerminalTabBar extends ConsumerWidget {
               child: TabBar(
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
+                dividerColor: Colors.transparent,
                 onTap: (index) => ref
                     .read(terminalTabsProvider.notifier)
                     .select(tabs.tabs[index].id),
@@ -93,12 +105,17 @@ class _TerminalTabBar extends ConsumerWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Symbols.terminal, size: 18),
+                            Icon(
+                              tab.type == SessionTabType.terminal
+                                  ? Symbols.terminal
+                                  : Symbols.folder,
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                             Text(tab.serverName),
                             const SizedBox(width: 4),
                             IconButton(
-                              tooltip: 'Close terminal',
+                              tooltip: 'Close tab',
                               onPressed: () => ref
                                   .read(terminalTabsProvider.notifier)
                                   .close(tab.id),
@@ -116,6 +133,7 @@ class _TerminalTabBar extends ConsumerWidget {
               onPressed: () => showTerminalCommandPalette(context, ref),
               icon: const Icon(Symbols.add),
             ),
+            const SizedBox(width: 8),
           ],
         ),
       ),
@@ -132,15 +150,19 @@ class _TerminalTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tab = tabs.tabs[tabs.selectedIndex];
+    if (tab is FileManagementTab) return FileManagementTabView(tab: tab);
+    final terminalTab = tab as TerminalTab;
     final session = sessions.asData?.value
-        .where((item) => item.serverId == tab.serverId)
+        .where((item) => item.serverId == terminalTab.serverId)
         .firstOrNull;
     return ColoredBox(
       color: const Color(0xFF111315),
       child: Column(
         children: [
           Expanded(
-            child: ClipRect(child: tab.terminal.buildView(autofocus: true)),
+            child: ClipRect(
+              child: terminalTab.terminal.buildView(autofocus: true),
+            ),
           ),
           _TerminalStatusBar(session: session),
         ],
@@ -205,12 +227,14 @@ class _ConnectedServers extends StatelessWidget {
   const _ConnectedServers({
     required this.servers,
     required this.tabs,
-    required this.onOpen,
+    required this.onOpenTerminal,
+    required this.onOpenFiles,
   });
 
   final AsyncValue<List<Server>> servers;
   final TerminalTabsState tabs;
-  final Future<void> Function(Server server) onOpen;
+  final Future<void> Function(Server server) onOpenTerminal;
+  final Future<void> Function(Server server) onOpenFiles;
 
   @override
   Widget build(BuildContext context) => servers.when(
@@ -225,7 +249,12 @@ class _ConnectedServers extends StatelessWidget {
               label: const Text('Add server'),
             ),
           )
-        : _TerminalServerGrid(servers: servers, tabs: tabs, onOpen: onOpen),
+        : _TerminalServerGrid(
+            servers: servers,
+            tabs: tabs,
+            onOpenTerminal: onOpenTerminal,
+            onOpenFiles: onOpenFiles,
+          ),
   );
 }
 
@@ -233,12 +262,14 @@ class _TerminalServerGrid extends StatelessWidget {
   const _TerminalServerGrid({
     required this.servers,
     required this.tabs,
-    required this.onOpen,
+    required this.onOpenTerminal,
+    required this.onOpenFiles,
   });
 
   final List<Server> servers;
   final TerminalTabsState tabs;
-  final Future<void> Function(Server server) onOpen;
+  final Future<void> Function(Server server) onOpenTerminal;
+  final Future<void> Function(Server server) onOpenFiles;
 
   @override
   Widget build(BuildContext context) => GridView.builder(
@@ -281,9 +312,15 @@ class _TerminalServerGrid extends StatelessWidget {
                   ),
                   const Spacer(),
                   FilledButton.tonalIcon(
-                    onPressed: () => onOpen(server),
+                    onPressed: () => onOpenTerminal(server),
                     icon: const Icon(Symbols.add),
                     label: const Text('New terminal'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Open file management',
+                    onPressed: () => onOpenFiles(server),
+                    icon: const Icon(Symbols.folder),
                   ),
                 ],
               ),

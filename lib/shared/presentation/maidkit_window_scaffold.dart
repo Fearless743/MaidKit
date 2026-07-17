@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 
 import '../../servers/terminal_command_palette.dart';
+import 'task_progress.dart';
 
 final desktopWindowProvider = Provider<bool>(
   (ref) => DesktopWindowFrame.isPlatformDesktop,
@@ -29,7 +30,12 @@ class MaidKitWindowScaffold extends ConsumerWidget {
       child: DesktopWindowFrame(
         isDesktopPlatform: ref.watch(desktopWindowProvider),
         title: Text('MaidKit', style: Theme.of(context).textTheme.labelLarge),
-        child: child,
+        child: Column(
+          children: [
+            Expanded(child: child),
+            const TaskProgressBar(),
+          ],
+        ),
       ),
     );
   }

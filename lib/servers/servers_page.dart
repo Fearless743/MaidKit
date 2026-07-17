@@ -8,6 +8,7 @@ import 'package:styled_widget/styled_widget.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
 import '../data/local/app_database.dart';
+import '../routing/app_router.gr.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -107,6 +108,8 @@ class ServersPage extends ConsumerWidget {
                 onConnect: (server) => _connect(context, ref, server),
                 onEdit: (server) => _edit(context, ref, server),
                 onDelete: (server) => _delete(ref, server),
+                onOpenDetail: (server) =>
+                    context.router.root.push(ServerDetailRoute(server: server)),
                 onRefresh: (server) => ref
                     .read(connectionManagerProvider)
                     .refreshServerInfo(server),
@@ -131,6 +134,7 @@ class _ServerGrid extends StatelessWidget {
     required this.onConnect,
     required this.onEdit,
     required this.onDelete,
+    required this.onOpenDetail,
     required this.onRefresh,
   });
 
@@ -139,6 +143,7 @@ class _ServerGrid extends StatelessWidget {
   final ValueChanged<Server> onConnect;
   final ValueChanged<Server> onEdit;
   final ValueChanged<Server> onDelete;
+  final ValueChanged<Server> onOpenDetail;
   final ValueChanged<Server> onRefresh;
 
   @override
@@ -172,6 +177,7 @@ class _ServerGrid extends StatelessWidget {
           server: server,
           session: session,
           onConnect: () => onConnect(server),
+          onOpenDetail: () => onOpenDetail(server),
           onRefresh: () => onRefresh(server),
         ),
       );
@@ -184,12 +190,14 @@ class _ServerCard extends StatelessWidget {
     required this.server,
     required this.session,
     required this.onConnect,
+    required this.onOpenDetail,
     required this.onRefresh,
   });
 
   final Server server;
   final SshSessionInfo? session;
   final VoidCallback onConnect;
+  final VoidCallback onOpenDetail;
   final VoidCallback onRefresh;
 
   @override
@@ -245,6 +253,12 @@ class _ServerCard extends StatelessWidget {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'View server details',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onOpenDetail,
+                    icon: const Icon(Symbols.open_in_new),
+                  ),
+                  IconButton(
                     tooltip: 'Refresh statistics',
                     visualDensity: VisualDensity.compact,
                     onPressed: connected ? onRefresh : null,
@@ -270,6 +284,7 @@ class _ServerCard extends StatelessWidget {
                       ),
               ),
             ),
+            const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 10),
             Row(
