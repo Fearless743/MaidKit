@@ -10,7 +10,7 @@ class ServerWorkspacePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AutoTabsRouter(
-      routes: const [ServersRoute(), SessionsRoute()],
+      routes: const [ServersRoute(), SessionsRoute(), SettingsRoute()],
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       transitionBuilder: (context, child, animation) {
@@ -41,14 +41,16 @@ class _ServerTabsShell extends StatelessWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex,
+                      selectedIndex: tabsRouter.activeIndex < 2
+                          ? tabsRouter.activeIndex
+                          : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
                       trailingAtBottom: true,
                       trailing: Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: IconButton(
                           tooltip: 'Settings',
-                          onPressed: () {},
+                          onPressed: () => tabsRouter.setActiveIndex(2),
                           icon: const Icon(Icons.settings_outlined),
                         ),
                       ),
@@ -96,6 +98,11 @@ class _ServerTabsShell extends StatelessWidget {
                       icon: Icon(Icons.terminal_outlined),
                       selectedIcon: Icon(Icons.terminal),
                       label: 'Sessions',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: 'Settings',
                     ),
                   ],
                 ),

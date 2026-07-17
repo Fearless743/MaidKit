@@ -35,6 +35,9 @@ class VaultService {
   Future<bool> hasVault() async =>
       (await _database.select(_database.vaultMetadata).get()).isNotEmpty;
 
+  Future<bool> isBiometricUnlockEnabled() async =>
+      await _secureStorage.containsKey(key: _biometricKey);
+
   Future<void> create(String password, {bool enableBiometrics = false}) async {
     if (password.length < 12) {
       throw ArgumentError('Use a vault password with at least 12 characters.');
@@ -132,6 +135,9 @@ class VaultService {
       value: _encode(await key.extractBytes()),
     );
   }
+
+  Future<void> disableBiometricUnlock() =>
+      _secureStorage.delete(key: _biometricKey);
 
   Future<void> lock() async => _dataKey = null;
 

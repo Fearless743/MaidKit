@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../data/local/app_database.dart';
 import 'server_repository.dart';
 import 'ssh_connection_manager.dart';
 import 'server_models.dart';
+import 'terminal_session_adapter.dart';
 import 'vault_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -27,8 +29,60 @@ final vaultExistsProvider = FutureProvider<bool>((ref) {
   return ref.watch(vaultServiceProvider).hasVault();
 });
 
+final biometricUnlockEnabledProvider = FutureProvider<bool>((ref) {
+  return ref.watch(vaultServiceProvider).isBiometricUnlockEnabled();
+});
+
+final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
+  ThemeModeNotifier.new,
+);
+
+class ThemeModeNotifier extends Notifier<ThemeMode> {
+  @override
+  ThemeMode build() => ThemeMode.system;
+
+  void setThemeMode(ThemeMode mode) => state = mode;
+}
+
+final terminalSessionAdapterOptionsProvider =
+    Provider<List<TerminalSessionAdapterOption>>((ref) {
+      return const [
+        TerminalSessionAdapterOption(
+          id: 'xterm',
+          label: 'xterm',
+          description: 'The built-in Flutter terminal renderer.',
+          factory: XtermTerminalSessionAdapterFactory(),
+        ),
+      ];
+    });
+
+final selectedTerminalSessionAdapterProvider =
+    NotifierProvider<SelectedTerminalSessionAdapterNotifier, String>(
+      SelectedTerminalSessionAdapterNotifier.new,
+    );
+
+class SelectedTerminalSessionAdapterNotifier extends Notifier<String> {
+  @override
+  String build() => 'xterm';
+
+  void select(String adapterId) => state = adapterId;
+}
+
+final terminalSessionAdapterFactoryProvider =
+    Provider<TerminalSessionAdapterFactory>((ref) {
+      final options = ref.watch(terminalSessionAdapterOptionsProvider);
+      final selectedId = ref.watch(selectedTerminalSessionAdapterProvider);
+      return options
+              .where((option) => option.id == selectedId)
+              .firstOrNull
+              ?.factory ??
+          options.first.factory;
+    });
+
 final connectionManagerProvider = Provider<SshConnectionManager>((ref) {
-  final manager = SshConnectionManager();
+  final manager = SshConnectionManager(
+    () => ref.read(terminalSessionAdapterFactoryProvider),
+  );
   ref.onDispose(manager.dispose);
   return manager;
 });

@@ -1,30 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
-import 'package:xterm/xterm.dart';
 
 import '../data/local/app_database.dart';
 import 'server_models.dart';
+import 'terminal_session_adapter.dart';
 
 typedef HostKeyApproval = Future<bool> Function(HostKeyPrompt prompt);
 
 class SshConnectionManager {
+  SshConnectionManager(this._terminalAdapterFactory);
+
+  final TerminalSessionAdapterFactory Function() _terminalAdapterFactory;
   final _sessions = <int, SSHClient>{};
   final _shells = <int, SSHSession>{};
-  final _terminals = <int, Terminal>{};
+  final _terminalBindings = <int, TerminalSessionBinding>{};
   final _controller = StreamController<List<SshSessionInfo>>.broadcast();
   final _states = <int, SshSessionInfo>{};
 
   Stream<List<SshSessionInfo>> get sessions => _controller.stream;
   List<SshSessionInfo> get current => _states.values.toList();
 
-  Terminal? terminalFor(int serverId) => _terminals[serverId];
+  TerminalSessionAdapter? terminalFor(int serverId) =>
+      _terminalBindings[serverId]?.adapter;
 
-  Future<Terminal> openTerminal(int serverId) async {
-    final existing = _terminals[serverId];
-    if (existing != null) return existing;
+  Future<TerminalSessionAdapter> openTerminal(int serverId) async {
+    final existing = _terminalBindings[serverId];
+    if (existing != null) return existing.adapter;
     final client = _sessions[serverId];
     if (client == null || client.isClosed) {
       throw StateError('Connect to this server before opening a terminal.');
@@ -32,23 +35,26 @@ class SshConnectionManager {
     final shell = await client.shell(
       pty: const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 36),
     );
-    final terminal = Terminal(maxLines: 10000);
-    terminal.onOutput = (data) =>
-        shell.write(Uint8List.fromList(utf8.encode(data)));
-    terminal.onResize = (width, height, pixelWidth, pixelHeight) =>
-        shell.resizeTerminal(width, height, pixelWidth, pixelHeight);
-    shell.stdout.listen(
-      (data) => terminal.write(utf8.decode(data, allowMalformed: true)),
-    );
-    shell.stderr.listen(
-      (data) => terminal.write(utf8.decode(data, allowMalformed: true)),
+    final terminal = _terminalAdapterFactory().create();
+    final binding = TerminalSessionBinding(
+      adapter: terminal,
+      stdout: shell.stdout,
+      stderr: shell.stderr,
+      send: shell.write,
+      resize: (event) => shell.resizeTerminal(
+        event.columns,
+        event.rows,
+        event.pixelWidth,
+        event.pixelHeight,
+      ),
     );
     _shells[serverId] = shell;
-    _terminals[serverId] = terminal;
+    _terminalBindings[serverId] = binding;
     unawaited(
       shell.done.whenComplete(() {
         if (identical(_shells[serverId], shell)) {
           _shells.remove(serverId);
+          unawaited(_closeTerminal(serverId));
         }
       }),
     );
@@ -117,6 +123,7 @@ class SshConnectionManager {
       unawaited(
         client.done.whenComplete(() {
           _sessions.remove(server.id);
+          unawaited(_closeShell(server.id));
           final state = _states[server.id];
           if (state != null && state.status == SessionStatus.connected) {
             _set(state.copyWith(status: SessionStatus.closed));
@@ -140,8 +147,7 @@ class SshConnectionManager {
   }
 
   Future<void> disconnect(int serverId) async {
-    _shells.remove(serverId)?.stdin.close();
-    _terminals.remove(serverId);
+    await _closeShell(serverId);
     final client = _sessions.remove(serverId);
     client?.close();
     final state = _states[serverId];
@@ -154,9 +160,22 @@ class SshConnectionManager {
   }
 
   Future<void> dispose() async {
+    for (final serverId in _sessions.keys.toList()) {
+      await _closeShell(serverId);
+    }
     for (final client in _sessions.values) {
       client.close();
     }
     await _controller.close();
+  }
+
+  Future<void> _closeShell(int serverId) async {
+    final shell = _shells.remove(serverId);
+    await shell?.stdin.close();
+    await _closeTerminal(serverId);
+  }
+
+  Future<void> _closeTerminal(int serverId) async {
+    await _terminalBindings.remove(serverId)?.close();
   }
 }

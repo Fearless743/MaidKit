@@ -1,10 +1,10 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:xterm/xterm.dart';
 
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'terminal_session_adapter.dart';
 
 @RoutePage()
 class SessionsPage extends ConsumerStatefulWidget {
@@ -16,7 +16,7 @@ class SessionsPage extends ConsumerStatefulWidget {
 
 class _SessionsPageState extends ConsumerState<SessionsPage> {
   int? _selectedServerId;
-  Terminal? _terminal;
+  TerminalSessionAdapter? _terminal;
   String? _terminalError;
   bool _openingTerminal = false;
 
@@ -140,7 +140,7 @@ class _TerminalPane extends StatelessWidget {
     required this.error,
     this.title,
   });
-  final Terminal? terminal;
+  final TerminalSessionAdapter? terminal;
   final bool opening;
   final String? error;
   final String? title;
@@ -176,14 +176,7 @@ class _TerminalPane extends StatelessWidget {
             ),
           ),
           const Divider(height: 1, color: Colors.white24),
-          Expanded(
-            child: TerminalView(
-              terminal!,
-              autofocus: true,
-              backgroundOpacity: 0,
-              padding: const EdgeInsets.all(12),
-            ),
-          ),
+          Expanded(child: terminal!.buildView(autofocus: true)),
         ],
       ),
     );

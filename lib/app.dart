@@ -4,6 +4,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 
 import 'routing/app_router.dart';
 import 'shared/presentation/maidkit_window_scaffold.dart';
+import 'servers/server_providers.dart';
 import 'servers/vault_gate.dart';
 import 'theme.dart';
 
@@ -15,12 +16,14 @@ class MaidKitApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appRouter = ref.watch(appRouterProvider);
+    final themeMode = ref.watch(themeModeProvider);
     IslandUIFoundation.configureOverlay(maidKitOverlayKey);
     return MaterialApp.router(
       title: 'MaidKit',
       debugShowCheckedModeBanner: false,
       theme: createMaidKitTheme(Brightness.light),
       darkTheme: createMaidKitTheme(Brightness.dark),
+      themeMode: themeMode,
       routerConfig: appRouter.config(),
       builder: (context, child) => Overlay(
         key: maidKitOverlayKey,

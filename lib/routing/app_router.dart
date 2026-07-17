@@ -15,6 +15,7 @@ class AppRouter extends RootStackRouter {
       children: [
         AutoRoute(page: ServersRoute.page, path: '', initial: true),
         AutoRoute(page: SessionsRoute.page, path: 'sessions'),
+        AutoRoute(page: SettingsRoute.page, path: 'settings'),
       ],
     ),
   ];
