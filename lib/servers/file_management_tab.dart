@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -5,7 +7,18 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter/services.dart';
+import 'package:highlight/highlight_core.dart' show Mode;
+import 'package:highlight/languages/bash.dart' as bash;
+import 'package:highlight/languages/css.dart' as css;
+import 'package:highlight/languages/dart.dart' as dart;
+import 'package:highlight/languages/javascript.dart' as javascript;
+import 'package:highlight/languages/json.dart' as json;
+import 'package:highlight/languages/python.dart' as python;
+import 'package:highlight/languages/typescript.dart' as typescript;
+import 'package:highlight/languages/xml.dart' as xml;
+import 'package:highlight/languages/yaml.dart' as yaml;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -1135,6 +1148,84 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       .read(connectionManagerProvider)
       .withClient(widget.tab.serverId, (client) => client.sftp());
 
+  Future<void> _editLocal(File file) => _showFileEditor(
+    name: _entityName(file),
+    location: file.path,
+    load: () async {
+      final bytes = await file.readAsBytes();
+      _validateEditableText(bytes.length, file.path);
+      return utf8.decode(bytes);
+    },
+    save: (text) async {
+      await file.writeAsBytes(utf8.encode(text), flush: true);
+      await _refreshLocal();
+    },
+  );
+
+  Future<void> _editRemote(SftpName entry) {
+    final path = _joinRemotePath(_remotePath, entry.filename);
+    return _showFileEditor(
+      name: entry.filename,
+      location: path,
+      load: () async {
+        _validateEditableText(entry.attr.size, path);
+        final sftp = await _sftp();
+        final file = await sftp.open(path, mode: SftpFileOpenMode.read);
+        try {
+          final bytes = await file.readBytes();
+          _validateEditableText(bytes.length, path);
+          return utf8.decode(bytes);
+        } finally {
+          await file.close();
+        }
+      },
+      save: (text) async {
+        final sftp = await _sftp();
+        final file = await sftp.open(
+          path,
+          mode:
+              SftpFileOpenMode.write |
+              SftpFileOpenMode.create |
+              SftpFileOpenMode.truncate,
+        );
+        try {
+          await file.writeBytes(Uint8List.fromList(utf8.encode(text)));
+        } finally {
+          await file.close();
+        }
+        await _refreshRemote();
+      },
+    );
+  }
+
+  Future<void> _showFileEditor({
+    required String name,
+    required String location,
+    required Future<String> Function() load,
+    required Future<void> Function(String text) save,
+  }) => showAttentionModal(
+    id: 'file-editor-${widget.tab.id}-$location',
+    replaceIfExists: true,
+    barrierDismissible: false,
+    builder: (context, dismiss) => _FileEditorModal(
+      name: name,
+      location: location,
+      load: load,
+      save: save,
+      dismiss: dismiss,
+    ),
+  );
+
+  void _validateEditableText(int? size, String path) {
+    const maximumEditableBytes = 1024 * 1024;
+    if (size != null && size > maximumEditableBytes) {
+      throw FileSystemException(
+        'Files larger than 1 MB cannot be edited directly.',
+        path,
+      );
+    }
+  }
+
   Menu _localEntryMenu(FileSystemEntity entry, int index) {
     final selected = _entriesForSelection(_FileSide.local);
     final entries = selected.isEmpty
@@ -1151,6 +1242,8 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       children: [
         if (onlyThis && isDirectory)
           MenuAction(title: 'Open', callback: () => _openLocal(entry)),
+        if (onlyThis && entry is File)
+          MenuAction(title: 'Edit', callback: () => _editLocal(entry)),
         MenuAction(
           title: transferLabel,
           attributes: MenuActionAttributes(disabled: busy),
@@ -1215,6 +1308,8 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       children: [
         if (onlyThis && isDirectory)
           MenuAction(title: 'Open', callback: () => _openRemote(entry)),
+        if (onlyThis && entry.attr.isFile)
+          MenuAction(title: 'Edit', callback: () => _editRemote(entry)),
         MenuAction(
           title: transferLabel,
           attributes: MenuActionAttributes(disabled: busy),
@@ -2072,6 +2167,256 @@ class _EmptyPane extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FileEditorModal extends StatefulWidget {
+  const _FileEditorModal({
+    required this.name,
+    required this.location,
+    required this.load,
+    required this.save,
+    required this.dismiss,
+  });
+
+  final String name;
+  final String location;
+  final Future<String> Function() load;
+  final Future<void> Function(String text) save;
+  final VoidCallback dismiss;
+
+  @override
+  State<_FileEditorModal> createState() => _FileEditorModalState();
+}
+
+class _FileEditorModalState extends State<_FileEditorModal> {
+  late final CodeController _controller;
+  var _loading = true;
+  var _saving = false;
+  String? _error;
+  String _savedText = '';
+
+  bool get _isDirty => !_loading && _controller.text != _savedText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CodeController(language: _languageForFileName(widget.name));
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final text = await widget.load();
+      if (!mounted) return;
+      setState(() {
+        _controller.text = text;
+        _savedText = text;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (_loading || _saving || !_isDirty) return;
+    setState(() => _saving = true);
+    try {
+      await widget.save(_controller.text);
+      if (!mounted) return;
+      setState(() {
+        _savedText = _controller.text;
+        _saving = false;
+      });
+      showStyledSnackBar(
+        message: widget.name,
+        title: 'Saved',
+        icon: Symbols.check_circle,
+        accentColor: Theme.of(context).colorScheme.primary,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _saving = false;
+      });
+    }
+  }
+
+  Future<void> _requestDismiss() async {
+    if (_saving) return;
+    if (_isDirty) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Discard changes?'),
+          content: Text('Changes to ${widget.name} have not been saved.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Discard'),
+            ),
+          ],
+        ),
+      );
+      if (discard != true || !mounted) return;
+    }
+    widget.dismiss();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AttentionModalScaffold(
+      titleText: 'Edit ${widget.name}',
+      onDismiss: () => unawaited(_requestDismiss()),
+      maxWidth: 1080,
+      maxHeightFactor: 0.9,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.location,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontFamily: MaidKitFonts.mono,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(child: _buildEditor(context)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _saving
+                        ? 'Saving…'
+                        : _isDirty
+                        ? 'Unsaved changes'
+                        : 'Saved',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _error == null
+                          ? scheme.onSurfaceVariant
+                          : scheme.error,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton(
+                  onPressed: _saving
+                      ? null
+                      : () => unawaited(_requestDismiss()),
+                  child: const Text('Close'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _loading || _saving || !_isDirty
+                      ? null
+                      : () => unawaited(_save()),
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Symbols.save, size: 18),
+                  label: const Text('Save'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditor(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Text(
+          _error!,
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: scheme.error),
+        ),
+      );
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CodeTheme(
+          data: CodeThemeData(
+            styles: {
+              'root': TextStyle(
+                color: scheme.onSurface,
+                backgroundColor: scheme.surfaceContainerLowest,
+                fontFamily: MaidKitFonts.mono,
+              ),
+              'comment': TextStyle(color: scheme.onSurfaceVariant),
+              'keyword': TextStyle(color: scheme.primary),
+              'string': TextStyle(color: scheme.tertiary),
+              'number': TextStyle(color: scheme.secondary),
+            },
+          ),
+          child: CodeField(
+            controller: _controller,
+            expands: true,
+            wrap: false,
+            padding: const EdgeInsets.all(12),
+            textStyle: const TextStyle(fontFamily: MaidKitFonts.mono),
+            gutterStyle: GutterStyle(
+              textStyle: TextStyle(color: scheme.onSurfaceVariant),
+              showErrors: false,
+              showFoldingHandles: false,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Mode? _languageForFileName(String name) {
+  final dot = name.lastIndexOf('.');
+  final extension = dot == -1 ? '' : name.substring(dot + 1).toLowerCase();
+  return switch (extension) {
+    'dart' => dart.dart,
+    'html' || 'htm' || 'xml' || 'svg' => xml.xml,
+    'css' || 'scss' => css.css,
+    'js' || 'mjs' || 'cjs' => javascript.javascript,
+    'ts' => typescript.typescript,
+    'json' => json.json,
+    'py' => python.python,
+    'yaml' || 'yml' => yaml.yaml,
+    'sh' || 'bash' || 'zsh' || 'fish' || 'env' => bash.bash,
+    _ => null,
+  };
 }
 
 String _entityName(FileSystemEntity entry) =>

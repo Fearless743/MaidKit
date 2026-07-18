@@ -7,9 +7,17 @@ import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
 
 /// Whether [container] reports a running lifecycle state.
+///
+/// Paused containers are treated as running so stop/kill/force-remove stay
+/// available while start remains disabled.
 bool isContainerRunning(ServerContainer container) {
   final state = container.state.toLowerCase();
-  return state.contains('running') || state == 'up';
+  return state.contains('running') || state == 'up' || state.contains('paused');
+}
+
+/// Whether [container] is paused (cgroups frozen; still exists as running).
+bool isContainerPaused(ServerContainer container) {
+  return container.state.toLowerCase().contains('paused');
 }
 
 /// Compact / table-style list row for a [ServerContainer].

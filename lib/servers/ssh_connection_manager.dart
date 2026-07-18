@@ -1158,6 +1158,10 @@ cut -d. -f1 /proc/uptime 2>/dev/null || true
     required ContainerScope scope,
     required String containerId,
     required ContainerAction action,
+
+    /// When [action] is [ContainerAction.remove], forces removal of a running
+    /// container (`rm -f`). Ignored for other actions.
+    bool force = false,
     String? sudoPassword,
   }) async {
     if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:-]*$').hasMatch(containerId)) {
@@ -1167,10 +1171,13 @@ cut -d. -f1 /proc/uptime 2>/dev/null || true
         'Invalid container ID.',
       );
     }
+    final verb = action == ContainerAction.remove
+        ? 'rm ${force ? '-f ' : ''}'
+        : '${action.cliVerb} ';
     await withClient(serverId, (client) async {
       final result = await _execute(
         client,
-        '${_scopePrefix(scope, sudoPassword)}${runtime.name} ${action.name} $containerId',
+        '${_scopePrefix(scope, sudoPassword)}${runtime.name} $verb$containerId',
         stdin: scope == ContainerScope.root ? sudoPassword : null,
       );
       if (result.exitCode != 0) {

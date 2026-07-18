@@ -220,29 +220,81 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     if (connected && mounted) await _bootstrap();
   }
 
+  Future<bool> _confirmAction(
+    ContainerAction action, {
+    required String name,
+    required bool forceRemove,
+  }) async {
+    final scheme = Theme.of(context).colorScheme;
+    final title = switch (action) {
+      ContainerAction.stop => 'Stop $name?',
+      ContainerAction.restart => 'Restart $name?',
+      ContainerAction.kill => 'Kill $name?',
+      ContainerAction.remove =>
+        forceRemove ? 'Force delete $name?' : 'Delete $name?',
+      _ => '${action.label} $name?',
+    };
+    final message = switch (action) {
+      ContainerAction.stop =>
+        'The container will remain available to start again.',
+      ContainerAction.restart =>
+        'The container will be stopped and started again.',
+      ContainerAction.kill =>
+        'Sends SIGKILL immediately. Prefer Stop when the process can exit cleanly.',
+      ContainerAction.remove when forceRemove =>
+        'The container is still running. It will be force-stopped and permanently removed.',
+      ContainerAction.remove =>
+        'The container will be permanently removed. Images and volumes are left in place.',
+      _ => null,
+    };
+    final confirmLabel = switch (action) {
+      ContainerAction.remove => forceRemove ? 'Force delete' : 'Delete',
+      ContainerAction.kill => 'Kill',
+      _ => action.label,
+    };
+    final destructive =
+        action == ContainerAction.kill || action == ContainerAction.remove;
+
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: message == null ? null : Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: scheme.error,
+                    foregroundColor: scheme.onError,
+                  )
+                : null,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return approved == true;
+  }
+
   Future<void> _runAction(ContainerAction action) async {
     if (_actionBusy) return;
-    if (action == ContainerAction.stop) {
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Stop ${widget.containerName}?'),
-          content: const Text(
-            'The container will remain available to start again.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Stop'),
-            ),
-          ],
-        ),
+    final name = _inspect?.name.isNotEmpty == true
+        ? _inspect!.name
+        : widget.containerName;
+    final running = _inspect?.isRunning ?? false;
+    final forceRemove = action == ContainerAction.remove && running;
+    if (action.requiresConfirmation) {
+      final approved = await _confirmAction(
+        action,
+        name: name,
+        forceRemove: forceRemove,
       );
-      if (approved != true || !mounted) return;
+      if (!approved || !mounted) return;
     }
     setState(() => _actionBusy = true);
     try {
@@ -254,20 +306,25 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
             scope: widget.scope,
             containerId: widget.containerId,
             action: action,
+            force: forceRemove,
             sudoPassword: await _sudoPassword(),
           );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Container ${action.name}ed',
-        message: widget.containerName,
+        title: 'Container ${action.pastLabel}',
+        message: name,
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
+      if (action == ContainerAction.remove) {
+        if (mounted) context.router.maybePop();
+        return;
+      }
       await _bootstrap();
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not ${action.name} container',
+        title: 'Could not ${action.label.toLowerCase()} container',
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -461,27 +518,60 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
                   unawaited(_runAction(ContainerAction.stop));
                 case 'restart':
                   unawaited(_runAction(ContainerAction.restart));
+                case 'pause':
+                  unawaited(_runAction(ContainerAction.pause));
+                case 'unpause':
+                  unawaited(_runAction(ContainerAction.unpause));
+                case 'kill':
+                  unawaited(_runAction(ContainerAction.kill));
+                case 'remove':
+                  unawaited(_runAction(ContainerAction.remove));
                 case 'recreate':
                   unawaited(_recreateFromInspect());
               }
             },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'start',
-                enabled: !running,
-                child: const Text('Start'),
-              ),
-              PopupMenuItem(
-                value: 'stop',
-                enabled: running,
-                child: const Text('Stop'),
-              ),
-              const PopupMenuItem(value: 'restart', child: Text('Restart')),
-              const PopupMenuItem(
-                value: 'recreate',
-                child: Text('Re-create from inspect'),
-              ),
-            ],
+            itemBuilder: (context) {
+              final scheme = Theme.of(context).colorScheme;
+              final paused = inspect?.isPaused ?? false;
+              return [
+                PopupMenuItem(
+                  value: 'start',
+                  enabled: !running,
+                  child: const Text('Start'),
+                ),
+                PopupMenuItem(
+                  value: 'stop',
+                  enabled: running,
+                  child: const Text('Stop'),
+                ),
+                const PopupMenuItem(value: 'restart', child: Text('Restart')),
+                PopupMenuItem(
+                  value: 'pause',
+                  enabled: running && !paused,
+                  child: const Text('Pause'),
+                ),
+                PopupMenuItem(
+                  value: 'unpause',
+                  enabled: paused,
+                  child: const Text('Unpause'),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'kill',
+                  enabled: running,
+                  child: Text('Kill', style: TextStyle(color: scheme.error)),
+                ),
+                PopupMenuItem(
+                  value: 'remove',
+                  child: Text('Delete', style: TextStyle(color: scheme.error)),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'recreate',
+                  child: Text('Re-create from inspect'),
+                ),
+              ];
+            },
           ),
           const SizedBox(width: 8),
         ],

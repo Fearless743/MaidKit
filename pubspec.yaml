@@ -38,9 +38,11 @@ dependencies:
   drift: ^2.34.2
   drift_flutter: ^0.3.1
   file_picker: ^11.0.2
+  flutter_code_editor: ^0.3.5
   flutter_hooks: ^0.21.3+1
   flutter_secure_storage: ^10.3.1
   hooks_riverpod: ^3.3.2
+  highlight: ^0.7.0
   island_ui_foundation:
     git:
       url: https://src.solsynth.dev/SoSYS/Solian.git

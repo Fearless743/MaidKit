@@ -5,7 +5,53 @@ enum ContainerRuntime { docker, podman }
 /// environment. Root operations require passwordless sudo on the server.
 enum ContainerScope { user, root }
 
-enum ContainerAction { start, stop, restart }
+/// Lifecycle actions for a single container (`docker|podman <verb> <id>`).
+///
+/// [remove] maps to `rm`. When the container is still running, callers should
+/// pass `force: true` to `runContainerAction` so the runtime uses `rm -f`.
+enum ContainerAction { start, stop, restart, pause, unpause, kill, remove }
+
+extension ContainerActionX on ContainerAction {
+  /// Short label for menus and confirmation buttons.
+  String get label => switch (this) {
+    ContainerAction.start => 'Start',
+    ContainerAction.stop => 'Stop',
+    ContainerAction.restart => 'Restart',
+    ContainerAction.pause => 'Pause',
+    ContainerAction.unpause => 'Unpause',
+    ContainerAction.kill => 'Kill',
+    ContainerAction.remove => 'Delete',
+  };
+
+  /// Past-tense snackbar title fragment, e.g. "Container stopped".
+  String get pastLabel => switch (this) {
+    ContainerAction.start => 'started',
+    ContainerAction.stop => 'stopped',
+    ContainerAction.restart => 'restarted',
+    ContainerAction.pause => 'paused',
+    ContainerAction.unpause => 'unpaused',
+    ContainerAction.kill => 'killed',
+    ContainerAction.remove => 'deleted',
+  };
+
+  /// Subcommand verb passed to the runtime CLI (not always [name]).
+  String get cliVerb => switch (this) {
+    ContainerAction.remove => 'rm',
+    _ => name,
+  };
+
+  /// Whether the action can interrupt or destroy a running workload.
+  bool get isDestructive => switch (this) {
+    ContainerAction.stop ||
+    ContainerAction.kill ||
+    ContainerAction.remove => true,
+    _ => false,
+  };
+
+  /// Whether the UI should prompt before running the action.
+  bool get requiresConfirmation =>
+      isDestructive || this == ContainerAction.restart;
+}
 
 /// Actions available for a local container image.
 enum ImageAction { remove }
@@ -258,8 +304,12 @@ class ContainerInspectDetail {
 
   bool get isRunning {
     final value = state.toLowerCase();
-    return value.contains('running') || value == 'up';
+    return value.contains('running') ||
+        value == 'up' ||
+        value.contains('paused');
   }
+
+  bool get isPaused => state.toLowerCase().contains('paused');
 
   /// Best-effort `run` command reconstructed from inspect data.
   ///

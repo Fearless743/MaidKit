@@ -121,32 +121,83 @@ class _ContainerManagementTabState
         : null;
   }
 
+  Future<bool> _confirmAction(
+    ServerContainer container,
+    ContainerAction action, {
+    required bool forceRemove,
+  }) async {
+    final scheme = Theme.of(context).colorScheme;
+    final title = switch (action) {
+      ContainerAction.stop => 'Stop ${container.name}?',
+      ContainerAction.restart => 'Restart ${container.name}?',
+      ContainerAction.kill => 'Kill ${container.name}?',
+      ContainerAction.remove =>
+        forceRemove
+            ? 'Force delete ${container.name}?'
+            : 'Delete ${container.name}?',
+      _ => '${action.label} ${container.name}?',
+    };
+    final message = switch (action) {
+      ContainerAction.stop =>
+        'The container will remain available to start again.',
+      ContainerAction.restart =>
+        'The container will be stopped and started again.',
+      ContainerAction.kill =>
+        'Sends SIGKILL immediately. Prefer Stop when the process can exit cleanly.',
+      ContainerAction.remove when forceRemove =>
+        'The container is still running. It will be force-stopped and permanently removed from this environment.',
+      ContainerAction.remove =>
+        'The container will be permanently removed from this environment. Images and volumes are left in place.',
+      _ => null,
+    };
+    final confirmLabel = switch (action) {
+      ContainerAction.remove => forceRemove ? 'Force delete' : 'Delete',
+      ContainerAction.kill => 'Kill',
+      _ => action.label,
+    };
+    final destructive =
+        action == ContainerAction.kill || action == ContainerAction.remove;
+
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: message == null ? null : Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: scheme.error,
+                    foregroundColor: scheme.onError,
+                  )
+                : null,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return approved == true;
+  }
+
   Future<void> _runAction(
     ContainerEnvironment environment,
     ServerContainer container,
     ContainerAction action,
   ) async {
-    if (action == ContainerAction.stop) {
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Stop ${container.name}?'),
-          content: const Text(
-            'The container will remain available to start again.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Stop'),
-            ),
-          ],
-        ),
+    final running = isContainerRunning(container);
+    final forceRemove = action == ContainerAction.remove && running;
+    if (action.requiresConfirmation) {
+      final approved = await _confirmAction(
+        container,
+        action,
+        forceRemove: forceRemove,
       );
-      if (approved != true || !mounted) return;
+      if (!approved || !mounted) return;
     }
     try {
       await ref
@@ -157,11 +208,12 @@ class _ContainerManagementTabState
             scope: environment.scope,
             containerId: container.id,
             action: action,
+            force: forceRemove,
             sudoPassword: await _storedSudoPassword(),
           );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Container ${action.name}ed',
+        title: 'Container ${action.pastLabel}',
         message: container.name,
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
@@ -170,7 +222,7 @@ class _ContainerManagementTabState
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not ${action.name} container',
+        title: 'Could not ${action.label.toLowerCase()} container',
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -359,25 +411,71 @@ class _ContainerEnvironmentSection extends StatelessWidget {
     required ServerContainer container,
     required Future<void> Function(ContainerAction action) onAction,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     final running = isContainerRunning(container);
+    final paused = isContainerPaused(container);
+    final canPause = running && !paused;
+    final canUnpause = paused;
+
+    List<Widget> menuRows(ContainerAction action, IconData icon) {
+      final destructive =
+          action == ContainerAction.kill || action == ContainerAction.remove;
+      return [
+        Icon(icon, size: 20, color: destructive ? scheme.error : null),
+        const SizedBox(width: 12),
+        Text(
+          action.label,
+          style: destructive ? TextStyle(color: scheme.error) : null,
+        ),
+      ];
+    }
+
     Menu menu() => Menu(
       children: [
         MenuAction(
-          title: 'Start',
+          title: ContainerAction.start.label,
           image: MenuImage.icon(Symbols.play_arrow),
           attributes: MenuActionAttributes(disabled: running),
           callback: () => onAction(ContainerAction.start),
         ),
         MenuAction(
-          title: 'Stop',
+          title: ContainerAction.stop.label,
           image: MenuImage.icon(Symbols.stop),
           attributes: MenuActionAttributes(disabled: !running),
           callback: () => onAction(ContainerAction.stop),
         ),
         MenuAction(
-          title: 'Restart',
+          title: ContainerAction.restart.label,
           image: MenuImage.icon(Symbols.restart_alt),
           callback: () => onAction(ContainerAction.restart),
+        ),
+        MenuAction(
+          title: ContainerAction.pause.label,
+          image: MenuImage.icon(Symbols.pause),
+          attributes: MenuActionAttributes(disabled: !canPause),
+          callback: () => onAction(ContainerAction.pause),
+        ),
+        MenuAction(
+          title: ContainerAction.unpause.label,
+          image: MenuImage.icon(Symbols.play_circle),
+          attributes: MenuActionAttributes(disabled: !canUnpause),
+          callback: () => onAction(ContainerAction.unpause),
+        ),
+        MenuSeparator(),
+        MenuAction(
+          title: ContainerAction.kill.label,
+          image: MenuImage.icon(Symbols.dangerous),
+          attributes: MenuActionAttributes(
+            destructive: true,
+            disabled: !running,
+          ),
+          callback: () => onAction(ContainerAction.kill),
+        ),
+        MenuAction(
+          title: ContainerAction.remove.label,
+          image: MenuImage.icon(Symbols.delete),
+          attributes: const MenuActionAttributes(destructive: true),
+          callback: () => onAction(ContainerAction.remove),
         ),
       ],
     );
@@ -402,33 +500,55 @@ class _ContainerEnvironmentSection extends StatelessWidget {
             PopupMenuItem(
               value: ContainerAction.start,
               enabled: !running,
-              child: const Row(
-                children: [
-                  Icon(Symbols.play_arrow, size: 20),
-                  SizedBox(width: 12),
-                  Text('Start'),
-                ],
+              child: Row(
+                children: menuRows(ContainerAction.start, Symbols.play_arrow),
               ),
             ),
             PopupMenuItem(
               value: ContainerAction.stop,
               enabled: running,
-              child: const Row(
-                children: [
-                  Icon(Symbols.stop, size: 20),
-                  SizedBox(width: 12),
-                  Text('Stop'),
-                ],
+              child: Row(
+                children: menuRows(ContainerAction.stop, Symbols.stop),
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: ContainerAction.restart,
               child: Row(
-                children: [
-                  Icon(Symbols.restart_alt, size: 20),
-                  SizedBox(width: 12),
-                  Text('Restart'),
-                ],
+                children: menuRows(
+                  ContainerAction.restart,
+                  Symbols.restart_alt,
+                ),
+              ),
+            ),
+            PopupMenuItem(
+              value: ContainerAction.pause,
+              enabled: canPause,
+              child: Row(
+                children: menuRows(ContainerAction.pause, Symbols.pause),
+              ),
+            ),
+            PopupMenuItem(
+              value: ContainerAction.unpause,
+              enabled: canUnpause,
+              child: Row(
+                children: menuRows(
+                  ContainerAction.unpause,
+                  Symbols.play_circle,
+                ),
+              ),
+            ),
+            const PopupMenuDivider(),
+            PopupMenuItem(
+              value: ContainerAction.kill,
+              enabled: running,
+              child: Row(
+                children: menuRows(ContainerAction.kill, Symbols.dangerous),
+              ),
+            ),
+            PopupMenuItem(
+              value: ContainerAction.remove,
+              child: Row(
+                children: menuRows(ContainerAction.remove, Symbols.delete),
               ),
             ),
           ],
