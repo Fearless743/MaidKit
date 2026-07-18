@@ -212,106 +212,103 @@ class _ServerCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 16, right: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    Symbols.dns,
-                    fill: connected ? 1 : 0,
-                    size: 22,
-                    color: connected
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          server.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${server.username}@${server.host}:${server.port}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+      child: InkWell(
+        onTap: onOpenDetail,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Symbols.dns,
+                      fill: connected ? 1 : 0,
+                      size: 22,
+                      color: connected
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            server.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.titleMedium,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'View server details',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onOpenDetail,
-                    icon: const Icon(Symbols.open_in_new),
-                  ),
-                  IconButton(
-                    tooltip: 'Refresh statistics',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: connected ? onRefresh : null,
-                    icon: const Icon(Symbols.refresh),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: connected
-                    ? _ServerStats(
-                        stats: session?.stats,
-                        systemInfo: session?.systemInfo,
-                        collectStats: server.collectStats,
-                        collectSystemInfo: server.collectSystemInfo,
-                      )
-                    : _DisconnectedStats(
-                        connecting: connecting,
-                        error: session?.error,
+                          const SizedBox(height: 2),
+                          Text(
+                            '${server.username}@${server.host}:${server.port}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _ConnectionStatus(
-                  connected: connected,
-                  connecting: connecting,
-                  failed: failed,
-                ),
-                const Spacer(),
-                if (!connected && !connecting)
-                  FilledButton.tonal(
-                    onPressed: onConnect,
-                    child: const Text('Connect'),
-                  ),
-                if (connecting)
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colorScheme.primary,
                     ),
+                    IconButton(
+                      tooltip: 'Refresh statistics',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: connected ? onRefresh : null,
+                      icon: const Icon(Symbols.refresh),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: connected
+                      ? _ServerStats(
+                          stats: session?.stats,
+                          systemInfo: session?.systemInfo,
+                          collectStats: server.collectStats,
+                          collectSystemInfo: server.collectSystemInfo,
+                        )
+                      : _DisconnectedStats(
+                          connecting: connecting,
+                          error: session?.error,
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _ConnectionStatus(
+                    connected: connected,
+                    connecting: connecting,
+                    failed: failed,
                   ),
-              ],
-            ).padding(horizontal: 16),
-          ],
+                  const Spacer(),
+                  if (!connected && !connecting)
+                    FilledButton.tonal(
+                      onPressed: onConnect,
+                      child: const Text('Connect'),
+                    ),
+                  if (connecting)
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                ],
+              ).padding(horizontal: 16),
+            ],
+          ),
         ),
       ),
     );

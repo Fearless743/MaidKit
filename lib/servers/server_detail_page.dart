@@ -12,6 +12,7 @@ import 'package:maid_kit/containers/image_management_tab.dart';
 import 'activity_tab.dart';
 import 'crontab_tab.dart';
 import 'firewall_tab.dart';
+import 'package_management_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -417,7 +418,7 @@ class _InspectorTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -438,6 +439,7 @@ class _InspectorTabs extends StatelessWidget {
               ),
               Tab(icon: Icon(Symbols.image, size: 18), text: 'Images'),
               Tab(icon: Icon(Symbols.schedule, size: 18), text: 'Crontab'),
+              Tab(icon: Icon(Symbols.inventory_2, size: 18), text: 'Packages'),
               Tab(icon: Icon(Symbols.shield, size: 18), text: 'Firewall'),
             ],
           ),
@@ -483,6 +485,12 @@ class _InspectorTabs extends StatelessWidget {
                   refreshInterval: refreshInterval,
                 ),
                 CrontabTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                ),
+                PackageManagementTab(
                   server: server,
                   connected: connected,
                   connectionError: connectionError,

@@ -9,6 +9,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'activity_models.dart';
 import 'crontab_models.dart';
 import 'firewall_models.dart';
+import 'package_models.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'systemd_models.dart';
@@ -162,6 +163,122 @@ class SshConnectionManager {
           .map(_parseProcess)
           .whereType<ServerProcess>()
           .toList();
+    });
+  }
+
+  /// Detects package tools available on the remote host and reads its pending
+  /// update list with the preferred tool. No package indexes are changed.
+  Future<PackageManagerStatus> getPackageManagerStatus(
+    int serverId, {
+    PackageManager? preferredManager,
+  }) async {
+    return withClient(serverId, (client) async {
+      const managers = PackageManager.values;
+      final detected = <PackageManager>[];
+      for (final manager in managers) {
+        final executable = _packageExecutable(manager);
+        final result = await _execute(client, 'command -v $executable');
+        if (result.exitCode == 0) detected.add(manager);
+      }
+      if (detected.isEmpty) {
+        return const PackageManagerStatus(
+          available: [],
+          manager: null,
+          installedPackageCount: null,
+          outdatedPackages: [],
+        );
+      }
+      final manager = detected.contains(preferredManager)
+          ? preferredManager!
+          : detected.first;
+      final installed = await _execute(
+        client,
+        _installedPackageCountCommand(manager),
+      );
+      final updates = await _execute(client, _packageOutdatedCommand(manager));
+      // Each package manager uses a non-zero exit status to describe an empty
+      // update list in at least some releases, so parse stdout regardless.
+      return PackageManagerStatus(
+        available: detected,
+        manager: manager,
+        installedPackageCount: int.tryParse(installed.stdout.trim()),
+        outdatedPackages: _parsePackageNames(updates.stdout),
+      );
+    });
+  }
+
+  Future<List<PackageSearchResult>> searchPackages(
+    int serverId, {
+    required PackageManager manager,
+    required String query,
+  }) async {
+    final term = query.trim();
+    if (term.isEmpty) return const [];
+    if (!_safePackageName(term)) {
+      throw ArgumentError.value(
+        query,
+        'query',
+        'Use a package name or prefix.',
+      );
+    }
+    return withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        _packageSearchCommand(manager, term),
+      );
+      if (result.exitCode != 0 && result.stdout.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      final packages = _parsePackageSearch(result.stdout);
+      if (packages.isEmpty) return packages;
+      final installed = await _execute(
+        client,
+        _packageInstallationStatusCommand(manager, packages.map((p) => p.name)),
+      );
+      final installedNames = _parseInstalledPackageNames(installed.stdout);
+      return [
+        for (final package in packages)
+          PackageSearchResult(
+            name: package.name,
+            version: package.version,
+            description: package.description,
+            installed: installedNames.contains(package.name),
+          ),
+      ];
+    });
+  }
+
+  Future<void> runPackageAction(
+    int serverId, {
+    required PackageManager manager,
+    required PackageAction action,
+    String? packageName,
+    required bool sshUserIsRoot,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    final name = packageName?.trim();
+    if ((action == PackageAction.install || action == PackageAction.remove) &&
+        (name == null || !_safePackageName(name))) {
+      throw ArgumentError.value(
+        packageName,
+        'packageName',
+        'Invalid package name.',
+      );
+    }
+    final display = _packageActionCommand(manager, action, name);
+    await withClient(serverId, (client) async {
+      onOutput?.call('\$ $display\n');
+      final prefix = sshUserIsRoot
+          ? ''
+          : (sudoPassword == null ? 'sudo -n ' : 'sudo -S -p "" ');
+      final result = await _executeStreaming(
+        client,
+        '$prefix$display',
+        stdin: sshUserIsRoot ? null : sudoPassword,
+        onOutput: onOutput,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
     });
   }
 
@@ -1878,6 +1995,176 @@ fi
 
   bool _safeProjectName(String value) =>
       RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]*$').hasMatch(value);
+
+  bool _safePackageName(String value) =>
+      RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9+_.:@/-]*$').hasMatch(value);
+
+  String _packageExecutable(PackageManager manager) => switch (manager) {
+    PackageManager.apt => 'apt-get',
+    PackageManager.dnf => 'dnf',
+    PackageManager.yum => 'yum',
+    PackageManager.pacman => 'pacman',
+    PackageManager.zypper => 'zypper',
+    PackageManager.apk => 'apk',
+    PackageManager.xbps => 'xbps-install',
+  };
+
+  String _packageOutdatedCommand(PackageManager manager) => switch (manager) {
+    PackageManager.apt =>
+      "apt list --upgradable 2>/dev/null | sed '1d' | cut -d/ -f1",
+    PackageManager.dnf =>
+      'dnf -q check-update 2>/dev/null | awk \'NF >= 3 {print \$1}\'',
+    PackageManager.yum =>
+      'yum -q check-update 2>/dev/null | awk \'NF >= 3 {print \$1}\'',
+    PackageManager.pacman => 'pacman -Qu 2>/dev/null | awk \'{print \$1}\'',
+    PackageManager.zypper =>
+      'zypper --non-interactive list-updates 2>/dev/null | awk \'/^v / {print \$3}\'',
+    PackageManager.apk => 'apk version -l "<" 2>/dev/null | cut -d" " -f1',
+    PackageManager.xbps =>
+      'xbps-install -Mun 2>/dev/null | awk \'{print \$1}\'',
+  };
+
+  String _installedPackageCountCommand(PackageManager manager) =>
+      switch (manager) {
+        PackageManager.apt => r"dpkg-query -W -f='${binary:Package}\n' | wc -l",
+        PackageManager.dnf ||
+        PackageManager.yum ||
+        PackageManager.zypper => 'rpm -qa | wc -l',
+        PackageManager.pacman => 'pacman -Qq | wc -l',
+        PackageManager.apk => 'apk info | wc -l',
+        PackageManager.xbps => 'xbps-query -l | wc -l',
+      };
+
+  String _packageInstallationStatusCommand(
+    PackageManager manager,
+    Iterable<String> names,
+  ) {
+    final packages = names
+        .where(_safePackageName)
+        .map(_shellSingleQuote)
+        .join(' ');
+    final check = switch (manager) {
+      PackageManager.apt =>
+        "dpkg-query -W -f='\${db:Status-Status}' \$package 2>/dev/null | grep -qx installed",
+      PackageManager.dnf ||
+      PackageManager.yum ||
+      PackageManager.zypper => 'rpm -q \$package >/dev/null 2>&1',
+      PackageManager.pacman => 'pacman -Q \$package >/dev/null 2>&1',
+      PackageManager.apk => 'apk info -e \$package >/dev/null 2>&1',
+      PackageManager.xbps => 'xbps-query -p pkgver \$package >/dev/null 2>&1',
+    };
+    return 'for package in $packages; do if $check; then '
+        'printf "%s\\t1\\n" "\$package"; else '
+        'printf "%s\\t0\\n" "\$package"; fi; done';
+  }
+
+  String _packageSearchCommand(PackageManager manager, String query) {
+    final pattern = '$query*';
+    return switch (manager) {
+      PackageManager.apt =>
+        "apt-cache search --names-only '^$query' | head -n 80",
+      PackageManager.dnf => 'dnf -q search $pattern 2>/dev/null | head -n 80',
+      PackageManager.yum => 'yum -q search $pattern 2>/dev/null | head -n 80',
+      PackageManager.pacman => 'pacman -Ss ^$query 2>/dev/null | head -n 160',
+      PackageManager.zypper =>
+        'zypper --non-interactive search $pattern 2>/dev/null | head -n 80',
+      PackageManager.apk => 'apk search -v $pattern 2>/dev/null | head -n 80',
+      PackageManager.xbps => 'xbps-query -Rs $query 2>/dev/null | head -n 80',
+    };
+  }
+
+  String _packageActionCommand(
+    PackageManager manager,
+    PackageAction action,
+    String? packageName,
+  ) {
+    final name = packageName ?? '';
+    return switch ((manager, action)) {
+      (PackageManager.apt, PackageAction.refresh) => 'apt-get update',
+      (PackageManager.apt, PackageAction.upgrade) =>
+        'env DEBIAN_FRONTEND=noninteractive apt-get -y upgrade',
+      (PackageManager.apt, PackageAction.install) =>
+        'env DEBIAN_FRONTEND=noninteractive apt-get -y install $name',
+      (PackageManager.apt, PackageAction.remove) =>
+        'env DEBIAN_FRONTEND=noninteractive apt-get -y remove $name',
+      (PackageManager.dnf, PackageAction.refresh) ||
+      (
+        PackageManager.yum,
+        PackageAction.refresh,
+      ) => '${_packageExecutable(manager)} makecache',
+      (PackageManager.dnf, PackageAction.upgrade) ||
+      (
+        PackageManager.yum,
+        PackageAction.upgrade,
+      ) => '${_packageExecutable(manager)} -y upgrade',
+      (PackageManager.dnf, PackageAction.install) ||
+      (
+        PackageManager.yum,
+        PackageAction.install,
+      ) => '${_packageExecutable(manager)} -y install $name',
+      (PackageManager.dnf, PackageAction.remove) ||
+      (
+        PackageManager.yum,
+        PackageAction.remove,
+      ) => '${_packageExecutable(manager)} -y remove $name',
+      (PackageManager.pacman, PackageAction.refresh) => 'pacman -Sy',
+      (PackageManager.pacman, PackageAction.upgrade) =>
+        'pacman --noconfirm -Syu',
+      (PackageManager.pacman, PackageAction.install) =>
+        'pacman --noconfirm -S $name',
+      (PackageManager.pacman, PackageAction.remove) =>
+        'pacman --noconfirm -R $name',
+      (PackageManager.zypper, PackageAction.refresh) =>
+        'zypper --non-interactive refresh',
+      (PackageManager.zypper, PackageAction.upgrade) =>
+        'zypper --non-interactive update',
+      (PackageManager.zypper, PackageAction.install) =>
+        'zypper --non-interactive install $name',
+      (PackageManager.zypper, PackageAction.remove) =>
+        'zypper --non-interactive remove $name',
+      (PackageManager.apk, PackageAction.refresh) => 'apk update',
+      (PackageManager.apk, PackageAction.upgrade) => 'apk upgrade',
+      (PackageManager.apk, PackageAction.install) => 'apk add $name',
+      (PackageManager.apk, PackageAction.remove) => 'apk del $name',
+      (PackageManager.xbps, PackageAction.refresh) => 'xbps-install -S',
+      (PackageManager.xbps, PackageAction.upgrade) => 'xbps-install -yu',
+      (PackageManager.xbps, PackageAction.install) => 'xbps-install -y $name',
+      (PackageManager.xbps, PackageAction.remove) => 'xbps-remove -y $name',
+    };
+  }
+
+  List<String> _parsePackageNames(String output) => output
+      .split('\n')
+      .map((line) => line.trim().split(RegExp(r'\s+')).firstOrNull ?? '')
+      .where((name) => _safePackageName(name))
+      .toSet()
+      .take(80)
+      .toList();
+
+  List<PackageSearchResult> _parsePackageSearch(String output) => output
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty && !line.startsWith('Last metadata'))
+      .map((line) {
+        final fields = line.split(RegExp(r'\s+'));
+        final name = fields.first.split('/').first;
+        return PackageSearchResult(
+          name: name,
+          version: fields.length > 1 ? fields[1] : null,
+          description: fields.length > 2 ? fields.skip(2).join(' ') : null,
+        );
+      })
+      .where((result) => _safePackageName(result.name))
+      .take(80)
+      .toList();
+
+  Set<String> _parseInstalledPackageNames(String output) => output
+      .split('\n')
+      .map((line) => line.split('\t'))
+      .where((fields) => fields.length == 2 && fields[1].trim() == '1')
+      .map((fields) => fields.first.trim())
+      .where(_safePackageName)
+      .toSet();
 
   bool _safeRemoteDirectory(String value) =>
       RegExp(r'^/[a-zA-Z0-9_./-]+$').hasMatch(value) && !value.contains('..');
