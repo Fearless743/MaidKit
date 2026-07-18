@@ -51,8 +51,10 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    // Riverpod forbids mutating providers during dispose / tree finalization.
     final serverId = widget.server.id;
-    _focusedServerNotifier.clear(serverId);
+    final focused = _focusedServerNotifier;
+    Future.microtask(() => focused.clear(serverId));
     super.dispose();
   }
 

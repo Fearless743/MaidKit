@@ -49,9 +49,18 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   final _keyEncoder = ghostty.KeyEncoder();
   final _outgoingBytes = StreamController<Uint8List>.broadcast();
   final _resizeEvents = StreamController<TerminalResize>.broadcast();
+  final _matches = <_GhosttyMatch>[];
+
+  /// Bumped whenever find highlights change so the renderer repaints.
+  final findRevision = ValueNotifier<int>(0);
+  var _findIndex = 0;
   var _disposed = false;
   var _columns = _initialColumns;
   var _rows = _initialRows;
+
+  void _bumpFind() {
+    findRevision.value++;
+  }
 
   @override
   Stream<Uint8List> get outgoingBytes => _outgoingBytes.stream;
@@ -65,10 +74,104 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   }
 
   @override
-  Widget buildView({bool autofocus = false}) => _GhosttyTerminalView(
+  int find(String query, {bool caseSensitive = false}) {
+    findClear();
+    if (_disposed || query.isEmpty) return 0;
+
+    final needle = caseSensitive ? query : query.toLowerCase();
+    if (needle.isEmpty) return 0;
+
+    // Prefer select-all plain text (includes scrollback). Keep soft wraps as
+    // separate rows (unwrap: false) so column indices match the painted grid.
+    final lines = _extractFindLines();
+    for (var row = 0; row < lines.length; row++) {
+      final line = lines[row];
+      final haystack = caseSensitive ? line : line.toLowerCase();
+      var from = 0;
+      while (true) {
+        final index = haystack.indexOf(needle, from);
+        if (index < 0) break;
+        _matches.add(
+          _GhosttyMatch(row: row, start: index, end: index + needle.length),
+        );
+        from = index + 1;
+      }
+    }
+
+    _findIndex = 0;
+    _bumpFind();
+    return _matches.length;
+  }
+
+  /// Rows of plain text covering scrollback + active area when possible.
+  List<String> _extractFindLines() {
+    final selection = _terminal.selectAll();
+    if (selection != null) {
+      final text = selection.format(unwrap: false, trim: false);
+      if (text.isNotEmpty) {
+        // Drop a trailing empty split from a final newline.
+        final lines = text.split('\n');
+        if (lines.isNotEmpty && lines.last.isEmpty) {
+          return lines.sublist(0, lines.length - 1);
+        }
+        return lines;
+      }
+    }
+
+    // Fallback: format the active screen only.
+    final formatter = ghostty.Formatter(
+      terminal: _terminal,
+      format: ghostty.FormatterFormat.plain,
+      unwrap: false,
+      trim: false,
+    );
+    try {
+      final text = formatter.format();
+      final lines = text.split('\n');
+      if (lines.isNotEmpty && lines.last.isEmpty) {
+        return lines.sublist(0, lines.length - 1);
+      }
+      return lines;
+    } finally {
+      formatter.dispose();
+    }
+  }
+
+  @override
+  void findJump(int index) {
+    if (_disposed || _matches.isEmpty) return;
+    final safe = index.clamp(0, _matches.length - 1);
+    _findIndex = safe;
+    final match = _matches[safe];
+    // Pin the match near the top of the viewport so the highlight is visible.
+    final visible = _terminal.scrollbar.visible;
+    final target = (match.row - (visible ~/ 3)).clamp(0, 1 << 30);
+    _terminal.scrollToRow(target);
+    _bumpFind();
+  }
+
+  @override
+  void findClear() {
+    final had = _matches.isNotEmpty;
+    _matches.clear();
+    _findIndex = 0;
+    if (!_disposed && had) {
+      _terminal.selection = null;
+    }
+    if (had) _bumpFind();
+  }
+
+  @override
+  Widget buildView({
+    bool autofocus = false,
+    bool readOnly = false,
+    bool showCursor = true,
+  }) => _GhosttyTerminalView(
     key: ObjectKey(this),
     adapter: this,
     autofocus: autofocus,
+    readOnly: readOnly,
+    showCursor: showCursor,
     cursorAnimationEnabled: cursorAnimationEnabled,
   );
 
@@ -119,6 +222,8 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _matches.clear();
+    findRevision.dispose();
     _terminal.onWritePty = null;
     _keyEncoder.dispose();
     _terminal.dispose();
@@ -127,16 +232,46 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   }
 }
 
+class _GhosttyMatch {
+  const _GhosttyMatch({
+    required this.row,
+    required this.start,
+    required this.end,
+  });
+
+  final int row;
+  final int start;
+  final int end;
+}
+
+class _GhosttyFindHit {
+  const _GhosttyFindHit({
+    required this.viewportRow,
+    required this.start,
+    required this.end,
+    required this.current,
+  });
+
+  final int viewportRow;
+  final int start;
+  final int end;
+  final bool current;
+}
+
 class _GhosttyTerminalView extends StatefulWidget {
   const _GhosttyTerminalView({
     super.key,
     required this.adapter,
     required this.autofocus,
+    required this.readOnly,
+    required this.showCursor,
     required this.cursorAnimationEnabled,
   });
 
   final GhosttyTerminalSessionAdapter adapter;
   final bool autofocus;
+  final bool readOnly;
+  final bool showCursor;
   final bool cursorAnimationEnabled;
 
   @override
@@ -159,6 +294,10 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
     duration: const Duration(milliseconds: 90),
   );
   var _resizeScheduled = false;
+
+  /// Trackpad/wheel deltas are often smaller than one cell; accumulate so we
+  /// do not drop sub-line scrolls (which feels like "scroll is broken").
+  var _scrollAccumulator = 0.0;
   String? _composingText;
   ghostty.Position? _selectionStart;
   var _draggingSelection = false;
@@ -169,11 +308,24 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
   void initState() {
     super.initState();
     widget.adapter._terminal.addListener(_onTerminalChanged);
+    widget.adapter.findRevision.addListener(_onTerminalChanged);
+  }
+
+  @override
+  void didUpdateWidget(_GhosttyTerminalView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.adapter, widget.adapter)) {
+      oldWidget.adapter._terminal.removeListener(_onTerminalChanged);
+      oldWidget.adapter.findRevision.removeListener(_onTerminalChanged);
+      widget.adapter._terminal.addListener(_onTerminalChanged);
+      widget.adapter.findRevision.addListener(_onTerminalChanged);
+    }
   }
 
   @override
   void dispose() {
     widget.adapter._terminal.removeListener(_onTerminalChanged);
+    widget.adapter.findRevision.removeListener(_onTerminalChanged);
     _cells.dispose();
     _rows.dispose();
     _renderState.dispose();
@@ -184,6 +336,31 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
 
   void _onTerminalChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// Map absolute screen-row find hits into the current viewport.
+  List<_GhosttyFindHit> _visibleFindHits() {
+    final matches = widget.adapter._matches;
+    if (matches.isEmpty) return const [];
+    final scrollbar = widget.adapter._terminal.scrollbar;
+    final offset = scrollbar.offset;
+    final visible = scrollbar.visible;
+    final current = widget.adapter._findIndex;
+    final hits = <_GhosttyFindHit>[];
+    for (var i = 0; i < matches.length; i++) {
+      final match = matches[i];
+      final viewportRow = match.row - offset;
+      if (viewportRow < 0 || viewportRow >= visible) continue;
+      hits.add(
+        _GhosttyFindHit(
+          viewportRow: viewportRow,
+          start: match.start,
+          end: match.end,
+          current: i == current,
+        ),
+      );
+    }
+    return hits;
   }
 
   void _scheduleResize(BoxConstraints constraints) {
@@ -303,6 +480,7 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
   }
 
   Future<void> _paste() async {
+    if (widget.readOnly) return;
     final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (text != null && text.isNotEmpty) widget.adapter.sendInput(text);
   }
@@ -314,14 +492,16 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
     final command =
         HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed;
-    if (command && event.logicalKey == LogicalKeyboardKey.keyV) {
-      unawaited(_paste());
-      return KeyEventResult.handled;
-    }
     if (command &&
         event.logicalKey == LogicalKeyboardKey.keyC &&
         widget.adapter._terminal.selection != null) {
       unawaited(_copySelection());
+      return KeyEventResult.handled;
+    }
+    // Log playback and other read-only surfaces ignore typing/paste.
+    if (widget.readOnly) return KeyEventResult.ignored;
+    if (command && event.logicalKey == LogicalKeyboardKey.keyV) {
+      unawaited(_paste());
       return KeyEventResult.handled;
     }
     final character = event.character;
@@ -408,12 +588,13 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
                 _draggingSelection = false;
               },
               onPointerSignal: (event) {
-                if (event is PointerScrollEvent) {
-                  widget.adapter._terminal.scrollViewport(
-                    (event.scrollDelta.dy / _cellHeight).round(),
-                  );
-                  setState(() {});
-                }
+                if (event is! PointerScrollEvent) return;
+                _scrollAccumulator += event.scrollDelta.dy;
+                final lines = _scrollAccumulator ~/ _cellHeight;
+                if (lines == 0) return;
+                _scrollAccumulator -= lines * _cellHeight;
+                widget.adapter._terminal.scrollViewport(lines);
+                setState(() {});
               },
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -424,6 +605,8 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
                       cursorAnimation: _cursorAnimation,
                       cursorFrom: _cursorFrom!,
                       cursorTo: _cursorTo!,
+                      showCursor: widget.showCursor,
+                      findHits: _visibleFindHits(),
                     ),
                     child: const SizedBox.expand(),
                   );
@@ -603,6 +786,8 @@ class _GhosttyTerminalPainter extends CustomPainter {
     required this.cursorAnimation,
     required this.cursorFrom,
     required this.cursorTo,
+    required this.showCursor,
+    required this.findHits,
   }) : super(repaint: cursorAnimation);
 
   static const _horizontalPadding = 12.0;
@@ -610,11 +795,16 @@ class _GhosttyTerminalPainter extends CustomPainter {
   static const _cellWidth = 8.4;
   static const _cellHeight = 18.0;
   static const _selectionOverlay = Color(0x6638BDF8);
+  // Strong enough to read on dark terminal chrome after cell backgrounds.
+  static const _findHitOverlay = Color(0x99E5E510);
+  static const _findCurrentOverlay = Color(0xCC39FF14);
 
   final _GhosttyTerminalFrame frame;
   final Animation<double> cursorAnimation;
   final Offset cursorFrom;
   final Offset cursorTo;
+  final bool showCursor;
+  final List<_GhosttyFindHit> findHits;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -624,6 +814,8 @@ class _GhosttyTerminalPainter extends CustomPainter {
       fontSize: 14,
       height: 1.2857,
     );
+
+    // 1) Cell backgrounds
     for (var rowIndex = 0; rowIndex < frame.rows.length; rowIndex++) {
       int? backgroundRunColor;
       int? backgroundRunStart;
@@ -658,7 +850,25 @@ class _GhosttyTerminalPainter extends CustomPainter {
           color: backgroundRunColor,
         );
       }
+    }
 
+    // 2) Find highlights (above cell bg, under glyphs) so they stay visible.
+    for (final hit in findHits) {
+      if (hit.viewportRow < 0 || hit.viewportRow >= frame.rows.length) {
+        continue;
+      }
+      final end = hit.end <= hit.start ? hit.start + 1 : hit.end;
+      _paintOverlayRun(
+        canvas,
+        rowIndex: hit.viewportRow,
+        start: hit.start,
+        end: end,
+        color: hit.current ? _findCurrentOverlay : _findHitOverlay,
+      );
+    }
+
+    // 3) Glyphs, selection, then cursor.
+    for (var rowIndex = 0; rowIndex < frame.rows.length; rowIndex++) {
       for (final cell in frame.rows[rowIndex]) {
         final x = _horizontalPadding + cell.column * _cellWidth;
         final y = _verticalPadding + rowIndex * _cellHeight;
@@ -713,7 +923,8 @@ class _GhosttyTerminalPainter extends CustomPainter {
       cursorTo,
       Curves.easeOutCubic.transform(cursorAnimation.value),
     )!;
-    if (cursor.visible &&
+    if (showCursor &&
+        cursor.visible &&
         cursorPosition.dy >= 0 &&
         cursorPosition.dy < frame.rows.length) {
       final cursorPaint = Paint()
@@ -757,7 +968,42 @@ class _GhosttyTerminalPainter extends CustomPainter {
   bool shouldRepaint(_GhosttyTerminalPainter oldDelegate) =>
       !identical(frame, oldDelegate.frame) ||
       cursorFrom != oldDelegate.cursorFrom ||
-      cursorTo != oldDelegate.cursorTo;
+      cursorTo != oldDelegate.cursorTo ||
+      showCursor != oldDelegate.showCursor ||
+      !_sameFindHits(findHits, oldDelegate.findHits);
+
+  bool _sameFindHits(List<_GhosttyFindHit> a, List<_GhosttyFindHit> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final left = a[i];
+      final right = b[i];
+      if (left.viewportRow != right.viewportRow ||
+          left.start != right.start ||
+          left.end != right.end ||
+          left.current != right.current) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _paintOverlayRun(
+    Canvas canvas, {
+    required int rowIndex,
+    required int start,
+    required int end,
+    required Color color,
+  }) {
+    if (end <= start) return;
+    final rect = Rect.fromLTWH(
+      _horizontalPadding + start * _cellWidth,
+      _verticalPadding + rowIndex * _cellHeight,
+      (end - start) * _cellWidth,
+      _cellHeight,
+    );
+    canvas.drawRect(rect, Paint()..color = color);
+  }
 
   void _paintSelectionRun(
     Canvas canvas, {

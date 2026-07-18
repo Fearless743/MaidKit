@@ -11,6 +11,7 @@ import 'file_management_tab.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_command_palette.dart';
+import 'terminal_find_host.dart';
 import 'terminal_tabs_provider.dart';
 
 @RoutePage()
@@ -162,7 +163,10 @@ class _TerminalTabs extends StatelessWidget {
         children: [
           Expanded(
             child: ClipRect(
-              child: terminalTab.terminal.buildView(autofocus: true),
+              child: TerminalFindHost(
+                adapter: terminalTab.terminal,
+                autofocus: true,
+              ),
             ),
           ),
           _TerminalStatusBar(session: session),

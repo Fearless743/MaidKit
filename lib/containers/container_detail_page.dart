@@ -13,6 +13,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/ansi_log_view.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
@@ -83,7 +84,10 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _focusedServerNotifier.clear(widget.server.id);
+    // Riverpod forbids mutating providers during dispose / tree finalization.
+    final serverId = widget.server.id;
+    final focused = _focusedServerNotifier;
+    Future.microtask(() => focused.clear(serverId));
     super.dispose();
   }
 
@@ -590,16 +594,24 @@ class _PanelSurface extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
 
+  static const _radius = BorderRadius.all(Radius.circular(12));
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
+    // Clip children (e.g. the log terminal) so they respect the rounded panel.
+    return ClipRRect(
+      borderRadius: _radius,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: _radius,
+        ),
+        child: padding == null
+            ? child
+            : Padding(padding: padding!, child: child),
       ),
-      child: padding == null ? child : Padding(padding: padding!, child: child),
     );
   }
 }
@@ -1131,20 +1143,7 @@ class _LogsPane extends StatelessWidget {
                   actionLabel: 'Refresh',
                   onAction: () async => onRefresh(),
                 )
-              : SelectionArea(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      Text(
-                        logs!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: MaidKitFonts.mono,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              : AnsiLogView(text: logs!),
         ),
       ],
     );

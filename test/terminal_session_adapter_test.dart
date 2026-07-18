@@ -151,7 +151,20 @@ class _FakeTerminalSessionAdapter implements TerminalSessionAdapter {
   Stream<TerminalResize> get resizeEvents => _resizes.stream;
 
   @override
-  Widget buildView({bool autofocus = false}) => const SizedBox();
+  Widget buildView({
+    bool autofocus = false,
+    bool readOnly = false,
+    bool showCursor = true,
+  }) => const SizedBox();
+
+  @override
+  int find(String query, {bool caseSensitive = false}) => 0;
+
+  @override
+  void findJump(int index) {}
+
+  @override
+  void findClear() {}
 
   @override
   Future<void> dispose() async {
