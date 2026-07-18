@@ -10,6 +10,7 @@ class CliOutputProgressTracker {
   final Map<String, double> _layers = {};
   double? _composeRatio;
   double? _barePercent;
+  int _barePercentCount = 0;
   String? detail;
 
   /// Overall progress in `0..1`, or null when still unknown.
@@ -27,7 +28,22 @@ class CliOutputProgressTracker {
     _layers.clear();
     _composeRatio = null;
     _barePercent = null;
+    _barePercentCount = 0;
     detail = null;
+  }
+
+  /// Call when the remote command has exited so the bar fills even if the
+  /// stream never reported a final 100% (common for multi-layer pulls).
+  void markFinished() {
+    if (_layers.isNotEmpty) {
+      for (final key in _layers.keys.toList()) {
+        _layers[key] = 1;
+      }
+    }
+    _composeRatio = 1;
+    _barePercent = 1;
+    _barePercentCount = _barePercentCount == 0 ? 1 : _barePercentCount;
+    detail = '100%';
   }
 
   /// Feed a raw CLI chunk (may contain ANSI, CR, partial lines).
@@ -40,13 +56,20 @@ class CliOutputProgressTracker {
         .split(RegExp(r'[\r\n]+'))
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty);
+    // Bare % values from this chunk are averaged together (multi-service pull
+    // frames often print several percentages at once).
+    final bareBatch = <double>[];
     for (final segment in segments) {
-      _ingestLine(segment);
+      _ingestLine(segment, bareBatch);
+    }
+    if (bareBatch.isNotEmpty) {
+      _barePercent = bareBatch.reduce((a, b) => a + b) / bareBatch.length;
+      _barePercentCount = bareBatch.length;
     }
     _refreshDetail();
   }
 
-  void _ingestLine(String line) {
+  void _ingestLine(String line, List<double> bareBatch) {
     final done = _layerDone.firstMatch(line);
     if (done != null) {
       _layers[done.group(1)!] = 1;
@@ -89,15 +112,12 @@ class CliOutputProgressTracker {
       return;
     }
 
-    // Prefer the highest bare percent on the line (progress bars often reprint).
-    var best = _barePercent;
+    // Collect every bare percentage on the line; [ingest] averages the batch.
     for (final match in _barePercentPattern.allMatches(line)) {
       final pct = double.tryParse(match.group(1)!);
       if (pct == null) continue;
-      final value = (pct / 100).clamp(0.0, 1.0);
-      if (best == null || value > best) best = value;
+      bareBatch.add((pct / 100).clamp(0.0, 1.0));
     }
-    if (best != null) _barePercent = best;
   }
 
   void _refreshDetail() {
@@ -108,7 +128,10 @@ class CliOutputProgressTracker {
     }
     if (_composeRatio != null && detail != null) return;
     if (_barePercent != null) {
-      detail = '${(_barePercent! * 100).round()}%';
+      final pct = (_barePercent! * 100).round();
+      detail = _barePercentCount > 1
+          ? 'avg $pct% ($_barePercentCount)'
+          : '$pct%';
     }
   }
 

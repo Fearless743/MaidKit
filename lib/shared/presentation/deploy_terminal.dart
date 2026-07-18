@@ -121,7 +121,9 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
   }
 
   void complete(String id, {required bool success, String? error}) {
-    final tracker = _progressTrackers[id];
+    // Command has exited — treat progress as complete regardless of how much
+    // of the CLI stream we managed to parse (layers may still show <100%).
+    _progressTrackers[id]?.markFinished();
     state = [
       for (final session in state)
         if (session.id == id)
@@ -130,8 +132,8 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
                 ? DeploySessionStatus.succeeded
                 : DeploySessionStatus.failed,
             error: error,
-            progress: success ? 1 : tracker?.progress,
-            progressDetail: tracker?.detail,
+            progress: 1,
+            progressDetail: success ? '100%' : session.progressDetail,
             clearProgress: true,
           )
         else
