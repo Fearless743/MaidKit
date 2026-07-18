@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 
@@ -11,9 +12,10 @@ import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
-import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/theme.dart';
+import 'compose_project_actions.dart';
 import 'container_cache_repository.dart';
+import 'container_list_tile.dart';
 import 'container_models.dart';
 
 @RoutePage()
@@ -315,27 +317,37 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Future<void> _action(Server server, ComposeProjectAction action) async {
-    final loading = showMaidKitLoadingModal(
-      context,
-      message:
-          '${action.name[0].toUpperCase()}${action.name.substring(1)}ing ${widget.link.name}…',
-    );
     try {
-      await ref
-          .read(connectionManagerProvider)
-          .runComposeProjectAction(
-            server.id,
-            runtime: _runtime,
-            scope: _scope,
-            projectName: widget.link.name,
-            directory: widget.link.directory,
-            action: action,
-            sudoPassword: await _sudoPassword(server),
-          );
+      await runComposeProjectActionWithTerminal(
+        ref: ref,
+        serverId: server.id,
+        serverName: server.name,
+        runtime: _runtime,
+        scope: _scope,
+        projectName: widget.link.name,
+        directory: widget.link.directory,
+        action: action,
+        sudoPassword: await _sudoPassword(server),
+      );
       ref.invalidate(containerCacheEntriesProvider);
+      if (mounted) {
+        showStyledSnackBar(
+          message:
+              '${widget.link.name} · ${action.label.toLowerCase()} finished.',
+          title: 'Project updated',
+          icon: Symbols.check_circle,
+          accentColor: Theme.of(context).colorScheme.primary,
+        );
+      }
       await _refresh();
-    } finally {
-      await loading.dismiss();
+    } catch (error) {
+      if (!mounted) return;
+      showStyledSnackBar(
+        message: error.toString(),
+        title: 'Could not ${action.label.toLowerCase()}',
+        icon: Symbols.error,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
     }
   }
 
@@ -427,20 +439,10 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
             icon: const Icon(Symbols.refresh),
           ),
           PopupMenuButton<ComposeProjectAction>(
-            onSelected: (action) => _action(server, action),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: ComposeProjectAction.stop,
-                child: Text('Stop'),
-              ),
-              PopupMenuItem(
-                value: ComposeProjectAction.restart,
-                child: Text('Restart'),
-              ),
-              PopupMenuItem(
-                value: ComposeProjectAction.recreate,
-                child: Text('Recreate'),
-              ),
+            onSelected: (action) => unawaited(_action(server, action)),
+            itemBuilder: (_) => [
+              for (final action in ComposeProjectAction.values)
+                PopupMenuItem(value: action, child: Text(action.label)),
             ],
           ),
           const SizedBox(width: 8),
@@ -1259,7 +1261,7 @@ class _ContainersPaneState extends State<_ContainersPane> {
                       ),
                       itemBuilder: (context, index) {
                         final container = containers[index];
-                        return _ContainerRow(
+                        return ContainerListTile(
                           container: container,
                           stats: widget.statsFor(container),
                           wide: wide,
@@ -1423,158 +1425,6 @@ class _SortHeader extends StatelessWidget {
                 color: color,
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ContainerRow extends StatelessWidget {
-  const _ContainerRow({
-    required this.container,
-    required this.stats,
-    required this.wide,
-    required this.onOpen,
-  });
-
-  final ServerContainer container;
-  final ContainerStats? stats;
-  final bool wide;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final running = _isRunning(container);
-    final mono = theme.textTheme.bodySmall?.copyWith(
-      fontFamily: MaidKitFonts.mono,
-      fontSize: 12,
-    );
-    return InkWell(
-      onTap: onOpen,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: Row(
-                children: [
-                  Icon(
-                    running ? Symbols.play_circle : Symbols.stop_circle,
-                    size: 18,
-                    color: running ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          container.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          container.image,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        if (!wide && stats != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            [
-                              if (stats!.cpuPercent != null)
-                                'CPU ${stats!.cpuPercent!.toStringAsFixed(1)}%',
-                              if (stats!.memUsage.isNotEmpty)
-                                'Mem ${stats!.memUsage.split('/').first.trim()}',
-                            ].join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (wide) ...[
-              SizedBox(
-                width: 72,
-                child: Text(
-                  stats?.cpuPercent == null
-                      ? '—'
-                      : '${stats!.cpuPercent!.toStringAsFixed(1)}%',
-                  textAlign: TextAlign.end,
-                  style: mono,
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 108,
-                child: Text(
-                  stats == null
-                      ? '—'
-                      : (stats!.memUsedBytes != null
-                            ? _formatBytes(stats!.memUsedBytes!)
-                            : stats!.memUsage.split('/').first.trim()),
-                  textAlign: TextAlign.end,
-                  style: mono,
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 120,
-                child: Text(
-                  stats?.netIO.isNotEmpty == true ? stats!.netIO : '—',
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: mono,
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 120,
-                child: Text(
-                  stats?.blockIO.isNotEmpty == true ? stats!.blockIO : '—',
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: mono,
-                ),
-              ),
-              const SizedBox(width: 12),
-            ],
-            SizedBox(
-              width: wide ? 100 : 88,
-              child: Text(
-                container.status,
-                textAlign: TextAlign.end,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Symbols.chevron_right,
-              size: 18,
-              color: scheme.onSurfaceVariant,
-            ),
           ],
         ),
       ),
@@ -1837,27 +1687,9 @@ class _EmptyPanel extends StatelessWidget {
   }
 }
 
-bool _isRunning(ServerContainer container) {
-  final state = container.state.toLowerCase();
-  return state.contains('running') || state == 'up';
-}
+bool _isRunning(ServerContainer container) => isContainerRunning(container);
 
-String _formatBytes(int bytes) {
-  if (bytes < 1000) return '$bytes B';
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  var value = bytes.toDouble();
-  var unit = -1;
-  while (value >= 1000 && unit < units.length - 1) {
-    value /= 1000;
-    unit++;
-  }
-  final digits = value >= 100
-      ? 0
-      : value >= 10
-      ? 1
-      : 2;
-  return '${value.toStringAsFixed(digits)} ${units[unit]}';
-}
+String _formatBytes(int bytes) => formatContainerBytes(bytes);
 
 String _formatTimestamp(DateTime value) {
   final local = value.toLocal();

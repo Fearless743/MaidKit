@@ -8,6 +8,7 @@ import 'package:styled_widget/styled_widget.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/containers/container_management_tab.dart';
+import 'package:maid_kit/containers/image_management_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -412,7 +413,7 @@ class _InspectorTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -426,6 +427,7 @@ class _InspectorTabs extends StatelessWidget {
                 icon: Icon(Symbols.deployed_code, size: 18),
                 text: 'Containers',
               ),
+              Tab(icon: Icon(Symbols.image, size: 18), text: 'Images'),
             ],
           ),
           Expanded(
@@ -443,6 +445,13 @@ class _InspectorTabs extends StatelessWidget {
                         onConnect: onConnect,
                       ),
                 ContainerManagementTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                  refreshInterval: refreshInterval,
+                ),
+                ImageManagementTab(
                   server: server,
                   connected: connected,
                   connectionError: connectionError,

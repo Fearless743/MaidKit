@@ -7,7 +7,56 @@ enum ContainerScope { user, root }
 
 enum ContainerAction { start, stop, restart }
 
-enum ComposeProjectAction { stop, restart, recreate }
+/// Actions available for a local container image.
+enum ImageAction { remove }
+
+/// Lifecycle / maintenance actions for a linked compose project.
+///
+/// Labels are short menu titles; [composeArgs] is the `compose` subcommand
+/// string appended after `docker|podman compose -p <name>`.
+enum ComposeProjectAction {
+  /// `compose pull` — fetch service images without starting containers.
+  pull,
+
+  /// `compose up -d` — create/start services in the background.
+  up,
+
+  /// `compose stop` — stop running services; leave containers in place.
+  stop,
+
+  /// `compose restart` — restart existing containers.
+  restart,
+
+  /// `compose up -d --force-recreate` — recreate containers even if config is unchanged.
+  recreate;
+
+  /// Short label for menus and snackbars.
+  String get label => switch (this) {
+    ComposeProjectAction.pull => 'Pull images',
+    ComposeProjectAction.up => 'Start',
+    ComposeProjectAction.stop => 'Stop',
+    ComposeProjectAction.restart => 'Restart',
+    ComposeProjectAction.recreate => 'Force recreate',
+  };
+
+  /// Present-participle used in loading / terminal titles.
+  String get progressLabel => switch (this) {
+    ComposeProjectAction.pull => 'Pulling images',
+    ComposeProjectAction.up => 'Starting',
+    ComposeProjectAction.stop => 'Stopping',
+    ComposeProjectAction.restart => 'Restarting',
+    ComposeProjectAction.recreate => 'Force recreating',
+  };
+
+  /// Arguments after `compose -p <project>`.
+  String get composeArgs => switch (this) {
+    ComposeProjectAction.pull => 'pull',
+    ComposeProjectAction.up => 'up -d',
+    ComposeProjectAction.stop => 'stop',
+    ComposeProjectAction.restart => 'restart',
+    ComposeProjectAction.recreate => 'up -d --force-recreate',
+  };
+}
 
 class ServerContainer {
   const ServerContainer({
@@ -78,6 +127,81 @@ class ContainerEnvironment {
   final String? error;
 
   bool get isAvailable => error == null;
+}
+
+/// A local image from `docker images` / `podman images`.
+class ServerContainerImage {
+  const ServerContainerImage({
+    required this.id,
+    required this.repository,
+    required this.tag,
+    required this.size,
+    required this.created,
+    this.unused = false,
+  });
+
+  final String id;
+  final String repository;
+  final String tag;
+
+  /// Human-readable size from the runtime (e.g. `128MB`).
+  final String size;
+
+  /// Relative created age from the runtime (e.g. `2 weeks ago`).
+  final String created;
+
+  /// True when no container references this image (includes dangling images).
+  final bool unused;
+
+  /// `repository:tag`, or the short id when the image is dangling.
+  String get reference {
+    final repo = repository.trim();
+    final imageTag = tag.trim();
+    if (repo.isEmpty || repo == '<none>') {
+      return id;
+    }
+    if (imageTag.isEmpty || imageTag == '<none>') {
+      return repo;
+    }
+    return '$repo:$imageTag';
+  }
+
+  bool get isDangling {
+    final repo = repository.trim();
+    final imageTag = tag.trim();
+    return repo.isEmpty ||
+        repo == '<none>' ||
+        imageTag.isEmpty ||
+        imageTag == '<none>';
+  }
+
+  ServerContainerImage copyWith({bool? unused}) => ServerContainerImage(
+    id: id,
+    repository: repository,
+    tag: tag,
+    size: size,
+    created: created,
+    unused: unused ?? this.unused,
+  );
+}
+
+/// Images listed for one runtime + scope combination on a server.
+class ImageEnvironment {
+  const ImageEnvironment({
+    required this.runtime,
+    required this.scope,
+    this.images = const [],
+    this.error,
+  });
+
+  final ContainerRuntime runtime;
+  final ContainerScope scope;
+  final List<ServerContainerImage> images;
+  final String? error;
+
+  bool get isAvailable => error == null;
+
+  int get unusedCount => images.where((image) => image.unused).length;
 }
 
 /// Structured result of `docker|podman inspect` for a single container.

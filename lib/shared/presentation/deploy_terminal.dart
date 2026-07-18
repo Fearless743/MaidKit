@@ -6,6 +6,8 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/theme.dart';
+import 'ansi_log_view.dart';
+import 'cli_output_progress.dart';
 
 enum DeploySessionStatus { running, succeeded, failed }
 
@@ -19,6 +21,8 @@ class DeploySession {
     required this.status,
     required this.modalVisible,
     this.error,
+    this.progress,
+    this.progressDetail,
   });
 
   final String id;
@@ -30,6 +34,12 @@ class DeploySession {
   final bool modalVisible;
   final String? error;
 
+  /// Parsed CLI progress in `0..1` when available (e.g. docker pull layers).
+  final double? progress;
+
+  /// Short label such as `3 / 8 layers`.
+  final String? progressDetail;
+
   bool get isRunning => status == DeploySessionStatus.running;
 
   DeploySession copyWith({
@@ -37,6 +47,9 @@ class DeploySession {
     DeploySessionStatus? status,
     bool? modalVisible,
     String? error,
+    double? progress,
+    String? progressDetail,
+    bool clearProgress = false,
   }) => DeploySession(
     id: id,
     title: title,
@@ -46,6 +59,10 @@ class DeploySession {
     status: status ?? this.status,
     modalVisible: modalVisible ?? this.modalVisible,
     error: error ?? this.error,
+    progress: clearProgress ? progress : (progress ?? this.progress),
+    progressDetail: clearProgress
+        ? progressDetail
+        : (progressDetail ?? this.progressDetail),
   );
 }
 
@@ -55,6 +72,8 @@ final deploySessionsProvider =
     );
 
 class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
+  final Map<String, CliOutputProgressTracker> _progressTrackers = {};
+
   @override
   List<DeploySession> build() => const [];
 
@@ -64,6 +83,7 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
     required String command,
   }) {
     final id = 'deploy-${DateTime.now().microsecondsSinceEpoch}';
+    _progressTrackers[id] = CliOutputProgressTracker();
     state = [
       ...state,
       DeploySession(
@@ -81,16 +101,27 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
 
   void append(String id, String chunk) {
     if (chunk.isEmpty) return;
+    final tracker = _progressTrackers.putIfAbsent(
+      id,
+      CliOutputProgressTracker.new,
+    );
+    tracker.ingest(chunk);
     state = [
       for (final session in state)
         if (session.id == id)
-          session.copyWith(log: '${session.log}$chunk')
+          session.copyWith(
+            log: '${session.log}$chunk',
+            progress: tracker.progress,
+            progressDetail: tracker.detail,
+            clearProgress: true,
+          )
         else
           session,
     ];
   }
 
   void complete(String id, {required bool success, String? error}) {
+    final tracker = _progressTrackers[id];
     state = [
       for (final session in state)
         if (session.id == id)
@@ -99,6 +130,9 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
                 ? DeploySessionStatus.succeeded
                 : DeploySessionStatus.failed,
             error: error,
+            progress: success ? 1 : tracker?.progress,
+            progressDetail: tracker?.detail,
+            clearProgress: true,
           )
         else
           session,
@@ -116,6 +150,7 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
   }
 
   void remove(String id) {
+    _progressTrackers.remove(id);
     state = state.where((session) => session.id != id).toList();
   }
 }
@@ -147,8 +182,8 @@ Future<void> runWithDeployTerminal({
   showDeployTerminal(ref, id);
   try {
     await run((chunk) => sessions.append(id, chunk));
-    sessions.complete(id, success: true);
     sessions.append(id, '\nCompleted successfully.\n');
+    sessions.complete(id, success: true);
   } catch (error) {
     sessions.append(id, '\n$error\n');
     sessions.complete(id, success: false, error: error.toString());
@@ -168,15 +203,6 @@ class _DeployTerminalModal extends ConsumerStatefulWidget {
 }
 
 class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
-  final _scroll = ScrollController();
-  var _stickToBottom = true;
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
   void _hide() {
     ref
         .read(deploySessionsProvider.notifier)
@@ -187,14 +213,6 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
   void _close() {
     ref.read(deploySessionsProvider.notifier).remove(widget.sessionId);
     widget.dismiss();
-  }
-
-  void _scrollToEndIfNeeded() {
-    if (!_stickToBottom || !_scroll.hasClients) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      _scroll.jumpTo(_scroll.position.maxScrollExtent);
-    });
   }
 
   @override
@@ -215,8 +233,6 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
       return const SizedBox.shrink();
     }
 
-    _scrollToEndIfNeeded();
-
     final statusColor = switch (session.status) {
       DeploySessionStatus.running => scheme.primary,
       DeploySessionStatus.succeeded => scheme.primary,
@@ -231,8 +247,8 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
     return AttentionModalScaffold(
       titleText: session.title,
       onDismiss: session.isRunning ? _hide : _close,
-      maxWidth: 760,
-      maxHeightFactor: 0.82,
+      maxWidth: 800,
+      maxHeightFactor: 0.85,
       actions: [
         if (session.isRunning)
           IconButton(
@@ -283,11 +299,21 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
                     ),
                   ),
                 ),
+                if (session.progress != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '${(session.progress! * 100).round()}%',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: statusColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: SelectableText(
               session.command,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -296,44 +322,34 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: _SessionProgressBar(session: session, color: statusColor),
+          ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLowest,
+                  color: const Color(0xFF111315),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: scheme.outlineVariant),
                 ),
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification is ScrollUpdateNotification &&
-                        _scroll.hasClients) {
-                      final position = _scroll.position;
-                      _stickToBottom =
-                          position.pixels >= position.maxScrollExtent - 48;
-                    }
-                    return false;
-                  },
-                  child: ListView(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                      SelectableText(
-                        session.log.isEmpty
-                            ? 'Waiting for remote output…'
-                            : session.log,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: MaidKitFonts.mono,
-                          height: 1.45,
-                          color: session.log.isEmpty
-                              ? scheme.onSurfaceVariant
-                              : scheme.onSurface,
+                child: session.log.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Waiting for remote output…',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: MaidKitFonts.mono,
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
+                      )
+                    : AnsiLogView(
+                        text: session.log,
+                        streaming: true,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
-                ),
               ),
             ),
           ),
@@ -344,8 +360,12 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
                 Expanded(
                   child: Text(
                     session.isRunning
-                        ? 'Hide to keep working; progress stays in the sidebar.'
-                        : 'Deployment finished.',
+                        ? (session.progressDetail == null
+                              ? 'Hide to keep working; progress stays in the sidebar.'
+                              : session.progressDetail!)
+                        : session.status == DeploySessionStatus.succeeded
+                        ? 'Finished successfully.'
+                        : 'Finished with an error.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -365,6 +385,48 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SessionProgressBar extends StatelessWidget {
+  const _SessionProgressBar({required this.session, required this.color});
+
+  final DeploySession session;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final running = session.isRunning;
+    final value = session.progress;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            // Indeterminate while running without a parsed percentage;
+            // determinate once docker/podman reports % or layer sizes.
+            value: running && value == null
+                ? null
+                : (value ?? (running ? null : 0)),
+            minHeight: 6,
+            color: color,
+            backgroundColor: scheme.surfaceContainerHighest,
+          ),
+        ),
+        if (session.progressDetail != null && session.isRunning) ...[
+          const SizedBox(height: 6),
+          Text(
+            session.progressDetail!,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -391,15 +453,21 @@ class DeploySessionsRailButton extends ConsumerWidget {
         ? scheme.primary
         : scheme.onSurfaceVariant;
 
+    final progressLabel = primary.progress == null
+        ? null
+        : '${(primary.progress! * 100).round()}%';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Tooltip(
         message: running
-            ? '${primary.title} (running — click to show)'
+            ? '${primary.title} (running${progressLabel == null ? '' : ' · $progressLabel'} — click to show)'
             : '${primary.title} (click to show)',
         child: Badge(
-          isLabelVisible: hidden.length > 1,
-          label: Text('${hidden.length}'),
+          isLabelVisible: hidden.length > 1 || progressLabel != null,
+          label: Text(
+            hidden.length > 1 ? '${hidden.length}' : (progressLabel ?? ''),
+          ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => showDeployTerminal(ref, primary.id),
@@ -422,6 +490,7 @@ class DeploySessionsRailButton extends ConsumerWidget {
                             child: CircularProgressIndicator(
                               strokeWidth: 1.5,
                               color: color,
+                              value: primary.progress,
                             ),
                           ),
                         ),
@@ -429,7 +498,7 @@ class DeploySessionsRailButton extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    running ? 'Deploy' : 'Log',
+                    running ? (progressLabel ?? 'Task') : 'Log',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(

@@ -11,12 +11,22 @@ import '../../servers/terminal_find_host.dart';
 import '../../servers/terminal_session_adapter.dart';
 
 /// Read-only log surface that reuses the user's selected terminal adapter
-/// (Ghostty or xterm) so container logs share the same VT parser, colors, and
-/// renderer as interactive sessions.
+/// (Ghostty or xterm) so container logs and task output share the same VT
+/// parser, colors, and renderer as interactive sessions.
+///
+/// [streaming] mode is for live CLI output (compose pull, deploy, etc.):
+/// - appends only new suffix bytes instead of rebuilding the terminal
+/// - preserves carriage returns so progress lines rewrite in place
+/// - keeps ANSI color sequences intact
+///
+/// Full-dump mode (default) is for one-shot log payloads such as container
+/// logs: the buffer is rewritten whenever [text] changes, and bare newlines
+/// are normalized to CRLF so each line starts at column 0.
 class AnsiLogView extends ConsumerStatefulWidget {
   const AnsiLogView({
     super.key,
     required this.text,
+    this.streaming = false,
 
     /// Only bottom corners are rounded by default — the log pane sits under a
     /// tab bar that already provides the top edge of the panel.
@@ -26,6 +36,7 @@ class AnsiLogView extends ConsumerStatefulWidget {
   });
 
   final String text;
+  final bool streaming;
   final BorderRadius borderRadius;
 
   @override
@@ -35,7 +46,7 @@ class AnsiLogView extends ConsumerStatefulWidget {
 class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
   TerminalSessionAdapter? _adapter;
   String? _boundAdapterId;
-  String? _loadedText;
+  String _writtenText = '';
   var _writeGeneration = 0;
 
   @override
@@ -49,7 +60,14 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
   @override
   void didUpdateWidget(AnsiLogView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) {
+    if (oldWidget.streaming != widget.streaming) {
+      _bindAdapter(force: true);
+      return;
+    }
+    if (oldWidget.text == widget.text) return;
+    if (widget.streaming) {
+      _appendStreamDelta();
+    } else {
       _bindAdapter(force: true);
     }
   }
@@ -65,14 +83,19 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
     final selectedId = ref.read(selectedTerminalSessionAdapterProvider);
     final factory = ref.read(terminalSessionAdapterFactoryProvider);
     final recreate = force || _adapter == null || _boundAdapterId != selectedId;
-    if (!recreate) return;
+    if (!recreate) {
+      if (widget.streaming) {
+        _appendStreamDelta();
+      }
+      return;
+    }
 
     final previous = _adapter;
     final adapter = factory.create();
     final generation = ++_writeGeneration;
     _adapter = adapter;
     _boundAdapterId = selectedId;
-    _loadedText = widget.text;
+    _writtenText = '';
     setState(() {});
 
     // Let the renderer perform its first layout/resize before feeding a bulk
@@ -82,21 +105,69 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || generation != _writeGeneration) return;
         if (!identical(_adapter, adapter)) return;
-        _writeLogText(adapter, widget.text);
+        if (widget.streaming) {
+          _writeStreaming(adapter, widget.text);
+          _writtenText = widget.text;
+        } else {
+          _writeLogDump(adapter, widget.text);
+          _writtenText = widget.text;
+        }
       });
     });
 
     unawaited(previous?.dispose() ?? Future<void>.value());
   }
 
-  /// VT line discipline treats bare LF as "move down, keep column". Convert
-  /// log newlines to CRLF so each line starts at column 0, matching a real PTY.
-  void _writeLogText(TerminalSessionAdapter adapter, String text) {
+  void _appendStreamDelta() {
+    final adapter = _adapter;
+    if (adapter == null) return;
+    final next = widget.text;
+    if (next == _writtenText) return;
+
+    if (_writtenText.isNotEmpty && next.startsWith(_writtenText)) {
+      final delta = next.substring(_writtenText.length);
+      _writeStreaming(adapter, delta);
+      _writtenText = next;
+      return;
+    }
+
+    // Non-prefix update (session reset / replace) — rebuild cleanly.
+    _bindAdapter(force: true);
+  }
+
+  /// Full log dump: normalize all newlines to CRLF so each line starts at
+  /// column 0 (VT line discipline treats bare LF as "move down, keep column").
+  void _writeLogDump(TerminalSessionAdapter adapter, String text) {
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     if (normalized.isEmpty) return;
     final withCrlf = normalized.replaceAll('\n', '\r\n');
     final payload = withCrlf.endsWith('\r\n') ? withCrlf : '$withCrlf\r\n';
     adapter.write(Uint8List.fromList(utf8.encode(payload)));
+  }
+
+  /// Live CLI stream: keep lone CR for in-line progress rewrites, convert bare
+  /// LF to CRLF, and leave ANSI sequences untouched for the VT parser.
+  void _writeStreaming(TerminalSessionAdapter adapter, String text) {
+    if (text.isEmpty) return;
+    final out = StringBuffer();
+    for (var i = 0; i < text.length; i++) {
+      final code = text.codeUnitAt(i);
+      if (code == 0x0d) {
+        // CR
+        if (i + 1 < text.length && text.codeUnitAt(i + 1) == 0x0a) {
+          out.write('\r\n');
+          i++;
+        } else {
+          out.writeCharCode(0x0d);
+        }
+      } else if (code == 0x0a) {
+        out.write('\r\n');
+      } else {
+        out.writeCharCode(code);
+      }
+    }
+    if (out.isEmpty) return;
+    adapter.write(Uint8List.fromList(utf8.encode(out.toString())));
   }
 
   @override
@@ -113,7 +184,7 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_loadedText != widget.text) {
+    if (!widget.streaming && _writtenText != widget.text) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _bindAdapter(force: true);
       });
@@ -135,8 +206,8 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
               PointerDeviceKind.stylus,
             },
           ),
-          // Absorb vertical scroll notifications so TabBarView does not steal
-          // them when the user scrolls logs.
+          // Absorb vertical scroll notifications so TabBarView / modal sheets
+          // do not steal them when the user scrolls logs.
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) => true,
             child: SizedBox.expand(

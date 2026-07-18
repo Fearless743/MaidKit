@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'container_list_tile.dart';
 import 'container_models.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
@@ -316,6 +317,66 @@ class _ContainerEnvironmentSection extends StatelessWidget {
     ContainerRuntime.podman => Symbols.package_2,
   };
 
+  Widget _containerTile(
+    BuildContext context, {
+    required ServerContainer container,
+    required Future<void> Function(ContainerAction action) onAction,
+  }) {
+    final running = isContainerRunning(container);
+    return ContainerListTile(
+      container: container,
+      contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      onOpen: () => context.router.push(
+        ContainerDetailRoute(
+          server: server,
+          runtime: environment.runtime,
+          scope: environment.scope,
+          containerId: container.id,
+          containerName: container.name,
+        ),
+      ),
+      trailing: PopupMenuButton<ContainerAction>(
+        tooltip: 'Container actions',
+        onSelected: onAction,
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: ContainerAction.start,
+            enabled: !running,
+            child: const Row(
+              children: [
+                Icon(Symbols.play_arrow, size: 20),
+                SizedBox(width: 12),
+                Text('Start'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: ContainerAction.stop,
+            enabled: running,
+            child: const Row(
+              children: [
+                Icon(Symbols.stop, size: 20),
+                SizedBox(width: 12),
+                Text('Stop'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: ContainerAction.restart,
+            child: Row(
+              children: [
+                Icon(Symbols.restart_alt, size: 20),
+                SizedBox(width: 12),
+                Text('Restart'),
+              ],
+            ),
+          ),
+        ],
+        icon: const Icon(Symbols.more_vert),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -382,17 +443,9 @@ class _ContainerEnvironmentSection extends StatelessWidget {
           else ...[
             Divider(height: 1, color: scheme.outlineVariant),
             for (var i = 0; i < environment.containers.length; i++) ...[
-              _ContainerRow(
+              _containerTile(
+                context,
                 container: environment.containers[i],
-                onOpen: () => context.router.push(
-                  ContainerDetailRoute(
-                    server: server,
-                    runtime: environment.runtime,
-                    scope: environment.scope,
-                    containerId: environment.containers[i].id,
-                    containerName: environment.containers[i].name,
-                  ),
-                ),
                 onAction: (action) =>
                     onAction(environment, environment.containers[i], action),
               ),
@@ -431,151 +484,6 @@ class _MetaChip extends StatelessWidget {
         label,
         style: theme.textTheme.labelSmall?.copyWith(
           color: scheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-class _ContainerRow extends StatelessWidget {
-  const _ContainerRow({
-    required this.container,
-    required this.onOpen,
-    required this.onAction,
-  });
-
-  final ServerContainer container;
-  final VoidCallback onOpen;
-  final Future<void> Function(ContainerAction action) onAction;
-
-  bool get _isRunning {
-    final state = container.state.toLowerCase();
-    return state.contains('running') || state == 'up';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return InkWell(
-      onTap: onOpen,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: _isRunning ? scheme.primary : scheme.outline,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    container.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    container.image,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    container.status,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _StateChip(state: container.state, running: _isRunning),
-            PopupMenuButton<ContainerAction>(
-              tooltip: 'Container actions',
-              onSelected: onAction,
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: ContainerAction.start,
-                  enabled: !_isRunning,
-                  child: const Row(
-                    children: [
-                      Icon(Symbols.play_arrow, size: 20),
-                      SizedBox(width: 12),
-                      Text('Start'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: ContainerAction.stop,
-                  enabled: _isRunning,
-                  child: const Row(
-                    children: [
-                      Icon(Symbols.stop, size: 20),
-                      SizedBox(width: 12),
-                      Text('Stop'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: ContainerAction.restart,
-                  child: Row(
-                    children: [
-                      Icon(Symbols.restart_alt, size: 20),
-                      SizedBox(width: 12),
-                      Text('Restart'),
-                    ],
-                  ),
-                ),
-              ],
-              icon: const Icon(Symbols.more_vert),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StateChip extends StatelessWidget {
-  const _StateChip({required this.state, required this.running});
-
-  final String state;
-  final bool running;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final label = state.isEmpty ? 'unknown' : state;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: running
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: running
-              ? scheme.onSecondaryContainer
-              : scheme.onSurfaceVariant,
         ),
       ),
     );

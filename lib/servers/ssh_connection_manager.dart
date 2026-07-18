@@ -322,13 +322,23 @@ done
   }
 
   /// Streams stdout and stderr chunks while a remote command runs.
+  ///
+  /// When [usePty] is true (default for live task UIs), the remote process sees
+  /// a terminal so tools like docker/podman emit ANSI colors and `\r` progress
+  /// rewrites instead of non-interactive plain dumps.
   Future<_CommandResult> _executeStreaming(
     SSHClient client,
     String command, {
     String? stdin,
     void Function(String chunk)? onOutput,
+    bool usePty = true,
   }) async {
-    final session = await client.execute(command);
+    final session = await client.execute(
+      command,
+      pty: usePty
+          ? const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 40)
+          : null,
+    );
     final stdoutBuffer = StringBuffer();
     final stderrBuffer = StringBuffer();
     final stdoutDone = utf8.decoder.bind(session.stdout).listen((chunk) {
@@ -353,6 +363,8 @@ done
   }
 
   /// Local image tags available to [runtime] under [scope], newest first.
+  ///
+  /// Used by autocomplete UIs; dangling / untagged images are omitted.
   Future<List<String>> listContainerImages(
     int serverId, {
     required ContainerRuntime runtime,
@@ -378,6 +390,295 @@ done
         images.add(image);
       }
       return images.toList()..sort();
+    });
+  }
+
+  /// Lists Docker and Podman images for the SSH user and root environments.
+  Future<List<ImageEnvironment>> listImages(
+    int serverId, {
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    return withClient(serverId, (client) async {
+      final environments = <ImageEnvironment>[];
+      for (final runtime in ContainerRuntime.values) {
+        final available = await _runtimeAvailable(client, runtime);
+        if (!available) continue;
+        final scopes = sshUserIsRoot
+            ? const [ContainerScope.root]
+            : ContainerScope.values;
+        for (final scope in scopes) {
+          environments.add(
+            await _listImageEnvironment(
+              client,
+              runtime,
+              scope,
+              sudoPassword: sudoPassword,
+            ),
+          );
+        }
+      }
+      return _deduplicateImageEnvironments(environments);
+    });
+  }
+
+  /// Same Docker-via-Podman shim handling as containers: prefer Podman when
+  /// both CLIs report an identical image id under the same scope.
+  List<ImageEnvironment> _deduplicateImageEnvironments(
+    List<ImageEnvironment> environments,
+  ) {
+    final seenByScope = <ContainerScope, Set<String>>{
+      for (final scope in ContainerScope.values) scope: <String>{},
+    };
+    final keptByEnvironment = <ImageEnvironment, List<ServerContainerImage>>{};
+    for (final environment in [
+      ...environments,
+    ]..sort((a, b) => b.runtime.index.compareTo(a.runtime.index))) {
+      if (!environment.isAvailable) continue;
+      final seen = seenByScope[environment.scope]!;
+      keptByEnvironment[environment] = [
+        for (final image in environment.images)
+          if (seen.add(image.id)) image,
+      ];
+    }
+    return [
+      for (final environment in environments)
+        if (!keptByEnvironment.containsKey(environment) ||
+            keptByEnvironment[environment]!.isNotEmpty)
+          ImageEnvironment(
+            runtime: environment.runtime,
+            scope: environment.scope,
+            images: keptByEnvironment[environment] ?? environment.images,
+            error: environment.error,
+          ),
+    ];
+  }
+
+  Future<ImageEnvironment> _listImageEnvironment(
+    SSHClient client,
+    ContainerRuntime runtime,
+    ContainerScope scope, {
+    String? sudoPassword,
+  }) async {
+    final prefix = _scopePrefix(scope, sudoPassword);
+    final stdin = scope == ContainerScope.root ? sudoPassword : null;
+    final result = await _execute(
+      client,
+      '$prefix'
+      "${runtime.name} images --format "
+      "'{{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}'",
+      stdin: stdin,
+    );
+    if (result.exitCode != 0) {
+      return ImageEnvironment(
+        runtime: runtime,
+        scope: scope,
+        error: _commandError(result),
+      );
+    }
+    final parsed = result.stdout
+        .split('\n')
+        .map(_parseImage)
+        .whereType<ServerContainerImage>()
+        .toList();
+    final used = await _listUsedImageMarkers(
+      client,
+      runtime,
+      scope,
+      sudoPassword: sudoPassword,
+    );
+    return ImageEnvironment(
+      runtime: runtime,
+      scope: scope,
+      images: [
+        for (final image in parsed)
+          image.copyWith(unused: !_imageIsInUse(image, used)),
+      ],
+    );
+  }
+
+  /// Collects image IDs and name refs attached to any container so unused
+  /// labels match what `image prune -a` would reclaim.
+  Future<({Set<String> ids, Set<String> refs})> _listUsedImageMarkers(
+    SSHClient client,
+    ContainerRuntime runtime,
+    ContainerScope scope, {
+    String? sudoPassword,
+  }) async {
+    final stdin = scope == ContainerScope.root ? sudoPassword : null;
+    // Image config name from `ps` (may be short) plus canonical Image ID from
+    // inspect (sha256:…) so tag rewrites and digests still match.
+    final script =
+        '''
+ids=\$(${runtime.name} ps -aq 2>/dev/null)
+if [ -n "\$ids" ]; then
+  ${runtime.name} ps -a --no-trunc --format '{{.Image}}'
+  ${runtime.name} inspect --format '{{.Image}}' \$ids 2>/dev/null
+fi
+''';
+    final result = await _execute(
+      client,
+      _scopedShell(scope, sudoPassword, script),
+      stdin: stdin,
+    );
+    if (result.exitCode != 0 && result.stdout.trim().isEmpty) {
+      return (ids: <String>{}, refs: <String>{});
+    }
+    final ids = <String>{};
+    final refs = <String>{};
+    for (final line in result.stdout.split('\n')) {
+      final raw = line.trim();
+      if (raw.isEmpty) continue;
+      final withoutDigest = raw.split('@').first.trim();
+      if (withoutDigest.startsWith('sha256:')) {
+        final full = withoutDigest.substring(7);
+        ids.add(full);
+        if (full.length >= 12) ids.add(full.substring(0, 12));
+      } else if (RegExp(r'^[a-f0-9]{12,64}$').hasMatch(withoutDigest)) {
+        ids.add(withoutDigest);
+        if (withoutDigest.length >= 12) {
+          ids.add(withoutDigest.substring(0, 12));
+        }
+      } else {
+        refs.add(withoutDigest);
+        final slash = withoutDigest.lastIndexOf('/');
+        final name = slash >= 0
+            ? withoutDigest.substring(slash + 1)
+            : withoutDigest;
+        refs.add(name);
+        if (!name.contains(':')) {
+          refs.add('$name:latest');
+        }
+      }
+    }
+    return (ids: ids, refs: refs);
+  }
+
+  bool _imageIsInUse(
+    ServerContainerImage image,
+    ({Set<String> ids, Set<String> refs}) used,
+  ) {
+    final id = image.id.trim();
+    final idBare = id.startsWith('sha256:') ? id.substring(7) : id;
+    if (used.ids.contains(id) ||
+        used.ids.contains(idBare) ||
+        (idBare.length >= 12 && used.ids.contains(idBare.substring(0, 12)))) {
+      return true;
+    }
+    for (final usedId in used.ids) {
+      if (usedId.length >= 12 &&
+          idBare.length >= 12 &&
+          (usedId.startsWith(idBare) || idBare.startsWith(usedId))) {
+        return true;
+      }
+    }
+
+    final repository = image.repository.trim();
+    final tag = image.tag.trim();
+    if (repository.isEmpty || repository == '<none>') return false;
+
+    final candidates = <String>{
+      image.reference,
+      repository,
+      if (tag.isNotEmpty && tag != '<none>') '$repository:$tag',
+      if (tag.isEmpty || tag == '<none>') '$repository:latest',
+    };
+    // Short names: docker.io/library/nginx:latest ↔ nginx:latest ↔ nginx
+    final shortRepo = repository.contains('/')
+        ? repository.split('/').last
+        : repository;
+    candidates.add(shortRepo);
+    if (tag.isNotEmpty && tag != '<none>') {
+      candidates.add('$shortRepo:$tag');
+    } else {
+      candidates.add('$shortRepo:latest');
+    }
+
+    for (final candidate in candidates) {
+      if (used.refs.contains(candidate)) return true;
+      for (final ref in used.refs) {
+        if (ref == candidate ||
+            ref.endsWith('/$candidate') ||
+            candidate.endsWith('/$ref') ||
+            ref.endsWith(':$candidate') ||
+            candidate.endsWith(':$ref')) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  ServerContainerImage? _parseImage(String line) {
+    final fields = line.split('\t');
+    if (fields.length < 5 || fields[0].trim().isEmpty) return null;
+    return ServerContainerImage(
+      id: fields[0].trim(),
+      repository: fields[1].trim(),
+      tag: fields[2].trim(),
+      size: fields[3].trim(),
+      created: fields[4].trim(),
+    );
+  }
+
+  Future<void> runImageAction(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String imageId,
+    required ImageAction action,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    if (!_safeContainerRef(imageId)) {
+      throw ArgumentError.value(imageId, 'imageId', 'Invalid image ID.');
+    }
+    final command = switch (action) {
+      ImageAction.remove => '${runtime.name} rmi $imageId',
+    };
+    await withClient(serverId, (client) async {
+      onOutput?.call('\$ $command\n');
+      final result = await _executeStreaming(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}$command',
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+        onOutput: onOutput,
+      );
+      if (result.exitCode != 0) {
+        throw StateError(_commandError(result));
+      }
+    });
+  }
+
+  /// Runs `docker|podman image prune` with optional live [onOutput] streaming.
+  ///
+  /// Without [allUnused], only dangling (untagged) images are removed. With
+  /// [allUnused] (`-a`), every image not used by a container is removed —
+  /// matching the UI "Unused" label for tagged images.
+  Future<void> pruneImages(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    bool force = true,
+    bool allUnused = false,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    final flags = StringBuffer();
+    if (allUnused) flags.write(' -a');
+    if (force) flags.write(' -f');
+    final displayCmd = '${runtime.name} image prune$flags';
+    await withClient(serverId, (client) async {
+      onOutput?.call('\$ $displayCmd\n');
+      final result = await _executeStreaming(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}$displayCmd',
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+        onOutput: onOutput,
+      );
+      if (result.exitCode != 0) {
+        throw StateError(_commandError(result));
+      }
     });
   }
 
@@ -419,7 +720,8 @@ done
       final script =
           'mkdir -p $directory && '
           'printf %s $encoded | base64 -d > $directory/compose.yaml && '
-          'cd $directory && ${runtime.name} compose -p $projectName up -d';
+          'cd $directory && COMPOSE_ANSI=always ${runtime.name} compose '
+          '--ansi always -p $projectName up -d';
       final command = _scopedShell(scope, sudoPassword, script);
       onOutput?.call(
         '\$ ${runtime.name} compose -p $projectName up -d  ($directory)\n',
@@ -725,6 +1027,8 @@ done
     return const [];
   }
 
+  /// Runs a compose project action with optional live [onOutput] streaming
+  /// (same pattern as [startRawContainer] / [deployComposeProject]).
   Future<void> runComposeProjectAction(
     int serverId, {
     required ContainerRuntime runtime,
@@ -733,24 +1037,24 @@ done
     required String directory,
     required ComposeProjectAction action,
     String? sudoPassword,
+    void Function(String chunk)? onOutput,
   }) async {
     if (!_safeProjectName(projectName) || !_safeRemoteDirectory(directory)) {
       throw ArgumentError('Project name or remote directory is invalid.');
     }
-    final command = switch (action) {
-      ComposeProjectAction.stop => 'stop',
-      ComposeProjectAction.restart => 'restart',
-      ComposeProjectAction.recreate => 'up -d --force-recreate',
-    };
+    // Force ANSI + a real TTY so pull/up progress bars and colors stream live.
+    final composeCmd =
+        'COMPOSE_ANSI=always ${runtime.name} compose --ansi always '
+        '-p $projectName ${action.composeArgs}';
+    final displayCmd =
+        '${runtime.name} compose -p $projectName ${action.composeArgs}';
     await withClient(serverId, (client) async {
-      final result = await _execute(
+      onOutput?.call('\$ $displayCmd  ($directory)\n');
+      final result = await _executeStreaming(
         client,
-        _scopedShell(
-          scope,
-          sudoPassword,
-          'cd $directory && ${runtime.name} compose -p $projectName $command',
-        ),
+        _scopedShell(scope, sudoPassword, 'cd $directory && $composeCmd'),
         stdin: scope == ContainerScope.root ? sudoPassword : null,
+        onOutput: onOutput,
       );
       if (result.exitCode != 0) throw StateError(_commandError(result));
     });

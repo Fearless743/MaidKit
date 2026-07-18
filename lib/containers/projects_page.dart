@@ -14,6 +14,7 @@ import 'package:maid_kit/shared/presentation/cloud_file_picker.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/theme.dart';
+import 'compose_project_actions.dart';
 import 'container_models.dart';
 import 'container_cache_repository.dart';
 import 'project_repository.dart';
@@ -197,31 +198,26 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     ComposeProjectAction action,
   ) async {
     if (group.directory == null) return;
-    final loading = showMaidKitLoadingModal(
-      context,
-      message:
-          '${action.name[0].toUpperCase()}${action.name.substring(1)}ing ${group.name}…',
-    );
     try {
       final credential = await ref
           .read(serverRepositoryProvider)
           .credentialFor(group.server);
-      await ref
-          .read(connectionManagerProvider)
-          .runComposeProjectAction(
-            group.server.id,
-            runtime: group.environment.runtime,
-            scope: group.environment.scope,
-            projectName: group.name,
-            directory: group.directory!,
-            action: action,
-            sudoPassword: credential.type == CredentialType.password
-                ? credential.password
-                : null,
-          );
+      await runComposeProjectActionWithTerminal(
+        ref: ref,
+        serverId: group.server.id,
+        serverName: group.server.name,
+        runtime: group.environment.runtime,
+        scope: group.environment.scope,
+        projectName: group.name,
+        directory: group.directory!,
+        action: action,
+        sudoPassword: credential.type == CredentialType.password
+            ? credential.password
+            : null,
+      );
       if (mounted) {
         showStyledSnackBar(
-          message: '${group.name} ${action.name} completed.',
+          message: '${group.name} · ${action.label.toLowerCase()} finished.',
           title: 'Project updated',
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
@@ -229,9 +225,10 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       }
       await _refresh();
     } catch (error) {
-      _snackError(error.toString(), title: 'Could not ${action.name} project');
-    } finally {
-      loading.dismiss();
+      _snackError(
+        error.toString(),
+        title: 'Could not ${action.label.toLowerCase()}',
+      );
     }
   }
 
@@ -894,21 +891,12 @@ class _ProjectWorkspace extends StatelessWidget {
           callback: () => onEdit(group),
         ),
         MenuSeparator(),
-        MenuAction(
-          title: 'Stop',
-          attributes: MenuActionAttributes(disabled: !hasComposeFolder),
-          callback: () => onAction(group, ComposeProjectAction.stop),
-        ),
-        MenuAction(
-          title: 'Restart',
-          attributes: MenuActionAttributes(disabled: !hasComposeFolder),
-          callback: () => onAction(group, ComposeProjectAction.restart),
-        ),
-        MenuAction(
-          title: 'Recreate',
-          attributes: MenuActionAttributes(disabled: !hasComposeFolder),
-          callback: () => onAction(group, ComposeProjectAction.recreate),
-        ),
+        for (final action in ComposeProjectAction.values)
+          MenuAction(
+            title: action.label,
+            attributes: MenuActionAttributes(disabled: !hasComposeFolder),
+            callback: () => onAction(group, action),
+          ),
         MenuSeparator(),
         MenuAction(
           title: 'Delete project link',
