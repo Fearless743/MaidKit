@@ -4,7 +4,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
+
+/// Matches Island's dialog max width for app-level prompts.
+const kMaidKitDialogMaxWidth = 480.0;
 
 class _FadeOverlay extends StatefulWidget {
   const _FadeOverlay({super.key, required this.child});
@@ -152,6 +156,111 @@ Future<T?> showMaidKitOverlayDialog<T>({
 
   overlay.insert(entry);
   return completer.future;
+}
+
+String _formatErrorMessage(dynamic err) {
+  return switch (err) {
+    String message => message,
+    Exception exception => exception.toString(),
+    _ => err.toString(),
+  };
+}
+
+/// An error dialog patterned after Island's [showErrorAlert]. Uses the
+/// app-wide overlay so prompts sit above the desktop window frame.
+void showMaidKitErrorAlert(dynamic err, {IconData? icon, String? title}) {
+  final text = _formatErrorMessage(err);
+
+  showMaidKitOverlayDialog<void>(
+    builder: (context, close) => ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
+      child: AlertDialog(
+        title: null,
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                icon ?? Symbols.error_outline_rounded,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title ?? 'Something went wrong',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText(text),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => close(null),
+            child: Text(MaterialLocalizations.of(context).okButtonLabel),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A confirmation dialog patterned after Island's [showConfirmAlert]. Returns
+/// `true` when the user confirms, otherwise `false`.
+Future<bool> showMaidKitConfirmAlert(
+  String message,
+  String title, {
+  IconData? icon,
+  bool isDanger = false,
+}) async {
+  final result = await showMaidKitOverlayDialog<bool>(
+    builder: (context, close) => ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
+      child: AlertDialog(
+        title: null,
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon ?? Symbols.help_rounded,
+              size: 48,
+              fill: 1,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(message),
+            const SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => close(false),
+            child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+          ),
+          TextButton(
+            onPressed: () => close(true),
+            style: isDanger
+                ? TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  )
+                : null,
+            child: Text(MaterialLocalizations.of(context).okButtonLabel),
+          ),
+        ],
+      ),
+    ),
+  );
+  return result ?? false;
 }
 
 /// An Island command-palette-shaped overlay for searchable app actions.

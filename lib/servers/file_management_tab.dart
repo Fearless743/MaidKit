@@ -24,6 +24,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/shared/presentation/task_progress.dart';
 import 'package:maid_kit/theme.dart';
 import 'server_connection_actions.dart';
@@ -694,34 +695,17 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       final label = entries.length == 1
           ? entries.first.name
           : '${entries.length} items';
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Delete $label?'),
-          content: Text(
-            entries.length == 1 && entries.first.isDirectory
-                ? 'This folder and its contents will be permanently removed.'
-                : entries.length == 1
-                ? 'This file will be permanently removed.'
-                : 'Selected files and folders will be permanently removed.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
+      final message = entries.length == 1 && entries.first.isDirectory
+          ? 'This folder and its contents will be permanently removed.'
+          : entries.length == 1
+          ? 'This file will be permanently removed.'
+          : 'Selected files and folders will be permanently removed.';
+      final approved = await showMaidKitConfirmAlert(
+        message,
+        'Delete $label?',
+        isDanger: true,
       );
-      if (approved != true || !mounted) return;
+      if (!approved || !mounted) return;
     }
 
     try {
@@ -2256,24 +2240,12 @@ class _FileEditorModalState extends State<_FileEditorModal> {
   Future<void> _requestDismiss() async {
     if (_saving) return;
     if (_isDirty) {
-      final discard = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Discard changes?'),
-          content: Text('Changes to ${widget.name} have not been saved.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep editing'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard'),
-            ),
-          ],
-        ),
+      final discard = await showMaidKitConfirmAlert(
+        'Changes to ${widget.name} have not been saved.',
+        'Discard changes?',
+        isDanger: true,
       );
-      if (discard != true || !mounted) return;
+      if (!discard || !mounted) return;
     }
     widget.dismiss();
   }

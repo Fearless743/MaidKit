@@ -273,26 +273,11 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
 
   Future<void> _deleteProjectLink(_ProjectGroup group) async {
     if (group.linkId == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Unlink ${group.name}?'),
-        content: const Text(
-          'This removes the project from MaidKit only. Its remote compose file and containers are unchanged.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Unlink'),
-          ),
-        ],
-      ),
+    final confirmed = await showMaidKitConfirmAlert(
+      'This removes the project from MaidKit only. Its remote compose file and containers are unchanged.',
+      'Unlink ${group.name}?',
     );
-    if (confirmed == true) {
+    if (confirmed) {
       await ref.read(projectRepositoryProvider).deleteLink(group.linkId!);
     }
   }

@@ -15,6 +15,7 @@ import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/ansi_log_view.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
 
@@ -225,7 +226,6 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     required String name,
     required bool forceRemove,
   }) async {
-    final scheme = Theme.of(context).colorScheme;
     final title = switch (action) {
       ContainerAction.stop => 'Stop $name?',
       ContainerAction.restart => 'Restart $name?',
@@ -245,40 +245,16 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
         'The container is still running. It will be force-stopped and permanently removed.',
       ContainerAction.remove =>
         'The container will be permanently removed. Images and volumes are left in place.',
-      _ => null,
-    };
-    final confirmLabel = switch (action) {
-      ContainerAction.remove => forceRemove ? 'Force delete' : 'Delete',
-      ContainerAction.kill => 'Kill',
-      _ => action.label,
+      _ => 'Continue with this action?',
     };
     final destructive =
         action == ContainerAction.kill || action == ContainerAction.remove;
 
-    final approved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: message == null ? null : Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: destructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: scheme.error,
-                    foregroundColor: scheme.onError,
-                  )
-                : null,
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(confirmLabel),
-          ),
-        ],
-      ),
+    return showMaidKitConfirmAlert(
+      message,
+      title,
+      isDanger: destructive,
     );
-    return approved == true;
   }
 
   Future<void> _runAction(ContainerAction action) async {
@@ -349,26 +325,12 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     final inspect = _inspect;
     if (inspect == null || _actionBusy) return;
     final command = inspect.rerunCommand(widget.runtime);
-    final approved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Re-create container?'),
-        content: Text(
-          'This stops and removes ${inspect.name}, then runs:\n\n$command',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Re-create'),
-          ),
-        ],
-      ),
+    final approved = await showMaidKitConfirmAlert(
+      'This stops and removes ${inspect.name}, then runs:\n\n$command',
+      'Re-create container?',
+      isDanger: true,
     );
-    if (approved != true || !mounted) return;
+    if (!approved || !mounted) return;
 
     setState(() => _actionBusy = true);
     final sudo = await _sudoPassword();

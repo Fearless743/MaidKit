@@ -14,6 +14,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/app_context_menu.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/theme.dart';
 
 /// Image management surface for a single server, scoped by runtime and
@@ -120,27 +121,13 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
     ImageAction action,
   ) async {
     if (action == ImageAction.remove) {
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Remove ${image.reference}?'),
-          content: const Text(
-            'The image will be deleted from this environment. '
-            'Containers still using it will fail to start until pulled again.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Remove'),
-            ),
-          ],
-        ),
+      final approved = await showMaidKitConfirmAlert(
+        'The image will be deleted from this environment. '
+        'Containers still using it will fail to start until pulled again.',
+        'Remove ${image.reference}?',
+        isDanger: true,
       );
-      if (approved != true || !mounted) return;
+      if (!approved || !mounted) return;
     }
     try {
       await runImageRemoveWithTerminal(

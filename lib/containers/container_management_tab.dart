@@ -15,6 +15,7 @@ import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/app_context_menu.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 
 /// A reusable container-management surface for a single server. Its data is
 /// scoped by runtime (Docker/Podman) and by user/root environment so it can be
@@ -126,7 +127,6 @@ class _ContainerManagementTabState
     ContainerAction action, {
     required bool forceRemove,
   }) async {
-    final scheme = Theme.of(context).colorScheme;
     final title = switch (action) {
       ContainerAction.stop => 'Stop ${container.name}?',
       ContainerAction.restart => 'Restart ${container.name}?',
@@ -148,40 +148,16 @@ class _ContainerManagementTabState
         'The container is still running. It will be force-stopped and permanently removed from this environment.',
       ContainerAction.remove =>
         'The container will be permanently removed from this environment. Images and volumes are left in place.',
-      _ => null,
-    };
-    final confirmLabel = switch (action) {
-      ContainerAction.remove => forceRemove ? 'Force delete' : 'Delete',
-      ContainerAction.kill => 'Kill',
-      _ => action.label,
+      _ => 'Continue with this action?',
     };
     final destructive =
         action == ContainerAction.kill || action == ContainerAction.remove;
 
-    final approved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: message == null ? null : Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: destructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: scheme.error,
-                    foregroundColor: scheme.onError,
-                  )
-                : null,
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(confirmLabel),
-          ),
-        ],
-      ),
+    return showMaidKitConfirmAlert(
+      message,
+      title,
+      isDanger: destructive,
     );
-    return approved == true;
   }
 
   Future<void> _runAction(
