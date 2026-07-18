@@ -85,6 +85,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
   int? _remoteAnchorIndex;
   _FileSide? _focusedSide;
   _FileClipboard? _clipboard;
+  var _localCollapsed = false;
 
   @override
   void initState() {
@@ -1330,131 +1331,194 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       fontFamily: MaidKitFonts.mono,
       color: scheme.onSurfaceVariant,
     );
-    final panes = [
-      _FilePane(
-        title: 'Local',
-        path: _localDirectory.path,
-        pathTextStyle: pathTextStyle,
-        focused: _focusedSide == _FileSide.local,
-        dropHighlighted: _dropTargetSide == _FileSide.local,
-        canGoUp: _localDirectory.parent.path != _localDirectory.path,
-        onGoUp: _goUpLocal,
-        onPathTap: _chooseLocalDirectory,
-        onRefresh: _refreshLocal,
-        onFocus: () => _focusSide(_FileSide.local),
-        loading: _loadingLocal,
-        error: _localError,
-        clipboardHint: _clipboardHint(_FileSide.local),
-        backgroundMenu: () => _paneBackgroundMenu(_FileSide.local),
-        canAcceptDrop: (data) => data.side == _FileSide.remote,
-        onDragEntered: () => setState(() => _dropTargetSide = _FileSide.local),
-        onDragExited: () {
-          if (_dropTargetSide == _FileSide.local) {
-            setState(() => _dropTargetSide = null);
-          }
+    final localPane = _FilePane(
+      title: 'Local',
+      path: _localDirectory.path,
+      pathTextStyle: pathTextStyle,
+      focused: _focusedSide == _FileSide.local,
+      dropHighlighted: _dropTargetSide == _FileSide.local,
+      canGoUp: _localDirectory.parent.path != _localDirectory.path,
+      onGoUp: _goUpLocal,
+      onPathTap: _chooseLocalDirectory,
+      onRefresh: _refreshLocal,
+      onFocus: () => _focusSide(_FileSide.local),
+      loading: _loadingLocal,
+      error: _localError,
+      clipboardHint: _clipboardHint(_FileSide.local),
+      backgroundMenu: () => _paneBackgroundMenu(_FileSide.local),
+      canAcceptDrop: (data) => data.side == _FileSide.remote,
+      onDragEntered: () => setState(() => _dropTargetSide = _FileSide.local),
+      onDragExited: () {
+        if (_dropTargetSide == _FileSide.local) {
+          setState(() => _dropTargetSide = null);
+        }
+      },
+      onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.local),
+      headerActions: [
+        IconButton(
+          tooltip: 'Hide local',
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          onPressed: () => setState(() {
+            _localCollapsed = true;
+            if (_focusedSide == _FileSide.local) {
+              _focusedSide = _FileSide.remote;
+            }
+            if (_dropTargetSide == _FileSide.local) {
+              _dropTargetSide = null;
+            }
+          }),
+          icon: const Icon(Symbols.left_panel_close, size: 18),
+        ),
+      ],
+      child: _LocalFileList(
+        entries: _localEntries,
+        selectedPaths: _selectedLocalPaths,
+        cutPaths: _cutPathsFor(_FileSide.local),
+        onTapEntry: (entry, index) {
+          _selectLocal(
+            entry,
+            index: index,
+            toggle: _isMultiModifierPressed,
+            range: _isRangeModifierPressed,
+          );
         },
-        onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.local),
-        child: _LocalFileList(
-          entries: _localEntries,
-          selectedPaths: _selectedLocalPaths,
-          cutPaths: _cutPathsFor(_FileSide.local),
-          onTapEntry: (entry, index) {
-            _selectLocal(
-              entry,
-              index: index,
-              toggle: _isMultiModifierPressed,
-              range: _isRangeModifierPressed,
-            );
-          },
-          onOpen: _openLocal,
-          dragDataFor: _dragDataForLocal,
-          onContextPrepare: _ensureLocalContextSelection,
-          menuProvider: _localEntryMenu,
+        onOpen: _openLocal,
+        dragDataFor: _dragDataForLocal,
+        onContextPrepare: _ensureLocalContextSelection,
+        menuProvider: _localEntryMenu,
+      ),
+    );
+    final remotePane = _FilePane(
+      title: 'Remote',
+      path: _remotePath,
+      pathTextStyle: pathTextStyle,
+      focused: _focusedSide == _FileSide.remote,
+      dropHighlighted: _dropTargetSide == _FileSide.remote,
+      canGoUp: _remotePath != '/',
+      onGoUp: _goUpRemote,
+      pathInput: TextField(
+        controller: _remotePathController,
+        focusNode: _remotePathFocusNode,
+        style: pathTextStyle,
+        maxLines: 1,
+        textInputAction: TextInputAction.go,
+        onTap: () {
+          _focusSide(_FileSide.remote);
+          _remotePathController.selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: _remotePathController.text.length,
+          );
+        },
+        onSubmitted: _navigateRemote,
+        decoration: const InputDecoration(
+          hintText: 'Remote path',
+          isDense: true,
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         ),
       ),
-      _FilePane(
-        title: 'Remote · ${widget.tab.serverName}',
-        path: _remotePath,
-        pathTextStyle: pathTextStyle,
-        focused: _focusedSide == _FileSide.remote,
-        dropHighlighted: _dropTargetSide == _FileSide.remote,
-        canGoUp: _remotePath != '/',
-        onGoUp: _goUpRemote,
-        pathInput: TextField(
-          controller: _remotePathController,
-          focusNode: _remotePathFocusNode,
-          style: pathTextStyle,
-          maxLines: 1,
-          textInputAction: TextInputAction.go,
-          onTap: () {
-            _focusSide(_FileSide.remote);
-            _remotePathController.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: _remotePathController.text.length,
-            );
-          },
-          onSubmitted: _navigateRemote,
-          decoration: const InputDecoration(
-            hintText: 'Remote path',
-            isDense: true,
-            border: InputBorder.none,
+      onCopyPath: _copyRemotePath,
+      onOpenTerminal: _openTerminalHere,
+      onRefresh: _refreshRemote,
+      onFocus: () => _focusSide(_FileSide.remote),
+      loading: _loadingRemote,
+      error: _remoteError,
+      clipboardHint: _clipboardHint(_FileSide.remote),
+      backgroundMenu: () => _paneBackgroundMenu(_FileSide.remote),
+      canAcceptDrop: (data) => data.side == _FileSide.local,
+      onDragEntered: () => setState(() => _dropTargetSide = _FileSide.remote),
+      onDragExited: () {
+        if (_dropTargetSide == _FileSide.remote) {
+          setState(() => _dropTargetSide = null);
+        }
+      },
+      onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.remote),
+      headerActions: [
+        if (_localCollapsed)
+          IconButton(
+            tooltip: 'Show local',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: () => setState(() => _localCollapsed = false),
+            icon: const Icon(Symbols.left_panel_open, size: 18),
           ),
-        ),
-        onCopyPath: _copyRemotePath,
-        onOpenTerminal: _openTerminalHere,
-        onRefresh: _refreshRemote,
-        onFocus: () => _focusSide(_FileSide.remote),
-        loading: _loadingRemote,
-        error: _remoteError,
-        clipboardHint: _clipboardHint(_FileSide.remote),
-        backgroundMenu: () => _paneBackgroundMenu(_FileSide.remote),
-        canAcceptDrop: (data) => data.side == _FileSide.local,
-        onDragEntered: () => setState(() => _dropTargetSide = _FileSide.remote),
-        onDragExited: () {
-          if (_dropTargetSide == _FileSide.remote) {
-            setState(() => _dropTargetSide = null);
-          }
+      ],
+      child: _RemoteFileList(
+        entries: _remoteEntries,
+        currentPath: _remotePath,
+        selectedPaths: _selectedRemotePaths,
+        cutPaths: _cutPathsFor(_FileSide.remote),
+        onTapEntry: (entry, index) {
+          _selectRemote(
+            entry,
+            index: index,
+            toggle: _isMultiModifierPressed,
+            range: _isRangeModifierPressed,
+          );
         },
-        onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.remote),
-        child: _RemoteFileList(
-          entries: _remoteEntries,
-          currentPath: _remotePath,
-          selectedPaths: _selectedRemotePaths,
-          cutPaths: _cutPathsFor(_FileSide.remote),
-          onTapEntry: (entry, index) {
-            _selectRemote(
-              entry,
-              index: index,
-              toggle: _isMultiModifierPressed,
-              range: _isRangeModifierPressed,
-            );
-          },
-          onOpen: _openRemote,
-          dragDataFor: _dragDataForRemote,
-          onContextPrepare: _ensureRemoteContextSelection,
-          menuProvider: _remoteEntryMenu,
-        ),
+        onOpen: _openRemote,
+        dragDataFor: _dragDataForRemote,
+        onContextPrepare: _ensureRemoteContextSelection,
+        menuProvider: _remoteEntryMenu,
       ),
-    ];
+    );
 
     final content = LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 900) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: panes[0]),
-              const VerticalDivider(width: 1),
-              Expanded(child: panes[1]),
-            ],
-          );
-        }
-        return Column(
-          children: [
-            Expanded(child: panes[0]),
-            const Divider(height: 1),
-            Expanded(child: panes[1]),
-          ],
+        final wide = constraints.maxWidth >= 900;
+        return TweenAnimationBuilder<double>(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeInOutCubic,
+          tween: Tween<double>(end: _localCollapsed ? 0.0 : 1.0),
+          builder: (context, localFactor, _) {
+            final factor = localFactor.clamp(0.0, 1.0);
+            final showLocal = factor > 0.001;
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (showLocal) ...[
+                    ClipRect(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: factor,
+                        child: SizedBox(
+                          width: constraints.maxWidth / 2,
+                          child: Opacity(opacity: factor, child: localPane),
+                        ),
+                      ),
+                    ),
+                    Opacity(
+                      opacity: factor,
+                      child: const VerticalDivider(width: 1),
+                    ),
+                  ],
+                  Expanded(child: remotePane),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                if (showLocal) ...[
+                  ClipRect(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      heightFactor: factor,
+                      child: SizedBox(
+                        height: constraints.maxHeight / 2,
+                        child: Opacity(opacity: factor, child: localPane),
+                      ),
+                    ),
+                  ),
+                  Opacity(opacity: factor, child: const Divider(height: 1)),
+                ],
+                Expanded(child: remotePane),
+              ],
+            );
+          },
         );
       },
     );
@@ -1553,6 +1617,7 @@ class _FilePane extends StatelessWidget {
     this.onCopyPath,
     this.onOpenTerminal,
     this.clipboardHint,
+    this.headerActions = const [],
   });
 
   final String title;
@@ -1577,6 +1642,7 @@ class _FilePane extends StatelessWidget {
   final Future<void> Function()? onCopyPath;
   final Future<void> Function()? onOpenTerminal;
   final String? clipboardHint;
+  final List<Widget> headerActions;
 
   @override
   Widget build(BuildContext context) {
@@ -1606,69 +1672,105 @@ class _FilePane extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          title,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: focused || highlighted
-                                ? scheme.primary
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child:
-                              pathInput ??
-                              TextButton(
-                                onPressed: onPathTap,
-                                style: TextButton.styleFrom(
-                                  alignment: Alignment.centerLeft,
-                                ),
-                                child: Text(
-                                  path,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: pathTextStyle,
-                                ),
-                              ),
-                        ),
-                        if (clipboardHint != null)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: Text(
-                              clipboardHint!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: scheme.primary,
-                              ),
+                    padding: const EdgeInsets.fromLTRB(10, 2, 2, 2),
+                    child: SizedBox(
+                      height: 32,
+                      child: Row(
+                        children: [
+                          Text(
+                            title,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: focused || highlighted
+                                  ? scheme.primary
+                                  : null,
                             ),
                           ),
-                        IconButton(
-                          tooltip: 'Go up',
-                          onPressed: canGoUp ? onGoUp : null,
-                          icon: const Icon(Symbols.arrow_upward),
-                        ),
-                        if (onCopyPath != null)
-                          IconButton(
-                            tooltip: 'Copy remote path',
-                            onPressed: () => onCopyPath!(),
-                            icon: const Icon(Symbols.content_copy),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child:
+                                pathInput ??
+                                TextButton(
+                                  onPressed: onPathTap,
+                                  style: TextButton.styleFrom(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 0,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  child: Text(
+                                    path,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: pathTextStyle,
+                                  ),
+                                ),
                           ),
-                        if (onOpenTerminal != null)
+                          if (clipboardHint != null)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Text(
+                                clipboardHint!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.primary,
+                                ),
+                              ),
+                            ),
+                          ...headerActions,
                           IconButton(
-                            tooltip: 'Open terminal here',
-                            onPressed: () => onOpenTerminal!(),
-                            icon: const Icon(Symbols.terminal),
+                            tooltip: 'Go up',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                            onPressed: canGoUp ? onGoUp : null,
+                            icon: const Icon(Symbols.arrow_upward, size: 18),
                           ),
-                        IconButton(
-                          tooltip: 'Refresh',
-                          onPressed: loading ? null : onRefresh,
-                          icon: const Icon(Symbols.refresh),
-                        ),
-                      ],
+                          if (onCopyPath != null)
+                            IconButton(
+                              tooltip: 'Copy remote path',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              onPressed: () => onCopyPath!(),
+                              icon: const Icon(Symbols.content_copy, size: 18),
+                            ),
+                          if (onOpenTerminal != null)
+                            IconButton(
+                              tooltip: 'Open terminal here',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              onPressed: () => onOpenTerminal!(),
+                              icon: const Icon(Symbols.terminal, size: 18),
+                            ),
+                          IconButton(
+                            tooltip: 'Refresh',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                            onPressed: loading ? null : onRefresh,
+                            icon: const Icon(Symbols.refresh, size: 18),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const Divider(height: 1),

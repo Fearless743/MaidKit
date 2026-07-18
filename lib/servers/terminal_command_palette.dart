@@ -12,7 +12,11 @@ import 'terminal_tabs_provider.dart';
 Future<void> showTerminalCommandPalette(BuildContext context, WidgetRef ref) {
   final tabs = ref.read(terminalTabsProvider);
   final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
-  final activeTab = tabs.tabs.isEmpty ? null : tabs.tabs[tabs.selectedIndex];
+  final activeTab = tabs.selectedTab;
+  final activeServer = activeTab == null
+      ? null
+      : servers.where((server) => server.id == activeTab.serverId).firstOrNull;
+  final canSplit = tabs.isNotEmpty;
   return showMaidKitCommandPalette<void>(
     builder: (context, close) => _TerminalCommandPalette(
       activeTab: activeTab,
@@ -22,6 +26,35 @@ Future<void> showTerminalCommandPalette(BuildContext context, WidgetRef ref) {
         await openTerminalSession(context, ref, server);
         close(null);
       },
+      onOpenFiles: activeServer == null
+          ? null
+          : () async {
+              final manager = ref.read(connectionManagerProvider);
+              if (manager.clientFor(activeServer.id) == null &&
+                  !await connectForStatistics(context, ref, activeServer)) {
+                return;
+              }
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .openFileManagement(activeServer);
+              close(null);
+            },
+      onSplitRight: !canSplit
+          ? null
+          : () {
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .splitEmpty(SessionSplitAxis.horizontal);
+              close(null);
+            },
+      onSplitDown: !canSplit
+          ? null
+          : () {
+              ref
+                  .read(terminalTabsProvider.notifier)
+                  .splitEmpty(SessionSplitAxis.vertical);
+              close(null);
+            },
       onClose: activeTab == null
           ? null
           : () async {
@@ -46,6 +79,9 @@ class _TerminalCommandPalette extends StatefulWidget {
     required this.servers,
     required this.onDismiss,
     required this.onOpen,
+    required this.onOpenFiles,
+    required this.onSplitRight,
+    required this.onSplitDown,
     required this.onClose,
     required this.onDisconnect,
   });
@@ -54,6 +90,9 @@ class _TerminalCommandPalette extends StatefulWidget {
   final List<Server> servers;
   final VoidCallback onDismiss;
   final Future<void> Function(Server server) onOpen;
+  final Future<void> Function()? onOpenFiles;
+  final VoidCallback? onSplitRight;
+  final VoidCallback? onSplitDown;
   final Future<void> Function()? onClose;
   final Future<void> Function()? onDisconnect;
 
@@ -97,15 +136,33 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
           icon: Symbols.add,
           onSelect: () => widget.onOpen(activeServer),
         ),
+      if (widget.onOpenFiles != null)
+        _TerminalAction(
+          label: 'Open file transfer on ${activeTab!.serverName}',
+          icon: Symbols.folder,
+          onSelect: widget.onOpenFiles!,
+        ),
+      if (widget.onSplitRight != null)
+        _TerminalAction(
+          label: 'Split right',
+          icon: Symbols.vertical_split,
+          onSelect: () async => widget.onSplitRight!(),
+        ),
+      if (widget.onSplitDown != null)
+        _TerminalAction(
+          label: 'Split down',
+          icon: Symbols.horizontal_split,
+          onSelect: () async => widget.onSplitDown!(),
+        ),
       if (widget.onClose != null)
         _TerminalAction(
-          label: 'Close this terminal',
+          label: 'Close this tab',
           icon: Symbols.close,
           onSelect: widget.onClose!,
         ),
       if (widget.onDisconnect != null)
         _TerminalAction(
-          label: 'Close all terminals on ${activeTab!.serverName}',
+          label: 'Close all tabs on ${activeTab!.serverName}',
           icon: Symbols.link_off,
           onSelect: widget.onDisconnect!,
         ),
@@ -137,7 +194,7 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
             SearchBar(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              hintText: 'Search terminal actions',
+              hintText: 'Search session actions',
               leading: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: CircleAvatar(

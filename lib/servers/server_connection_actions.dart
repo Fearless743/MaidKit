@@ -81,6 +81,7 @@ Future<bool> openTerminalSession(
   WidgetRef ref,
   Server server, {
   String? initialDirectory,
+  String? paneId,
 }) async {
   HostKeyPrompt? approvedHostKey;
   final loading = showMaidKitLoadingModal(
@@ -106,6 +107,7 @@ Future<bool> openTerminalSession(
           },
           knownHostKeyFingerprint: server.hostKeyFingerprint,
           initialDirectory: initialDirectory,
+          paneId: paneId,
         );
     if (approvedHostKey != null) {
       await ref
