@@ -10,6 +10,7 @@ import 'package:super_context_menu/super_context_menu.dart';
 import 'container_list_tile.dart';
 import 'container_models.dart';
 import 'container_runtime_install.dart';
+import 'project_repository.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_models.dart';
@@ -153,11 +154,7 @@ class _ContainerManagementTabState
     final destructive =
         action == ContainerAction.kill || action == ContainerAction.remove;
 
-    return showMaidKitConfirmAlert(
-      message,
-      title,
-      isDanger: destructive,
-    );
+    return showMaidKitConfirmAlert(message, title, isDanger: destructive);
   }
 
   Future<void> _runAction(
@@ -266,7 +263,99 @@ class _ContainerManagementTabState
   }
 }
 
-class _ContainerEnvironments extends StatelessWidget {
+/// Linked compose project and the live containers that belong to it.
+class _ServerProjectGroup {
+  _ServerProjectGroup({
+    required this.link,
+    required this.runtime,
+    required this.scope,
+  });
+
+  final ComposeProjectLink link;
+  final ContainerRuntime runtime;
+  final ContainerScope scope;
+  final containers = <ServerContainer>[];
+
+  int get runningCount =>
+      containers.where((container) => isContainerRunning(container)).length;
+}
+
+/// Composite key for a container inside a runtime/scope environment.
+String _containerEnvKey(
+  ContainerRuntime runtime,
+  ContainerScope scope,
+  String containerId,
+) => '${runtime.name}|${scope.name}|$containerId';
+
+List<_ServerProjectGroup> _projectGroupsForServer({
+  required Server server,
+  required List<ComposeProjectLink> links,
+  required List<ContainerEnvironment> environments,
+}) {
+  final groups = <_ServerProjectGroup>[];
+  for (final link in links.where((item) => item.serverId == server.id)) {
+    final runtime = ContainerRuntime.values.byName(link.runtime);
+    final scope = ContainerScope.values.byName(link.scope);
+    final group = _ServerProjectGroup(
+      link: link,
+      runtime: runtime,
+      scope: scope,
+    );
+    for (final environment in environments.where(
+      (env) => env.isAvailable && env.runtime == runtime && env.scope == scope,
+    )) {
+      for (final container in environment.containers) {
+        if (container.composeProject == link.name) {
+          group.containers.add(container);
+        }
+      }
+    }
+    groups.add(group);
+  }
+  groups.sort(
+    (a, b) => a.link.name.toLowerCase().compareTo(b.link.name.toLowerCase()),
+  );
+  return groups;
+}
+
+/// Containers that belong to any linked project on this server.
+Set<String> _projectContainerKeys(List<_ServerProjectGroup> projects) {
+  final keys = <String>{};
+  for (final project in projects) {
+    for (final container in project.containers) {
+      keys.add(_containerEnvKey(project.runtime, project.scope, container.id));
+    }
+  }
+  return keys;
+}
+
+/// Environments with project-owned containers removed for the standalone list.
+List<ContainerEnvironment> _environmentsWithoutProjects(
+  List<ContainerEnvironment> environments,
+  Set<String> projectContainerKeys,
+) {
+  return [
+    for (final environment in environments)
+      ContainerEnvironment(
+        runtime: environment.runtime,
+        scope: environment.scope,
+        error: environment.error,
+        containers: [
+          for (final container in environment.containers)
+            if (!projectContainerKeys.contains(
+              _containerEnvKey(
+                environment.runtime,
+                environment.scope,
+                container.id,
+              ),
+            ))
+              container,
+        ],
+      ),
+  ];
+}
+
+class _ContainerEnvironments extends ConsumerWidget {
   const _ContainerEnvironments({
     required this.server,
     required this.environments,
@@ -287,7 +376,7 @@ class _ContainerEnvironments extends StatelessWidget {
   final Future<void> Function() onInstallRuntime;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
@@ -302,9 +391,34 @@ class _ContainerEnvironments extends StatelessWidget {
       );
     }
 
+    final links =
+        ref.watch(composeProjectLinksProvider).asData?.value ??
+        const <ComposeProjectLink>[];
+    final projects = _projectGroupsForServer(
+      server: server,
+      links: links,
+      environments: environments,
+    );
+    final projectKeys = _projectContainerKeys(projects);
+    final standaloneEnvironments = _environmentsWithoutProjects(
+      environments,
+      projectKeys,
+    );
+
     final totalContainers = environments
         .where((env) => env.isAvailable)
         .fold<int>(0, (sum, env) => sum + env.containers.length);
+    final standaloneCount = standaloneEnvironments
+        .where((env) => env.isAvailable)
+        .fold<int>(0, (sum, env) => sum + env.containers.length);
+
+    final summaryParts = <String>[
+      totalContainers == 1 ? '1 container' : '$totalContainers containers',
+      if (projects.isNotEmpty)
+        projects.length == 1 ? '1 project' : '${projects.length} projects',
+      if (projects.isNotEmpty && standaloneCount > 0)
+        standaloneCount == 1 ? '1 standalone' : '$standaloneCount standalone',
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -313,15 +427,14 @@ class _ContainerEnvironments extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
             children: [
-              Text(
-                totalContainers == 1
-                    ? '1 container'
-                    : '$totalContainers containers',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              Expanded(
+                child: Text(
+                  summaryParts.join(' · '),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-              const Spacer(),
               IconButton(
                 tooltip: 'Refresh containers',
                 visualDensity: VisualDensity.compact,
@@ -333,22 +446,220 @@ class _ContainerEnvironments extends StatelessWidget {
         ),
         Divider(height: 1, color: scheme.outlineVariant),
         Expanded(
-          child: ListView.builder(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            itemCount: environments.length,
-            itemBuilder: (context, index) => Padding(
-              padding: EdgeInsets.only(
-                bottom: index == environments.length - 1 ? 0 : 16,
+            children: [
+              if (projects.isNotEmpty) ...[
+                Text(
+                  'Projects',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (var i = 0; i < projects.length; i++) ...[
+                  _ProjectCollapsibleTile(
+                    server: server,
+                    project: projects[i],
+                    onAction: onAction,
+                  ),
+                  if (i != projects.length - 1) const SizedBox(height: 8),
+                ],
+              ],
+              ..._standaloneSections(
+                projects: projects,
+                environments: environments,
+                standaloneEnvironments: standaloneEnvironments,
+                theme: theme,
+                scheme: scheme,
               ),
-              child: _ContainerEnvironmentSection(
-                server: server,
-                environment: environments[index],
-                onAction: onAction,
-              ),
-            ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  /// Environment sections with project-owned containers removed. Empty
+  /// environments are hidden only when projects already cover that runtime.
+  List<Widget> _standaloneSections({
+    required List<_ServerProjectGroup> projects,
+    required List<ContainerEnvironment> environments,
+    required List<ContainerEnvironment> standaloneEnvironments,
+    required ThemeData theme,
+    required ColorScheme scheme,
+  }) {
+    final visible = <ContainerEnvironment>[
+      for (final environment in standaloneEnvironments)
+        if (projects.isEmpty ||
+            !environment.isAvailable ||
+            environment.containers.isNotEmpty ||
+            environments
+                .where(
+                  (env) =>
+                      env.runtime == environment.runtime &&
+                      env.scope == environment.scope,
+                )
+                .every((env) => !env.isAvailable || env.containers.isEmpty))
+          environment,
+    ];
+    if (visible.isEmpty) return const [];
+
+    return [
+      if (projects.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text(
+          'Standalone containers',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+      for (var i = 0; i < visible.length; i++) ...[
+        _ContainerEnvironmentSection(
+          server: server,
+          environment: visible[i],
+          onAction: onAction,
+        ),
+        if (i != visible.length - 1) const SizedBox(height: 16),
+      ],
+    ];
+  }
+}
+
+class _ProjectCollapsibleTile extends StatelessWidget {
+  const _ProjectCollapsibleTile({
+    required this.server,
+    required this.project,
+    required this.onAction,
+  });
+
+  final Server server;
+  final _ServerProjectGroup project;
+  final Future<void> Function(
+    ContainerEnvironment,
+    ServerContainer,
+    ContainerAction,
+  )
+  onAction;
+
+  ContainerEnvironment get _environment => ContainerEnvironment(
+    runtime: project.runtime,
+    scope: project.scope,
+    containers: project.containers,
+  );
+
+  String get _runtimeLabel {
+    final name = project.runtime.name;
+    return '${name[0].toUpperCase()}${name.substring(1)}';
+  }
+
+  String get _scopeLabel =>
+      project.scope == ContainerScope.root ? 'Root' : 'User';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final count = project.containers.length;
+    final running = project.runningCount;
+    final statusLabel = count == 0
+        ? 'No containers'
+        : running == count
+        ? '$running running'
+        : '$running/$count running';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Theme(
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: count > 0 && count <= 6,
+          tilePadding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+          childrenPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          collapsedShape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          title: Text(
+            project.link.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall,
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  project.link.directory,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    _MetaChip(label: _runtimeLabel),
+                    _MetaChip(label: _scopeLabel),
+                    _MetaChip(label: statusLabel),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          trailing: IconButton(
+            tooltip: 'Open project',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => context.router.push(
+              ProjectDetailRoute(linkId: project.link.id),
+            ),
+            icon: const Icon(Symbols.open_in_new, size: 20),
+          ),
+          children: [
+            Divider(height: 1, color: scheme.outlineVariant),
+            if (project.containers.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Text(
+                  'No containers for this project right now.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              for (var i = 0; i < project.containers.length; i++) ...[
+                _ContainerActionTile(
+                  server: server,
+                  environment: _environment,
+                  container: project.containers[i],
+                  onAction: (action) =>
+                      onAction(_environment, project.containers[i], action),
+                ),
+                if (i != project.containers.length - 1)
+                  Divider(
+                    height: 1,
+                    indent: 12,
+                    endIndent: 12,
+                    color: scheme.outlineVariant.withValues(alpha: 0.5),
+                  ),
+              ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -382,11 +693,110 @@ class _ContainerEnvironmentSection extends StatelessWidget {
     ContainerRuntime.podman => Symbols.package_2,
   };
 
-  Widget _containerTile(
-    BuildContext context, {
-    required ServerContainer container,
-    required Future<void> Function(ContainerAction action) onAction,
-  }) {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
+              children: [
+                Icon(_runtimeIcon, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_runtimeLabel, style: theme.textTheme.titleSmall),
+                ),
+                _MetaChip(label: _scopeLabel),
+                if (environment.isAvailable) ...[
+                  const SizedBox(width: 8),
+                  _MetaChip(
+                    label: environment.containers.isEmpty
+                        ? 'Empty'
+                        : '${environment.containers.length}',
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (!environment.isAvailable)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Symbols.info, size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      environment.error ?? 'Unavailable',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (environment.containers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Text(
+                'No containers in this environment.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else ...[
+            Divider(height: 1, color: scheme.outlineVariant),
+            for (var i = 0; i < environment.containers.length; i++) ...[
+              _ContainerActionTile(
+                server: server,
+                environment: environment,
+                container: environment.containers[i],
+                onAction: (action) =>
+                    onAction(environment, environment.containers[i], action),
+              ),
+              if (i != environment.containers.length - 1)
+                Divider(
+                  height: 1,
+                  indent: 12,
+                  endIndent: 12,
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared container row with context menu and action overflow.
+class _ContainerActionTile extends StatelessWidget {
+  const _ContainerActionTile({
+    required this.server,
+    required this.environment,
+    required this.container,
+    required this.onAction,
+  });
+
+  final Server server;
+  final ContainerEnvironment environment;
+  final ServerContainer container;
+  final Future<void> Function(ContainerAction action) onAction;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final running = isContainerRunning(container);
     final paused = isContainerPaused(container);
@@ -530,92 +940,6 @@ class _ContainerEnvironmentSection extends StatelessWidget {
           ],
           icon: const Icon(Symbols.more_vert),
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Row(
-              children: [
-                Icon(_runtimeIcon, size: 18, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(_runtimeLabel, style: theme.textTheme.titleSmall),
-                ),
-                _MetaChip(label: _scopeLabel),
-                if (environment.isAvailable) ...[
-                  const SizedBox(width: 8),
-                  _MetaChip(
-                    label: environment.containers.isEmpty
-                        ? 'Empty'
-                        : '${environment.containers.length}',
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (!environment.isAvailable)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Symbols.info, size: 16, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      environment.error ?? 'Unavailable',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (environment.containers.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Text(
-                'No containers in this environment.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            )
-          else ...[
-            Divider(height: 1, color: scheme.outlineVariant),
-            for (var i = 0; i < environment.containers.length; i++) ...[
-              _containerTile(
-                context,
-                container: environment.containers[i],
-                onAction: (action) =>
-                    onAction(environment, environment.containers[i], action),
-              ),
-              if (i != environment.containers.length - 1)
-                Divider(
-                  height: 1,
-                  indent: 12,
-                  endIndent: 12,
-                  color: scheme.outlineVariant.withValues(alpha: 0.5),
-                ),
-            ],
-          ],
-        ],
       ),
     );
   }

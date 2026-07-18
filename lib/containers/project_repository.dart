@@ -1,7 +1,17 @@
 import 'package:drift/drift.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/servers/server_providers.dart';
 import 'container_models.dart';
+
+final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
+  return ProjectRepository(ref.watch(databaseProvider));
+});
+
+final composeProjectLinksProvider = StreamProvider<List<ComposeProjectLink>>(
+  (ref) => ref.watch(projectRepositoryProvider).watchAll(),
+);
 
 class ProjectRepository {
   ProjectRepository(this._database);

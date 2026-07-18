@@ -2176,7 +2176,6 @@ class _FileEditorModalState extends State<_FileEditorModal> {
   late final CodeController _controller;
   var _loading = true;
   var _saving = false;
-  String? _error;
   String _savedText = '';
 
   bool get _isDirty => !_loading && _controller.text != _savedText;
@@ -2205,10 +2204,8 @@ class _FileEditorModalState extends State<_FileEditorModal> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _error = error.toString();
-        _loading = false;
-      });
+      showMaidKitErrorAlert(error, title: 'Could not open ${widget.name}');
+      widget.dismiss();
     }
   }
 
@@ -2230,10 +2227,8 @@ class _FileEditorModalState extends State<_FileEditorModal> {
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _error = error.toString();
-        _saving = false;
-      });
+      setState(() => _saving = false);
+      showMaidKitErrorAlert(error, title: 'Could not save ${widget.name}');
     }
   }
 
@@ -2285,9 +2280,7 @@ class _FileEditorModalState extends State<_FileEditorModal> {
                         ? 'Unsaved changes'
                         : 'Saved',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _error == null
-                          ? scheme.onSurfaceVariant
-                          : scheme.error,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -2323,17 +2316,6 @@ class _FileEditorModalState extends State<_FileEditorModal> {
   Widget _buildEditor(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Text(
-          _error!,
-          textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: scheme.error),
-        ),
-      );
-    }
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: scheme.outlineVariant),

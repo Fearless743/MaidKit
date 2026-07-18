@@ -29,14 +29,6 @@ const _composeFileNames = [
   'docker-compose.yml',
 ];
 
-final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
-  return ProjectRepository(ref.watch(databaseProvider));
-});
-
-final composeProjectLinksProvider = StreamProvider<List<ComposeProjectLink>>(
-  (ref) => ref.watch(projectRepositoryProvider).watchAll(),
-);
-
 @RoutePage()
 class ProjectsPage extends ConsumerStatefulWidget {
   const ProjectsPage({super.key});
