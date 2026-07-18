@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../routing/app_router.gr.dart';
+import '../shared/presentation/deploy_terminal.dart';
 
 @RoutePage()
 class ServerWorkspacePage extends StatelessWidget {
@@ -54,10 +55,16 @@ class _ServerTabsShell extends StatelessWidget {
                       trailingAtBottom: true,
                       trailing: Padding(
                         padding: const EdgeInsets.only(bottom: 16),
-                        child: IconButton(
-                          tooltip: 'Settings',
-                          onPressed: () => tabsRouter.setActiveIndex(3),
-                          icon: const Icon(Symbols.settings),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const DeploySessionsRailButton(),
+                            IconButton(
+                              tooltip: 'Settings',
+                              onPressed: () => tabsRouter.setActiveIndex(3),
+                              icon: const Icon(Symbols.settings),
+                            ),
+                          ],
                         ),
                       ),
                       destinations: const [

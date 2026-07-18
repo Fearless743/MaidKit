@@ -1,12 +1,19 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'app_router.gr.dart';
 
-final appRouterProvider = Provider<AppRouter>((ref) => AppRouter());
+final maidKitNavigatorKey = GlobalKey<NavigatorState>();
+
+final appRouterProvider = Provider<AppRouter>(
+  (ref) => AppRouter(navigatorKey: maidKitNavigatorKey),
+);
 
 @AutoRouterConfig(replaceInRouteName: 'Page,Route')
 class AppRouter extends RootStackRouter {
+  AppRouter({super.navigatorKey});
+
   @override
   List<AutoRoute> get routes => [
     AutoRoute(
@@ -21,5 +28,6 @@ class AppRouter extends RootStackRouter {
     ),
     AutoRoute(page: ServerDetailRoute.page, path: '/server-detail'),
     AutoRoute(page: ProjectDetailRoute.page, path: '/project-detail'),
+    AutoRoute(page: ContainerDetailRoute.page, path: '/container-detail'),
   ];
 }

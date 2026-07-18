@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -7,6 +8,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'container_models.dart';
 import '../data/local/app_database.dart';
+import '../routing/app_router.gr.dart';
 import '../servers/server_models.dart';
 import '../servers/server_providers.dart';
 
@@ -193,6 +195,7 @@ class _ContainerManagementTabState
         onAction: _load,
       ),
       data: (environments) => _ContainerEnvironments(
+        server: widget.server,
         environments: environments,
         onRefresh: _load,
         onAction: _runAction,
@@ -203,11 +206,13 @@ class _ContainerManagementTabState
 
 class _ContainerEnvironments extends StatelessWidget {
   const _ContainerEnvironments({
+    required this.server,
     required this.environments,
     required this.onRefresh,
     required this.onAction,
   });
 
+  final Server server;
   final List<ContainerEnvironment> environments;
   final Future<void> Function() onRefresh;
   final Future<void> Function(
@@ -270,6 +275,7 @@ class _ContainerEnvironments extends StatelessWidget {
                 bottom: index == environments.length - 1 ? 0 : 16,
               ),
               child: _ContainerEnvironmentSection(
+                server: server,
                 environment: environments[index],
                 onAction: onAction,
               ),
@@ -283,10 +289,12 @@ class _ContainerEnvironments extends StatelessWidget {
 
 class _ContainerEnvironmentSection extends StatelessWidget {
   const _ContainerEnvironmentSection({
+    required this.server,
     required this.environment,
     required this.onAction,
   });
 
+  final Server server;
   final ContainerEnvironment environment;
   final Future<void> Function(
     ContainerEnvironment,
@@ -376,6 +384,15 @@ class _ContainerEnvironmentSection extends StatelessWidget {
             for (var i = 0; i < environment.containers.length; i++) ...[
               _ContainerRow(
                 container: environment.containers[i],
+                onOpen: () => context.router.push(
+                  ContainerDetailRoute(
+                    server: server,
+                    runtime: environment.runtime,
+                    scope: environment.scope,
+                    containerId: environment.containers[i].id,
+                    containerName: environment.containers[i].name,
+                  ),
+                ),
                 onAction: (action) =>
                     onAction(environment, environment.containers[i], action),
               ),
@@ -421,9 +438,14 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _ContainerRow extends StatelessWidget {
-  const _ContainerRow({required this.container, required this.onAction});
+  const _ContainerRow({
+    required this.container,
+    required this.onOpen,
+    required this.onAction,
+  });
 
   final ServerContainer container;
+  final VoidCallback onOpen;
   final Future<void> Function(ContainerAction action) onAction;
 
   bool get _isRunning {
@@ -435,92 +457,95 @@ class _ContainerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: _isRunning ? scheme.primary : scheme.outline,
-              shape: BoxShape.circle,
+    return InkWell(
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: _isRunning ? scheme.primary : scheme.outline,
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  container.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  container.image,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    container.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    container.image,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    container.status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _StateChip(state: container.state, running: _isRunning),
+            PopupMenuButton<ContainerAction>(
+              tooltip: 'Container actions',
+              onSelected: onAction,
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: ContainerAction.start,
+                  enabled: !_isRunning,
+                  child: const Row(
+                    children: [
+                      Icon(Symbols.play_arrow, size: 20),
+                      SizedBox(width: 12),
+                      Text('Start'),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  container.status,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                PopupMenuItem(
+                  value: ContainerAction.stop,
+                  enabled: _isRunning,
+                  child: const Row(
+                    children: [
+                      Icon(Symbols.stop, size: 20),
+                      SizedBox(width: 12),
+                      Text('Stop'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: ContainerAction.restart,
+                  child: Row(
+                    children: [
+                      Icon(Symbols.restart_alt, size: 20),
+                      SizedBox(width: 12),
+                      Text('Restart'),
+                    ],
                   ),
                 ),
               ],
+              icon: const Icon(Symbols.more_vert),
             ),
-          ),
-          const SizedBox(width: 8),
-          _StateChip(state: container.state, running: _isRunning),
-          PopupMenuButton<ContainerAction>(
-            tooltip: 'Container actions',
-            onSelected: onAction,
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: ContainerAction.start,
-                enabled: !_isRunning,
-                child: const Row(
-                  children: [
-                    Icon(Symbols.play_arrow, size: 20),
-                    SizedBox(width: 12),
-                    Text('Start'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: ContainerAction.stop,
-                enabled: _isRunning,
-                child: const Row(
-                  children: [
-                    Icon(Symbols.stop, size: 20),
-                    SizedBox(width: 12),
-                    Text('Stop'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: ContainerAction.restart,
-                child: Row(
-                  children: [
-                    Icon(Symbols.restart_alt, size: 20),
-                    SizedBox(width: 12),
-                    Text('Restart'),
-                  ],
-                ),
-              ),
-            ],
-            icon: const Icon(Symbols.more_vert),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

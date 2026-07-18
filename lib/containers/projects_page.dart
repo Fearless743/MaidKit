@@ -11,6 +11,7 @@ import '../servers/server_models.dart';
 import '../servers/server_providers.dart';
 import '../routing/app_router.gr.dart';
 import '../shared/presentation/cloud_file_picker.dart';
+import '../shared/presentation/deploy_terminal.dart';
 import '../shared/presentation/maidkit_alert.dart';
 import '../theme.dart';
 import 'container_models.dart';
@@ -143,19 +144,27 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
           .read(serverRepositoryProvider)
           .credentialFor(project.server);
       if (project.deploy) {
-        await ref
-            .read(connectionManagerProvider)
-            .deployComposeProject(
-              project.server.id,
-              runtime: project.runtime,
-              scope: project.scope,
-              projectName: project.name,
-              directory: project.directory,
-              composeSource: project.source,
-              sudoPassword: credential.type == CredentialType.password
-                  ? credential.password
-                  : null,
-            );
+        await runWithDeployTerminal(
+          ref: ref,
+          title: 'Deploy ${project.name}',
+          subtitle: project.server.name,
+          command:
+              '${project.runtime.name} compose -p ${project.name} up -d  (${project.directory})',
+          run: (onOutput) => ref
+              .read(connectionManagerProvider)
+              .deployComposeProject(
+                project.server.id,
+                runtime: project.runtime,
+                scope: project.scope,
+                projectName: project.name,
+                directory: project.directory,
+                composeSource: project.source,
+                sudoPassword: credential.type == CredentialType.password
+                    ? credential.password
+                    : null,
+                onOutput: onOutput,
+              ),
+        );
       }
       await ref
           .read(projectRepositoryProvider)
@@ -423,19 +432,30 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       final credential = await ref
           .read(serverRepositoryProvider)
           .credentialFor(draft.server);
-      await ref
-          .read(connectionManagerProvider)
-          .startRawContainer(
-            draft.server.id,
-            runtime: draft.runtime,
-            scope: draft.scope,
-            name: draft.name,
-            image: draft.image,
-            arguments: draft.arguments,
-            sudoPassword: credential.type == CredentialType.password
-                ? credential.password
-                : null,
-          );
+      final args = draft.arguments.trim();
+      final command =
+          '${draft.runtime.name} run -d --name ${draft.name} '
+          '${args.isEmpty ? '' : '$args '}${draft.image}';
+      await runWithDeployTerminal(
+        ref: ref,
+        title: 'Start ${draft.name}',
+        subtitle: draft.server.name,
+        command: command,
+        run: (onOutput) => ref
+            .read(connectionManagerProvider)
+            .startRawContainer(
+              draft.server.id,
+              runtime: draft.runtime,
+              scope: draft.scope,
+              name: draft.name,
+              image: draft.image,
+              arguments: draft.arguments,
+              sudoPassword: credential.type == CredentialType.password
+                  ? credential.password
+                  : null,
+              onOutput: onOutput,
+            ),
+      );
       if (mounted) {
         showStyledSnackBar(
           message: '${draft.name} was started on ${draft.server.name}.',
@@ -1695,29 +1715,263 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
   }
 }
 
-class _RawContainerSheet extends StatefulWidget {
+enum _RunFormMode { simple, advanced }
+
+enum _RestartPolicy {
+  none,
+  unlessStopped,
+  always,
+  onFailure;
+
+  String? get flag => switch (this) {
+    none => null,
+    unlessStopped => 'unless-stopped',
+    always => 'always',
+    onFailure => 'on-failure',
+  };
+
+  String get label => switch (this) {
+    none => 'Do not restart',
+    unlessStopped => 'Restart unless stopped',
+    always => 'Always restart',
+    onFailure => 'Restart on failure',
+  };
+
+  String get description => switch (this) {
+    none => 'Container stays stopped after it exits.',
+    unlessStopped => 'Restarts after crashes, but not after a manual stop.',
+    always => 'Restarts whenever the container stops, including reboot.',
+    onFailure => 'Restarts only when the container exits with an error.',
+  };
+}
+
+class _PairControllers {
+  _PairControllers({String left = '', String right = ''})
+    : left = TextEditingController(text: left),
+      right = TextEditingController(text: right);
+
+  final TextEditingController left;
+  final TextEditingController right;
+
+  void dispose() {
+    left.dispose();
+    right.dispose();
+  }
+}
+
+class _RawContainerSheet extends ConsumerStatefulWidget {
   const _RawContainerSheet({required this.servers});
 
   final List<Server> servers;
 
   @override
-  State<_RawContainerSheet> createState() => _RawContainerSheetState();
+  ConsumerState<_RawContainerSheet> createState() => _RawContainerSheetState();
 }
 
-class _RawContainerSheetState extends State<_RawContainerSheet> {
+class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
   late Server? server = widget.servers.isEmpty ? null : widget.servers.first;
   final name = TextEditingController();
   final image = TextEditingController();
   final arguments = TextEditingController();
+  final _imageFocus = FocusNode();
+  final _ports = <_PairControllers>[];
+  final _envVars = <_PairControllers>[];
+  final _volumes = <_PairControllers>[];
+  var mode = _RunFormMode.simple;
+  var restartPolicy = _RestartPolicy.unlessStopped;
   ContainerRuntime runtime = ContainerRuntime.docker;
   ContainerScope scope = ContainerScope.user;
+  var _images = const <String>[];
+  var _loadingImages = false;
+  String? _imagesError;
+  int _imagesRequestId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    name.addListener(_onFieldsChanged);
+    image.addListener(_onFieldsChanged);
+    arguments.addListener(_onFieldsChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadImages());
+  }
+
+  void _onFieldsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadImages() async {
+    final selected = server;
+    if (selected == null) {
+      setState(() {
+        _images = const [];
+        _loadingImages = false;
+        _imagesError = null;
+      });
+      return;
+    }
+    final requestId = ++_imagesRequestId;
+    setState(() {
+      _loadingImages = true;
+      _imagesError = null;
+    });
+    try {
+      final credential = await ref
+          .read(serverRepositoryProvider)
+          .credentialFor(selected);
+      final images = await ref
+          .read(connectionManagerProvider)
+          .listContainerImages(
+            selected.id,
+            runtime: runtime,
+            scope: scope,
+            sudoPassword: credential.type == CredentialType.password
+                ? credential.password
+                : null,
+          );
+      if (!mounted || requestId != _imagesRequestId) return;
+      setState(() {
+        _images = images;
+        _loadingImages = false;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _imagesRequestId) return;
+      setState(() {
+        _images = const [];
+        _loadingImages = false;
+        _imagesError = error.toString();
+      });
+    }
+  }
+
+  void _selectServer(Server? value) {
+    setState(() => server = value);
+    _loadImages();
+  }
+
+  void _selectRuntime(ContainerRuntime value) {
+    setState(() => runtime = value);
+    _loadImages();
+  }
+
+  void _selectScope(ContainerScope value) {
+    setState(() => scope = value);
+    _loadImages();
+  }
 
   @override
   void dispose() {
     name.dispose();
     image.dispose();
     arguments.dispose();
+    _imageFocus.dispose();
+    for (final row in _ports) {
+      row.dispose();
+    }
+    for (final row in _envVars) {
+      row.dispose();
+    }
+    for (final row in _volumes) {
+      row.dispose();
+    }
     super.dispose();
+  }
+
+  bool get _canSubmit =>
+      server != null &&
+      name.text.trim().isNotEmpty &&
+      image.text.trim().isNotEmpty;
+
+  String _shellQuote(String value) {
+    if (RegExp(r'^[a-zA-Z0-9_./:@%+=,-]+$').hasMatch(value)) return value;
+    return "'${value.replaceAll("'", "'\\''")}'";
+  }
+
+  bool _isPort(String value) => RegExp(r'^\d{1,5}$').hasMatch(value);
+
+  bool _isEnvKey(String value) =>
+      RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(value);
+
+  String _buildSimpleArguments() {
+    final parts = <String>[];
+    for (final row in _ports) {
+      final host = row.left.text.trim();
+      final container = row.right.text.trim();
+      if (host.isEmpty || container.isEmpty) continue;
+      if (!_isPort(host) || !_isPort(container)) continue;
+      final hostPort = int.tryParse(host);
+      final containerPort = int.tryParse(container);
+      if (hostPort == null ||
+          containerPort == null ||
+          hostPort < 1 ||
+          hostPort > 65535 ||
+          containerPort < 1 ||
+          containerPort > 65535) {
+        continue;
+      }
+      parts.add('-p $host:$container');
+    }
+    for (final row in _envVars) {
+      final key = row.left.text.trim();
+      final value = row.right.text;
+      if (key.isEmpty || !_isEnvKey(key)) continue;
+      parts.add('-e ${_shellQuote('$key=$value')}');
+    }
+    for (final row in _volumes) {
+      final host = row.left.text.trim();
+      final container = row.right.text.trim();
+      if (host.isEmpty || container.isEmpty) continue;
+      parts.add('-v ${_shellQuote('$host:$container')}');
+    }
+    final flag = restartPolicy.flag;
+    if (flag != null) parts.add('--restart $flag');
+    return parts.join(' ');
+  }
+
+  String get _resolvedArguments => mode == _RunFormMode.simple
+      ? _buildSimpleArguments()
+      : arguments.text.trim();
+
+  String get _commandPreview {
+    final nameValue = name.text.trim().isEmpty ? '<name>' : name.text.trim();
+    final imageValue = image.text.trim().isEmpty
+        ? '<image>'
+        : image.text.trim();
+    final args = _resolvedArguments;
+    final middle = args.isEmpty ? '' : ' $args';
+    return '${runtime.name} run -d --name $nameValue$middle $imageValue';
+  }
+
+  void _addPort() {
+    setState(() {
+      final row = _PairControllers();
+      row.left.addListener(_onFieldsChanged);
+      row.right.addListener(_onFieldsChanged);
+      _ports.add(row);
+    });
+  }
+
+  void _addEnv() {
+    setState(() {
+      final row = _PairControllers();
+      row.left.addListener(_onFieldsChanged);
+      row.right.addListener(_onFieldsChanged);
+      _envVars.add(row);
+    });
+  }
+
+  void _addVolume() {
+    setState(() {
+      final row = _PairControllers();
+      row.left.addListener(_onFieldsChanged);
+      row.right.addListener(_onFieldsChanged);
+      _volumes.add(row);
+    });
+  }
+
+  void _removeRow(List<_PairControllers> list, int index) {
+    setState(() {
+      list.removeAt(index).dispose();
+    });
   }
 
   void _submit() {
@@ -1735,44 +1989,149 @@ class _RawContainerSheetState extends State<_RawContainerSheet> {
         scope,
         name.text.trim(),
         image.text.trim(),
-        arguments.text.trim(),
+        _resolvedArguments,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return SheetScaffold(
       titleText: 'Run standalone container',
-      heightFactor: 0.72,
+      heightFactor: 0.9,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
+          Text(
+            'Start a single container without a compose project. '
+            'Use simple mode for common options, or advanced mode for raw runtime flags.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SegmentedButton<_RunFormMode>(
+            segments: const [
+              ButtonSegment(
+                value: _RunFormMode.simple,
+                label: Text('Simple'),
+                icon: Icon(Symbols.tune, size: 18),
+              ),
+              ButtonSegment(
+                value: _RunFormMode.advanced,
+                label: Text('Advanced'),
+                icon: Icon(Symbols.terminal, size: 18),
+              ),
+            ],
+            selected: {mode},
+            onSelectionChanged: (value) => setState(() => mode = value.first),
+          ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<Server>(
             initialValue: server,
-            decoration: const InputDecoration(labelText: 'Server'),
+            decoration: const InputDecoration(
+              labelText: 'Server',
+              helperText: 'Where the container will run',
+            ),
             items: widget.servers
                 .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
                 .toList(),
-            onChanged: (value) => setState(() => server = value),
+            onChanged: _selectServer,
           ),
           const SizedBox(height: 12),
           TextField(
             controller: name,
-            decoration: const InputDecoration(labelText: 'Container name'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: image,
-            decoration: const InputDecoration(labelText: 'Image'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: arguments,
             decoration: const InputDecoration(
-              labelText: 'Runtime arguments (optional)',
-              helperText: 'For example: -p 8080:80 -e KEY=value',
+              labelText: 'Container name',
+              helperText: 'A short label, for example web or postgres',
             ),
+          ),
+          const SizedBox(height: 12),
+          RawAutocomplete<String>(
+            textEditingController: image,
+            focusNode: _imageFocus,
+            optionsBuilder: (value) {
+              final query = value.text.trim().toLowerCase();
+              if (_images.isEmpty) return const Iterable<String>.empty();
+              if (query.isEmpty) return _images;
+              return _images.where(
+                (item) => item.toLowerCase().contains(query),
+              );
+            },
+            onSelected: (value) {
+              image.text = value;
+              image.selection = TextSelection.collapsed(offset: value.length);
+              setState(() {});
+            },
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+              final helper = _loadingImages
+                  ? 'Loading images from ${server?.name ?? 'server'}…'
+                  : _imagesError != null
+                  ? 'Could not list images. Type a full image name instead.'
+                  : _images.isEmpty
+                  ? 'No local images found. Type a registry image such as nginx:alpine'
+                  : '${_images.length} local image${_images.length == 1 ? '' : 's'} available';
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onSubmitted: (_) => onFieldSubmitted(),
+                decoration: InputDecoration(
+                  labelText: 'Image',
+                  helperText: helper,
+                  suffixIcon: _loadingImages
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          tooltip: 'Refresh images',
+                          onPressed: server == null ? null : _loadImages,
+                          icon: const Icon(Symbols.refresh, size: 18),
+                        ),
+                ),
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              final optionList = options.toList(growable: false);
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(8),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxHeight: 240,
+                      maxWidth: 480,
+                    ),
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: optionList.length,
+                      itemBuilder: (context, index) {
+                        final option = optionList[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            option,
+                            style: const TextStyle(
+                              fontFamily: MaidKitFonts.mono,
+                              fontSize: 13,
+                            ),
+                          ),
+                          onTap: () => onSelected(option),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
           Row(
@@ -1789,26 +2148,186 @@ class _RawContainerSheetState extends State<_RawContainerSheet> {
                         ),
                       )
                       .toList(),
-                  onChanged: (value) => setState(() => runtime = value!),
+                  onChanged: (value) => _selectRuntime(value!),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<ContainerScope>(
                   initialValue: scope,
-                  decoration: const InputDecoration(labelText: 'Scope'),
-                  items: ContainerScope.values
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(value.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) => setState(() => scope = value!),
+                  decoration: InputDecoration(
+                    labelText: 'Scope',
+                    helperText: scope == ContainerScope.user
+                        ? 'Runs as your SSH user'
+                        : 'Needs sudo on the server',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: ContainerScope.user,
+                      child: Text('User'),
+                    ),
+                    DropdownMenuItem(
+                      value: ContainerScope.root,
+                      child: Text('System (root)'),
+                    ),
+                  ],
+                  onChanged: (value) => _selectScope(value!),
                 ),
               ),
             ],
+          ),
+          if (mode == _RunFormMode.simple) ...[
+            const SizedBox(height: 20),
+            _sectionHeader(
+              theme,
+              title: 'Publish ports',
+              subtitle:
+                  'Map a port on the server to a port inside the container so you can reach the app from outside.',
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < _ports.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _pairRow(
+                  left: _ports[i].left,
+                  right: _ports[i].right,
+                  leftLabel: 'Server port',
+                  rightLabel: 'Container port',
+                  leftHint: '8080',
+                  rightHint: '80',
+                  separator: '→',
+                  keyboardType: TextInputType.number,
+                  onRemove: () => _removeRow(_ports, i),
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addPort,
+                icon: const Icon(Symbols.add, size: 18),
+                label: const Text('Add port'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _sectionHeader(
+              theme,
+              title: 'Environment variables',
+              subtitle:
+                  'Pass configuration into the container, such as database passwords or feature flags.',
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < _envVars.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _pairRow(
+                  left: _envVars[i].left,
+                  right: _envVars[i].right,
+                  leftLabel: 'Name',
+                  rightLabel: 'Value',
+                  leftHint: 'POSTGRES_PASSWORD',
+                  rightHint: 'secret',
+                  separator: '=',
+                  onRemove: () => _removeRow(_envVars, i),
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addEnv,
+                icon: const Icon(Symbols.add, size: 18),
+                label: const Text('Add variable'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _sectionHeader(
+              theme,
+              title: 'Folders (optional)',
+              subtitle:
+                  'Mount a folder from the server into the container to keep data after restarts.',
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < _volumes.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _pairRow(
+                  left: _volumes[i].left,
+                  right: _volumes[i].right,
+                  leftLabel: 'Server path',
+                  rightLabel: 'Container path',
+                  leftHint: '/opt/data',
+                  rightHint: '/var/lib/data',
+                  separator: '→',
+                  onRemove: () => _removeRow(_volumes, i),
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addVolume,
+                icon: const Icon(Symbols.add, size: 18),
+                label: const Text('Add folder'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<_RestartPolicy>(
+              initialValue: restartPolicy,
+              decoration: InputDecoration(
+                labelText: 'If the container stops',
+                helperText: restartPolicy.description,
+              ),
+              items: _RestartPolicy.values
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => restartPolicy = value!),
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: arguments,
+              minLines: 3,
+              maxLines: 6,
+              style: const TextStyle(
+                fontFamily: MaidKitFonts.mono,
+                fontSize: 13,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Runtime flags',
+                alignLabelWithHint: true,
+                helperText:
+                    'Raw docker/podman flags between --name and the image. '
+                    'Example: -p 8080:80 -e KEY=value --restart unless-stopped',
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Text(
+            'Command preview',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+              color: scheme.surfaceContainerLowest,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: SelectableText(
+                _commandPreview,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: MaidKitFonts.mono,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           Row(
@@ -1820,18 +2339,85 @@ class _RawContainerSheetState extends State<_RawContainerSheet> {
               ),
               const SizedBox(width: 8),
               FilledButton(
-                onPressed:
-                    server == null ||
-                        name.text.trim().isEmpty ||
-                        image.text.trim().isEmpty
-                    ? null
-                    : _submit,
+                onPressed: _canSubmit ? _submit : null,
                 child: const Text('Start'),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _sectionHeader(
+    ThemeData theme, {
+    required String title,
+    required String subtitle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pairRow({
+    required TextEditingController left,
+    required TextEditingController right,
+    required String leftLabel,
+    required String rightLabel,
+    required String leftHint,
+    required String rightHint,
+    required String separator,
+    required VoidCallback onRemove,
+    TextInputType? keyboardType,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: left,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(
+              labelText: leftLabel,
+              hintText: leftHint,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+          child: Text(
+            separator,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: TextField(
+            controller: right,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(
+              labelText: rightLabel,
+              hintText: rightHint,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Remove',
+          onPressed: onRemove,
+          icon: const Icon(Symbols.close, size: 18),
+        ),
+      ],
     );
   }
 }

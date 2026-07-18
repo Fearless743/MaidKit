@@ -20,6 +20,7 @@ class MaidKitApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     ref.watch(serverMetricsRefreshSchedulerProvider);
     IslandUIFoundation.configureOverlay(maidKitOverlayKey);
+    IslandUIFoundation.configureNavigator(maidKitNavigatorKey);
     return MaterialApp.router(
       title: 'MaidKit',
       debugShowCheckedModeBanner: false,

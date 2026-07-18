@@ -321,6 +321,66 @@ done
     );
   }
 
+  /// Streams stdout and stderr chunks while a remote command runs.
+  Future<_CommandResult> _executeStreaming(
+    SSHClient client,
+    String command, {
+    String? stdin,
+    void Function(String chunk)? onOutput,
+  }) async {
+    final session = await client.execute(command);
+    final stdoutBuffer = StringBuffer();
+    final stderrBuffer = StringBuffer();
+    final stdoutDone = utf8.decoder.bind(session.stdout).listen((chunk) {
+      stdoutBuffer.write(chunk);
+      onOutput?.call(chunk);
+    }).asFuture<void>();
+    final stderrDone = utf8.decoder.bind(session.stderr).listen((chunk) {
+      stderrBuffer.write(chunk);
+      onOutput?.call(chunk);
+    }).asFuture<void>();
+    if (stdin != null) {
+      session.stdin.add(Uint8List.fromList(utf8.encode('$stdin\n')));
+      await session.stdin.close();
+    }
+    await session.done;
+    await Future.wait([stdoutDone, stderrDone]);
+    return _CommandResult(
+      stdout: stdoutBuffer.toString(),
+      stderr: stderrBuffer.toString(),
+      exitCode: session.exitCode ?? 1,
+    );
+  }
+
+  /// Local image tags available to [runtime] under [scope], newest first.
+  Future<List<String>> listContainerImages(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    String? sudoPassword,
+  }) async {
+    return withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}'
+        "${runtime.name} images --format '{{.Repository}}:{{.Tag}}'",
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+      final images = <String>{};
+      for (final line in result.stdout.split('\n')) {
+        final image = line.trim();
+        if (image.isEmpty ||
+            image == '<none>:<none>' ||
+            image.endsWith(':<none>')) {
+          continue;
+        }
+        images.add(image);
+      }
+      return images.toList()..sort();
+    });
+  }
+
   ServerContainer? _parseContainer(String line) {
     final fields = line.split('\t');
     if (fields.length != 7 || fields.take(5).any((field) => field.isEmpty)) {
@@ -346,6 +406,7 @@ done
     required String directory,
     required String composeSource,
     String? sudoPassword,
+    void Function(String chunk)? onOutput,
   }) async {
     if (!_safeProjectName(projectName) || !_safeRemoteDirectory(directory)) {
       throw ArgumentError('Project name or remote directory is invalid.');
@@ -359,10 +420,15 @@ done
           'mkdir -p $directory && '
           'printf %s $encoded | base64 -d > $directory/compose.yaml && '
           'cd $directory && ${runtime.name} compose -p $projectName up -d';
-      final result = await _execute(
+      final command = _scopedShell(scope, sudoPassword, script);
+      onOutput?.call(
+        '\$ ${runtime.name} compose -p $projectName up -d  ($directory)\n',
+      );
+      final result = await _executeStreaming(
         client,
-        _scopedShell(scope, sudoPassword, script),
+        command,
         stdin: scope == ContainerScope.root ? sudoPassword : null,
+        onOutput: onOutput,
       );
       if (result.exitCode != 0) throw StateError(_commandError(result));
     });
@@ -418,20 +484,245 @@ done
     required String name,
     String arguments = '',
     String? sudoPassword,
+    void Function(String chunk)? onOutput,
   }) async {
     if (!_safeProjectName(name) || image.trim().isEmpty) {
       throw ArgumentError('Container name and image are required.');
     }
     // Arguments are deliberately a terminal-like escape hatch. The image and
     // name remain validated, while advanced runtime flags stay available.
+    final command =
+        '${_scopePrefix(scope, sudoPassword)}${runtime.name} run -d '
+        '--name $name ${arguments.isEmpty ? '' : '$arguments '}$image';
     await withClient(serverId, (client) async {
-      final result = await _execute(
+      onOutput?.call(
+        '\$ ${runtime.name} run -d --name $name '
+        '${arguments.isEmpty ? '' : '$arguments '}$image\n',
+      );
+      final result = await _executeStreaming(
         client,
-        '${_scopePrefix(scope, sudoPassword)}${runtime.name} run -d --name $name $arguments $image',
+        command,
         stdin: scope == ContainerScope.root ? sudoPassword : null,
+        onOutput: onOutput,
       );
       if (result.exitCode != 0) throw StateError(_commandError(result));
     });
+  }
+
+  bool _safeContainerRef(String value) =>
+      RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:-]*$').hasMatch(value);
+
+  /// Full inspect payload for one container, including fields used to rebuild
+  /// a `run` command.
+  Future<ContainerInspectDetail> inspectContainer(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String containerId,
+    String? sudoPassword,
+  }) async {
+    if (!_safeContainerRef(containerId)) {
+      throw ArgumentError.value(containerId, 'containerId', 'Invalid id.');
+    }
+    return withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}'
+        "${runtime.name} inspect --format '{{json .}}' $containerId",
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+      final raw = result.stdout.trim();
+      if (raw.isEmpty) {
+        throw StateError('Inspect returned no data for $containerId.');
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw StateError('Inspect payload was not a JSON object.');
+      }
+      return _parseContainerInspect(decoded, rawJson: raw);
+    });
+  }
+
+  /// Recent container logs (`stdout`/`stderr` merged by the runtime).
+  Future<String> readContainerLogs(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String containerId,
+    int tail = 300,
+    bool timestamps = false,
+    String? sudoPassword,
+  }) async {
+    if (!_safeContainerRef(containerId)) {
+      throw ArgumentError.value(containerId, 'containerId', 'Invalid id.');
+    }
+    final safeTail = tail.clamp(1, 5000);
+    return withClient(serverId, (client) async {
+      final flags = StringBuffer('--tail $safeTail');
+      if (timestamps) flags.write(' --timestamps');
+      final result = await _execute(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}'
+        '${runtime.name} logs $flags $containerId',
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      // Docker returns non-zero for missing containers; still surface stderr.
+      if (result.exitCode != 0 && result.stdout.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      final output = result.stdout.isEmpty ? result.stderr : result.stdout;
+      if (result.stderr.trim().isNotEmpty && result.stdout.isNotEmpty) {
+        return '${result.stdout}\n${result.stderr}';
+      }
+      return output;
+    });
+  }
+
+  Future<void> removeContainer(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String containerId,
+    bool force = false,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    if (!_safeContainerRef(containerId)) {
+      throw ArgumentError.value(containerId, 'containerId', 'Invalid id.');
+    }
+    final command =
+        '${_scopePrefix(scope, sudoPassword)}'
+        '${runtime.name} rm ${force ? '-f ' : ''}$containerId';
+    await withClient(serverId, (client) async {
+      onOutput?.call(
+        '\$ ${runtime.name} rm ${force ? '-f ' : ''}$containerId\n',
+      );
+      final result = await _executeStreaming(
+        client,
+        command,
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+        onOutput: onOutput,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  ContainerInspectDetail _parseContainerInspect(
+    Map<String, dynamic> json, {
+    required String rawJson,
+  }) {
+    final state = _asMap(json['State']);
+    final config = _asMap(json['Config']);
+    final hostConfig = _asMap(json['HostConfig']);
+    final networkSettings = _asMap(json['NetworkSettings']);
+    final restart = _asMap(hostConfig['RestartPolicy']);
+    final nameRaw = json['Name']?.toString() ?? '';
+    final name = nameRaw.startsWith('/') ? nameRaw.substring(1) : nameRaw;
+
+    final env = <String>[
+      for (final item in _asList(config['Env']))
+        if (item.toString().isNotEmpty) item.toString(),
+    ];
+    final entrypoint = <String>[
+      for (final item in _asList(config['Entrypoint'])) item.toString(),
+    ];
+    final command = <String>[
+      for (final item in _asList(config['Cmd'])) item.toString(),
+    ];
+    final binds = <String>[
+      for (final item in _asList(hostConfig['Binds'])) item.toString(),
+    ];
+    final mounts = <String>[];
+    for (final item in _asList(json['Mounts'])) {
+      final mount = _asMap(item);
+      final source = mount['Source']?.toString() ?? '';
+      final destination = mount['Destination']?.toString() ?? '';
+      if (source.isEmpty || destination.isEmpty) continue;
+      final mode = mount['Mode']?.toString() ?? '';
+      mounts.add(
+        mode.isEmpty ? '$source:$destination' : '$source:$destination:$mode',
+      );
+    }
+    final ports = <String>[];
+    final portBindings = _asMap(hostConfig['PortBindings']);
+    for (final entry in portBindings.entries) {
+      final containerPort = entry.key.toString(); // e.g. 80/tcp
+      final bindings = _asList(entry.value);
+      if (bindings.isEmpty) {
+        ports.add(containerPort.replaceAll('/tcp', '').replaceAll('/udp', ''));
+        continue;
+      }
+      for (final binding in bindings) {
+        final map = _asMap(binding);
+        final hostIp = map['HostIp']?.toString() ?? '';
+        final hostPort = map['HostPort']?.toString() ?? '';
+        final containerOnly = containerPort.split('/').first;
+        if (hostPort.isEmpty) {
+          ports.add(containerOnly);
+        } else if (hostIp.isEmpty || hostIp == '0.0.0.0' || hostIp == '::') {
+          ports.add('$hostPort:$containerOnly');
+        } else {
+          ports.add('$hostIp:$hostPort:$containerOnly');
+        }
+      }
+    }
+    final labels = <String, String>{};
+    final labelMap = _asMap(config['Labels']);
+    for (final entry in labelMap.entries) {
+      labels[entry.key.toString()] = entry.value?.toString() ?? '';
+    }
+    final networks = <String>[];
+    final networksMap = _asMap(networkSettings['Networks']);
+    networks.addAll(networksMap.keys.map((key) => key.toString()));
+
+    final stateName =
+        state['Status']?.toString() ?? state['status']?.toString() ?? '';
+    final status = [
+      if (stateName.isNotEmpty) stateName,
+      if (state['Error']?.toString().isNotEmpty == true) state['Error'],
+      if (state['ExitCode'] != null && stateName != 'running')
+        'exit ${state['ExitCode']}',
+    ].join(' · ');
+
+    return ContainerInspectDetail(
+      id: json['Id']?.toString() ?? '',
+      name: name,
+      image: config['Image']?.toString() ?? json['Image']?.toString() ?? '',
+      state: stateName,
+      status: status.isEmpty ? stateName : status,
+      created: json['Created']?.toString(),
+      startedAt: state['StartedAt']?.toString(),
+      finishedAt: state['FinishedAt']?.toString(),
+      exitCode: int.tryParse(state['ExitCode']?.toString() ?? ''),
+      platform: json['Platform']?.toString() ?? config['Platform']?.toString(),
+      restartPolicy: restart['Name']?.toString() ?? 'no',
+      networkMode: hostConfig['NetworkMode']?.toString() ?? 'default',
+      workingDir: config['WorkingDir']?.toString(),
+      user: config['User']?.toString(),
+      entrypoint: entrypoint,
+      command: command,
+      env: env,
+      ports: ports,
+      binds: binds.isNotEmpty ? binds : mounts,
+      mounts: mounts,
+      labels: labels,
+      networks: networks,
+      rawJson: rawJson,
+    );
+  }
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, item) => MapEntry(key.toString(), item));
+    }
+    return const {};
+  }
+
+  List<dynamic> _asList(Object? value) {
+    if (value is List) return value;
+    return const [];
   }
 
   Future<void> runComposeProjectAction(

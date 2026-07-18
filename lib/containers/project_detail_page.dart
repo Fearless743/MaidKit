@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 
 import '../data/local/app_database.dart';
+import '../routing/app_router.gr.dart';
 import '../servers/server_connection_actions.dart';
 import '../servers/server_models.dart';
 import '../servers/server_providers.dart';
@@ -461,6 +462,9 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
           onConnect: () => _connect(server),
         ),
         inspector: _InspectorTabs(
+          server: server,
+          runtime: _runtime,
+          scope: _scope,
           containers: containers,
           containersError: _containersError,
           connected: connected,
@@ -1000,6 +1004,9 @@ class _MetricCard extends StatelessWidget {
 
 class _InspectorTabs extends StatelessWidget {
   const _InspectorTabs({
+    required this.server,
+    required this.runtime,
+    required this.scope,
     required this.containers,
     required this.containersError,
     required this.connected,
@@ -1013,6 +1020,9 @@ class _InspectorTabs extends StatelessWidget {
     required this.onRefreshCompose,
   });
 
+  final Server server;
+  final ContainerRuntime runtime;
+  final ContainerScope scope;
   final List<ServerContainer> containers;
   final Object? containersError;
   final bool connected;
@@ -1049,6 +1059,9 @@ class _InspectorTabs extends StatelessWidget {
             child: TabBarView(
               children: [
                 _ContainersPane(
+                  server: server,
+                  runtime: runtime,
+                  scope: scope,
                   containers: containers,
                   containersError: containersError,
                   connected: connected,
@@ -1078,6 +1091,9 @@ enum _ContainerSort { name, cpu, memory, network, block, status }
 
 class _ContainersPane extends StatefulWidget {
   const _ContainersPane({
+    required this.server,
+    required this.runtime,
+    required this.scope,
     required this.containers,
     required this.containersError,
     required this.connected,
@@ -1087,6 +1103,9 @@ class _ContainersPane extends StatefulWidget {
     required this.onRefresh,
   });
 
+  final Server server;
+  final ContainerRuntime runtime;
+  final ContainerScope scope;
   final List<ServerContainer> containers;
   final Object? containersError;
   final bool connected;
@@ -1244,6 +1263,15 @@ class _ContainersPaneState extends State<_ContainersPane> {
                           container: container,
                           stats: widget.statsFor(container),
                           wide: wide,
+                          onOpen: () => context.router.push(
+                            ContainerDetailRoute(
+                              server: widget.server,
+                              runtime: widget.runtime,
+                              scope: widget.scope,
+                              containerId: container.id,
+                              containerName: container.name,
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -1407,11 +1435,13 @@ class _ContainerRow extends StatelessWidget {
     required this.container,
     required this.stats,
     required this.wide,
+    required this.onOpen,
   });
 
   final ServerContainer container;
   final ContainerStats? stats;
   final bool wide;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -1422,122 +1452,131 @@ class _ContainerRow extends StatelessWidget {
       fontFamily: MaidKitFonts.mono,
       fontSize: 12,
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Row(
-              children: [
-                Icon(
-                  running ? Symbols.play_circle : Symbols.stop_circle,
-                  size: 18,
-                  color: running ? scheme.primary : scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        container.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        container.image,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      if (!wide && stats != null) ...[
-                        const SizedBox(height: 4),
+    return InkWell(
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  Icon(
+                    running ? Symbols.play_circle : Symbols.stop_circle,
+                    size: 18,
+                    color: running ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          [
-                            if (stats!.cpuPercent != null)
-                              'CPU ${stats!.cpuPercent!.toStringAsFixed(1)}%',
-                            if (stats!.memUsage.isNotEmpty)
-                              'Mem ${stats!.memUsage.split('/').first.trim()}',
-                          ].join(' · '),
+                          container.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          container.image,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                         ),
+                        if (!wide && stats != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            [
+                              if (stats!.cpuPercent != null)
+                                'CPU ${stats!.cpuPercent!.toStringAsFixed(1)}%',
+                              if (stats!.memUsage.isNotEmpty)
+                                'Mem ${stats!.memUsage.split('/').first.trim()}',
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
+                ],
+              ),
+            ),
+            if (wide) ...[
+              SizedBox(
+                width: 72,
+                child: Text(
+                  stats?.cpuPercent == null
+                      ? '—'
+                      : '${stats!.cpuPercent!.toStringAsFixed(1)}%',
+                  textAlign: TextAlign.end,
+                  style: mono,
                 ),
-              ],
-            ),
-          ),
-          if (wide) ...[
-            SizedBox(
-              width: 72,
-              child: Text(
-                stats?.cpuPercent == null
-                    ? '—'
-                    : '${stats!.cpuPercent!.toStringAsFixed(1)}%',
-                textAlign: TextAlign.end,
-                style: mono,
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 108,
-              child: Text(
-                stats == null
-                    ? '—'
-                    : (stats!.memUsedBytes != null
-                          ? _formatBytes(stats!.memUsedBytes!)
-                          : stats!.memUsage.split('/').first.trim()),
-                textAlign: TextAlign.end,
-                style: mono,
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 108,
+                child: Text(
+                  stats == null
+                      ? '—'
+                      : (stats!.memUsedBytes != null
+                            ? _formatBytes(stats!.memUsedBytes!)
+                            : stats!.memUsage.split('/').first.trim()),
+                  textAlign: TextAlign.end,
+                  style: mono,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 120,
+                child: Text(
+                  stats?.netIO.isNotEmpty == true ? stats!.netIO : '—',
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mono,
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 120,
+                child: Text(
+                  stats?.blockIO.isNotEmpty == true ? stats!.blockIO : '—',
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mono,
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
             SizedBox(
-              width: 120,
+              width: wide ? 100 : 88,
               child: Text(
-                stats?.netIO.isNotEmpty == true ? stats!.netIO : '—',
+                container.status,
                 textAlign: TextAlign.end,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: mono,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 120,
-              child: Text(
-                stats?.blockIO.isNotEmpty == true ? stats!.blockIO : '—',
-                textAlign: TextAlign.end,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: mono,
-              ),
+            const SizedBox(width: 4),
+            Icon(
+              Symbols.chevron_right,
+              size: 18,
+              color: scheme.onSurfaceVariant,
             ),
-            const SizedBox(width: 12),
           ],
-          SizedBox(
-            width: wide ? 100 : 88,
-            child: Text(
-              container.status,
-              textAlign: TextAlign.end,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
