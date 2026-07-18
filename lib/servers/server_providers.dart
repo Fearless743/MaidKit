@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'ghostty_terminal_session_adapter.dart';
 import 'metrics_refresh_preferences.dart';
+import 'port_forwarding_models.dart';
 import 'server_repository.dart';
 import 'server_metrics_refresh_scheduler.dart';
 import 'ssh_connection_manager.dart';
@@ -206,6 +207,18 @@ final sessionsProvider = StreamProvider<List<SshSessionInfo>>((ref) {
   final manager = ref.watch(connectionManagerProvider);
   return _watchSessions(manager);
 });
+
+final portForwardsProvider = StreamProvider<List<ActivePortForward>>((ref) {
+  final manager = ref.watch(connectionManagerProvider);
+  return _watchPortForwards(manager);
+});
+
+Stream<List<ActivePortForward>> _watchPortForwards(
+  SshConnectionManager manager,
+) async* {
+  yield manager.currentPortForwards;
+  yield* manager.portForwards;
+}
 
 Stream<List<SshSessionInfo>> _watchSessions(
   SshConnectionManager manager,

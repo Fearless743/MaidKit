@@ -1,9 +1,12 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
+import 'port_forwarding_models.dart';
+import 'server_providers.dart';
 
 @RoutePage()
 class ServerWorkspacePage extends StatelessWidget {
@@ -28,13 +31,13 @@ class ServerWorkspacePage extends StatelessWidget {
   }
 }
 
-class _ServerTabsShell extends StatelessWidget {
+class _ServerTabsShell extends ConsumerWidget {
   const _ServerTabsShell({required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tabsRouter = AutoTabsRouter.of(context);
 
     return LayoutBuilder(
@@ -58,6 +61,8 @@ class _ServerTabsShell extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            const _PortForwardRailIndicator(),
+                            const SizedBox(height: 8),
                             const DeploySessionsRailButton(),
                             IconButton(
                               tooltip: 'Settings',
@@ -131,6 +136,42 @@ class _ServerTabsShell extends StatelessWidget {
                 ),
         );
       },
+    );
+  }
+}
+
+class _PortForwardRailIndicator extends ConsumerWidget {
+  const _PortForwardRailIndicator();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final forwards = ref.watch(portForwardsProvider).asData?.value ?? const [];
+    if (forwards.isEmpty) return const SizedBox.shrink();
+    return Badge(
+      label: Text('${forwards.length}'),
+      child: PopupMenuButton<ActivePortForward>(
+        tooltip:
+            '${forwards.length} active port forward${forwards.length == 1 ? '' : 's'}',
+        icon: const Icon(Symbols.swap_horiz),
+        onSelected: (forward) =>
+            ref.read(connectionManagerProvider).stopPortForward(forward.id),
+        itemBuilder: (context) => [
+          for (final forward in forwards)
+            PopupMenuItem(
+              value: forward,
+              child: SizedBox(
+                width: 260,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Symbols.swap_horiz),
+                  title: Text(forward.serverName),
+                  subtitle: Text(forward.summary),
+                  trailing: const Icon(Symbols.stop_circle),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -10,6 +11,7 @@ import 'activity_models.dart';
 import 'crontab_models.dart';
 import 'firewall_models.dart';
 import 'package_models.dart';
+import 'port_forwarding_models.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'systemd_models.dart';
@@ -32,11 +34,112 @@ class SshConnectionManager {
   final _sessions = <int, SSHClient>{};
   final _terminals = <String, _TerminalConnection>{};
   final _controller = StreamController<List<SshSessionInfo>>.broadcast();
+  final _portForwardController =
+      StreamController<List<ActivePortForward>>.broadcast();
   final _states = <int, SshSessionInfo>{};
+  final _portForwards = <String, _PortForwardingConnection>{};
   var _nextTerminalId = 0;
+  var _nextPortForwardId = 0;
 
   Stream<List<SshSessionInfo>> get sessions => _controller.stream;
   List<SshSessionInfo> get current => _states.values.toList();
+  Stream<List<ActivePortForward>> get portForwards =>
+      _portForwardController.stream;
+  List<ActivePortForward> get currentPortForwards =>
+      _portForwards.values.map((forward) => forward.info).toList();
+
+  Future<ActivePortForward> startPortForward({
+    required Server server,
+    required PortForwardDirection direction,
+    required String bindHost,
+    required int bindPort,
+    required String targetHost,
+    required int targetPort,
+  }) async {
+    final client = clientFor(server.id);
+    if (client == null) {
+      throw StateError(
+        'Connect to this server before starting a port forward.',
+      );
+    }
+    final id = 'forward-${_nextPortForwardId++}';
+    final info = ActivePortForward(
+      id: id,
+      serverId: server.id,
+      serverName: server.name,
+      direction: direction,
+      bindHost: bindHost,
+      bindPort: bindPort,
+      targetHost: targetHost,
+      targetPort: targetPort,
+    );
+
+    late final _PortForwardingConnection connection;
+    if (direction == PortForwardDirection.local) {
+      final listener = await ServerSocket.bind(bindHost, bindPort);
+      connection = _PortForwardingConnection.local(info, listener);
+      connection.subscription = listener.listen((socket) {
+        unawaited(_pipeLocalConnection(client, socket, targetHost, targetPort));
+      }, onError: (_, _) => unawaited(stopPortForward(id)));
+    } else {
+      final remote = await client.forwardRemote(host: bindHost, port: bindPort);
+      if (remote == null) {
+        throw StateError(
+          'The SSH server refused to listen on $bindHost:$bindPort.',
+        );
+      }
+      connection = _PortForwardingConnection.remote(info, remote);
+      connection.subscription = remote.connections.listen((channel) {
+        unawaited(_pipeRemoteConnection(channel, targetHost, targetPort));
+      }, onError: (_, _) => unawaited(stopPortForward(id)));
+    }
+    _portForwards[id] = connection;
+    _emitPortForwards();
+    return info;
+  }
+
+  Future<void> stopPortForward(String id) async {
+    final forward = _portForwards.remove(id);
+    if (forward == null) return;
+    await forward.close();
+    _emitPortForwards();
+  }
+
+  Future<void> _pipeLocalConnection(
+    SSHClient client,
+    Socket socket,
+    String targetHost,
+    int targetPort,
+  ) async {
+    try {
+      final channel = await client.forwardLocal(
+        targetHost,
+        targetPort,
+        localHost: socket.remoteAddress.address,
+        localPort: socket.remotePort,
+      );
+      unawaited(channel.stream.cast<List<int>>().pipe(socket));
+      unawaited(socket.cast<List<int>>().pipe(channel.sink));
+    } catch (_) {
+      await socket.close();
+    }
+  }
+
+  Future<void> _pipeRemoteConnection(
+    SSHForwardChannel channel,
+    String targetHost,
+    int targetPort,
+  ) async {
+    try {
+      final socket = await Socket.connect(targetHost, targetPort);
+      unawaited(channel.stream.cast<List<int>>().pipe(socket));
+      unawaited(socket.cast<List<int>>().pipe(channel.sink));
+    } catch (_) {
+      await channel.sink.close();
+    }
+  }
+
+  void _emitPortForwards() => _portForwardController.add(currentPortForwards);
 
   /// Returns the retained authenticated client for [serverId], if available.
   ///
@@ -2267,6 +2370,7 @@ fi
         client.done.whenComplete(() {
           if (!identical(_sessions[server.id], client)) return;
           _sessions.remove(server.id);
+          unawaited(_stopPortForwardsFor(server.id));
           unawaited(_closeTerminalsFor(server.id));
           final state = _states[server.id];
           if (state != null && state.status == SessionStatus.connected) {
@@ -2291,6 +2395,7 @@ fi
   }
 
   Future<void> disconnect(int serverId) async {
+    await _stopPortForwardsFor(serverId);
     final client = _sessions.remove(serverId);
     client?.close();
     final state = _states[serverId];
@@ -2309,7 +2414,21 @@ fi
     for (final client in _sessions.values) {
       client.close();
     }
+    for (final id in _portForwards.keys.toList()) {
+      await stopPortForward(id);
+    }
     await _controller.close();
+    await _portForwardController.close();
+  }
+
+  Future<void> _stopPortForwardsFor(int serverId) async {
+    final ids = _portForwards.entries
+        .where((entry) => entry.value.info.serverId == serverId)
+        .map((entry) => entry.key)
+        .toList();
+    for (final id in ids) {
+      await stopPortForward(id);
+    }
   }
 
   Future<void> _closeTerminalsFor(int serverId) async {
@@ -2418,6 +2537,25 @@ class _TerminalConnection {
   final SSHClient client;
   final SSHSession shell;
   final TerminalSessionBinding binding;
+}
+
+class _PortForwardingConnection {
+  _PortForwardingConnection.local(this.info, this.localListener)
+    : remoteForward = null;
+
+  _PortForwardingConnection.remote(this.info, this.remoteForward)
+    : localListener = null;
+
+  final ActivePortForward info;
+  final ServerSocket? localListener;
+  final SSHRemoteForward? remoteForward;
+  StreamSubscription<Object?>? subscription;
+
+  Future<void> close() async {
+    await subscription?.cancel();
+    await localListener?.close();
+    remoteForward?.close();
+  }
 }
 
 class _CommandResult {

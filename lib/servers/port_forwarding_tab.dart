@@ -1,0 +1,276 @@
+import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+import 'package:maid_kit/data/local/app_database.dart';
+import 'port_forwarding_models.dart';
+import 'server_providers.dart';
+
+class PortForwardingTab extends ConsumerStatefulWidget {
+  const PortForwardingTab({
+    super.key,
+    required this.server,
+    required this.connected,
+  });
+
+  final Server server;
+  final bool connected;
+
+  @override
+  ConsumerState<PortForwardingTab> createState() => _PortForwardingTabState();
+}
+
+class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
+  final _formKey = GlobalKey<FormState>();
+  final _bindHost = TextEditingController(text: '127.0.0.1');
+  final _bindPort = TextEditingController();
+  final _targetHost = TextEditingController(text: '127.0.0.1');
+  final _targetPort = TextEditingController();
+  var _direction = PortForwardDirection.local;
+  var _starting = false;
+
+  @override
+  void dispose() {
+    _bindHost.dispose();
+    _bindPort.dispose();
+    _targetHost.dispose();
+    _targetPort.dispose();
+    super.dispose();
+  }
+
+  Future<void> _start() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _starting = true);
+    try {
+      await ref
+          .read(connectionManagerProvider)
+          .startPortForward(
+            server: widget.server,
+            direction: _direction,
+            bindHost: _bindHost.text.trim(),
+            bindPort: int.parse(_bindPort.text),
+            targetHost: _targetHost.text.trim(),
+            targetPort: int.parse(_targetPort.text),
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Port forwarding started.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start forwarding: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final forwards =
+        (ref.watch(portForwardsProvider).asData?.value ??
+                const <ActivePortForward>[])
+            .where((forward) => forward.serverId == widget.server.id);
+    final scheme = Theme.of(context).colorScheme;
+    final directionDescription = switch (_direction) {
+      PortForwardDirection.local =>
+        'Listen on this computer and send connections through SSH to the server network.',
+      PortForwardDirection.remote =>
+        'Listen on the server and send connections through SSH to this computer network.',
+    };
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Port forwarding', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          directionDescription,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        if (!widget.connected)
+          _ConnectionNotice()
+        else
+          Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SegmentedButton<PortForwardDirection>(
+                  segments: const [
+                    ButtonSegment(
+                      value: PortForwardDirection.local,
+                      icon: Icon(Symbols.laptop_mac),
+                      label: Text('Local listener'),
+                    ),
+                    ButtonSegment(
+                      value: PortForwardDirection.remote,
+                      icon: Icon(Symbols.dns),
+                      label: Text('Server listener'),
+                    ),
+                  ],
+                  selected: {_direction},
+                  onSelectionChanged: (value) =>
+                      setState(() => _direction = value.first),
+                ),
+                const SizedBox(height: 16),
+                _ForwardFields(
+                  bindHost: _bindHost,
+                  bindPort: _bindPort,
+                  targetHost: _targetHost,
+                  targetPort: _targetPort,
+                  direction: _direction,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _starting ? null : _start,
+                  icon: _starting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Symbols.play_arrow),
+                  label: const Text('Start forwarding'),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 24),
+        Text('Active forwards', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        if (forwards.isEmpty)
+          Text(
+            'No ports are currently being forwarded.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          )
+        else
+          for (final forward in forwards) _ForwardTile(forward: forward),
+      ],
+    );
+  }
+}
+
+class _ConnectionNotice extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => const ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(Symbols.link_off),
+    title: Text('Connect to configure forwarding'),
+    subtitle: Text('Port forwards run inside the server SSH connection.'),
+  );
+}
+
+class _ForwardFields extends StatelessWidget {
+  const _ForwardFields({
+    required this.bindHost,
+    required this.bindPort,
+    required this.targetHost,
+    required this.targetPort,
+    required this.direction,
+  });
+
+  final TextEditingController bindHost;
+  final TextEditingController bindPort;
+  final TextEditingController targetHost;
+  final TextEditingController targetPort;
+  final PortForwardDirection direction;
+
+  @override
+  Widget build(BuildContext context) {
+    final listener = direction == PortForwardDirection.local
+        ? 'This computer listens'
+        : 'Server listens';
+    final target = direction == PortForwardDirection.local
+        ? 'Server network target'
+        : 'This computer target';
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _HostPortFields(label: listener, host: bindHost, port: bindPort),
+        _HostPortFields(label: target, host: targetHost, port: targetPort),
+      ],
+    );
+  }
+}
+
+class _HostPortFields extends StatelessWidget {
+  const _HostPortFields({
+    required this.label,
+    required this.host,
+    required this.port,
+  });
+
+  final String label;
+  final TextEditingController host;
+  final TextEditingController port;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 300,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: host,
+          decoration: const InputDecoration(labelText: 'Host'),
+          validator: _hostValidator,
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: port,
+          decoration: const InputDecoration(labelText: 'Port'),
+          keyboardType: TextInputType.number,
+          validator: _portValidator,
+        ),
+      ],
+    ),
+  );
+}
+
+class _ForwardTile extends ConsumerWidget {
+  const _ForwardTile({required this.forward});
+
+  final ActivePortForward forward;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(
+      forward.direction == PortForwardDirection.local
+          ? Symbols.laptop_mac
+          : Symbols.dns,
+    ),
+    title: Text('${forward.directionLabel} · ${forward.summary}'),
+    subtitle: Text(
+      'Running on ${forward.direction == PortForwardDirection.local ? 'this computer' : forward.serverName}',
+    ),
+    trailing: IconButton(
+      tooltip: 'Stop forwarding',
+      onPressed: () =>
+          ref.read(connectionManagerProvider).stopPortForward(forward.id),
+      icon: const Icon(Symbols.stop_circle),
+    ),
+  );
+}
+
+String? _hostValidator(String? value) =>
+    value == null || value.trim().isEmpty ? 'Enter a host' : null;
+
+String? _portValidator(String? value) {
+  final port = int.tryParse(value ?? '');
+  return port == null || port < 1 || port > 65535
+      ? 'Enter a port from 1 to 65535'
+      : null;
+}
