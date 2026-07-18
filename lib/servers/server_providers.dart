@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../data/local/app_database.dart';
+import 'package:maid_kit/data/local/app_database.dart';
 import 'ghostty_terminal_session_adapter.dart';
 import 'metrics_refresh_preferences.dart';
 import 'server_repository.dart';

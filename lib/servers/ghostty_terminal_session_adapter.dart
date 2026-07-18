@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:libghostty/libghostty.dart' as ghostty;
 
-import '../theme.dart';
+import 'package:maid_kit/theme.dart';
 import 'terminal_session_adapter.dart';
 
 /// Experimental terminal adapter backed by libghostty-vt.

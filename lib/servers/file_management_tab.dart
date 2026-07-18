@@ -11,8 +11,8 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
-import '../shared/presentation/task_progress.dart';
-import '../theme.dart';
+import 'package:maid_kit/shared/presentation/task_progress.dart';
+import 'package:maid_kit/theme.dart';
 import 'server_connection_actions.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';

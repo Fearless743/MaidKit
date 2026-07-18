@@ -3,9 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../data/local/app_database.dart';
-import '../shared/presentation/cloud_file_picker.dart';
-import '../shared/presentation/maidkit_alert.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/shared/presentation/cloud_file_picker.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';

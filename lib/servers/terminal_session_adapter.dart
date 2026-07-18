@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
-import '../theme.dart';
+import 'package:maid_kit/theme.dart';
 
 /// A terminal emulator instance attached to one remote shell.
 ///

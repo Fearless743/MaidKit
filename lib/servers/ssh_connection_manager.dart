@@ -4,8 +4,8 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
-import '../containers/container_models.dart';
-import '../data/local/app_database.dart';
+import 'package:maid_kit/containers/container_models.dart';
+import 'package:maid_kit/data/local/app_database.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';

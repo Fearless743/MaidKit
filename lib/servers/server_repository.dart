@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/local/app_database.dart';
+import 'package:maid_kit/data/local/app_database.dart';
 import 'server_models.dart';
 import 'vault_service.dart';
 

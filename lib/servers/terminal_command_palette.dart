@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../data/local/app_database.dart';
-import '../shared/presentation/maidkit_alert.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'server_connection_actions.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';

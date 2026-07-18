@@ -7,8 +7,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
-import '../data/local/app_database.dart';
-import '../routing/app_router.gr.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/routing/app_router.gr.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';

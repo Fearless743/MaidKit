@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../../theme.dart';
+import 'package:maid_kit/theme.dart';
 
 /// What the picker should allow the user to choose.
 enum CloudFilePickerSelection {

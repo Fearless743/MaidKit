@@ -7,10 +7,10 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'container_models.dart';
-import '../data/local/app_database.dart';
-import '../routing/app_router.gr.dart';
-import '../servers/server_models.dart';
-import '../servers/server_providers.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/routing/app_router.gr.dart';
+import 'package:maid_kit/servers/server_models.dart';
+import 'package:maid_kit/servers/server_providers.dart';
 
 /// A reusable container-management surface for a single server. Its data is
 /// scoped by runtime (Docker/Podman) and by user/root environment so it can be

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../data/local/app_database.dart';
+import 'package:maid_kit/data/local/app_database.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'ssh_connection_manager.dart';

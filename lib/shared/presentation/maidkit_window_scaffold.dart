@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 
-import '../../servers/terminal_command_palette.dart';
+import 'package:maid_kit/servers/terminal_command_palette.dart';
 import 'task_progress.dart';
 
 final desktopWindowProvider = Provider<bool>(

@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../data/local/app_database.dart';
-import '../servers/server_providers.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/servers/server_providers.dart';
 import 'container_models.dart';
 
 final containerCacheRepositoryProvider = Provider<ContainerCacheRepository>(

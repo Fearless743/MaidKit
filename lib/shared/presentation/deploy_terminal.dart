@@ -5,7 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../../theme.dart';
+import 'package:maid_kit/theme.dart';
 
 enum DeploySessionStatus { running, succeeded, failed }
 

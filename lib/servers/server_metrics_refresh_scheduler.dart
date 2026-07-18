@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../data/local/app_database.dart';
+import 'package:maid_kit/data/local/app_database.dart';
 import 'server_models.dart';
 import 'ssh_connection_manager.dart';
 

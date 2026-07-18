@@ -6,8 +6,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 
-import '../data/local/app_database.dart';
-import '../containers/container_management_tab.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/containers/container_management_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';

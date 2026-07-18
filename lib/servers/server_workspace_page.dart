@@ -2,8 +2,8 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../routing/app_router.gr.dart';
-import '../shared/presentation/deploy_terminal.dart';
+import 'package:maid_kit/routing/app_router.gr.dart';
+import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 
 @RoutePage()
 class ServerWorkspacePage extends StatelessWidget {

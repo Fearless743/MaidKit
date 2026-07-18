@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../data/local/app_database.dart';
+import 'package:maid_kit/data/local/app_database.dart';
 import 'container_models.dart';
 
 class ProjectRepository {

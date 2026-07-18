@@ -9,12 +9,12 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 
-import '../data/local/app_database.dart';
-import '../servers/server_connection_actions.dart';
-import '../servers/server_models.dart';
-import '../servers/server_providers.dart';
-import '../shared/presentation/deploy_terminal.dart';
-import '../theme.dart';
+import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/servers/server_connection_actions.dart';
+import 'package:maid_kit/servers/server_models.dart';
+import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
+import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
 
 @RoutePage()
