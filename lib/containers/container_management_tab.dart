@@ -360,9 +360,44 @@ class _ContainerEnvironmentSection extends StatelessWidget {
             containerName: container.name,
           ),
         ),
-        trailing: AppContextMenuButton(
+        trailing: PopupMenuButton<ContainerAction>(
           tooltip: 'Container actions',
-          menuBuilder: menu,
+          onSelected: onAction,
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: ContainerAction.start,
+              enabled: !running,
+              child: const Row(
+                children: [
+                  Icon(Symbols.play_arrow, size: 20),
+                  SizedBox(width: 12),
+                  Text('Start'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: ContainerAction.stop,
+              enabled: running,
+              child: const Row(
+                children: [
+                  Icon(Symbols.stop, size: 20),
+                  SizedBox(width: 12),
+                  Text('Stop'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: ContainerAction.restart,
+              child: Row(
+                children: [
+                  Icon(Symbols.restart_alt, size: 20),
+                  SizedBox(width: 12),
+                  Text('Restart'),
+                ],
+              ),
+            ),
+          ],
+          icon: const Icon(Symbols.more_vert),
         ),
       ),
     );

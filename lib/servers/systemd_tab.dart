@@ -178,6 +178,9 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
         'Stop ${unit.name}? Running processes for this service will be terminated.',
       SystemdUnitAction.restart =>
         'Restart ${unit.name}? The service will briefly be unavailable.',
+      SystemdUnitAction.reload =>
+        'Reload ${unit.name}? Configuration is re-read without a full restart '
+            'when the unit supports it.',
       SystemdUnitAction.disable =>
         'Disable ${unit.name}? It will not start automatically on boot.',
       SystemdUnitAction.enable =>
@@ -373,7 +376,12 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                               onPressed: () => _searchController.clear(),
                               icon: const Icon(Symbols.close, size: 18),
                             ),
-                      border: const OutlineInputBorder(),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -478,6 +486,11 @@ class _ServiceTile extends StatelessWidget {
           image: MenuImage.icon(Symbols.restart_alt),
           callback: () => onAction(SystemdUnitAction.restart),
         ),
+        MenuAction(
+          title: 'Reload',
+          image: MenuImage.icon(Symbols.sync),
+          callback: () => onAction(SystemdUnitAction.reload),
+        ),
       ],
       if (unit.canEnable)
         MenuAction(
@@ -504,6 +517,27 @@ class _ServiceTile extends StatelessWidget {
       ),
     ],
   );
+
+  void _onPopupSelected(_ServiceMenuAction value) {
+    switch (value) {
+      case _ServiceMenuAction.start:
+        onAction(SystemdUnitAction.start);
+      case _ServiceMenuAction.stop:
+        onAction(SystemdUnitAction.stop);
+      case _ServiceMenuAction.restart:
+        onAction(SystemdUnitAction.restart);
+      case _ServiceMenuAction.reload:
+        onAction(SystemdUnitAction.reload);
+      case _ServiceMenuAction.enable:
+        onAction(SystemdUnitAction.enable);
+      case _ServiceMenuAction.disable:
+        onAction(SystemdUnitAction.disable);
+      case _ServiceMenuAction.status:
+        onStatus();
+      case _ServiceMenuAction.logs:
+        onLogs();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -555,15 +589,65 @@ class _ServiceTile extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : AppContextMenuButton(
+            : PopupMenuButton<_ServiceMenuAction>(
                 tooltip: 'Actions',
-                menuBuilder: _menu,
-                visualDensity: VisualDensity.compact,
+                onSelected: _onPopupSelected,
+                itemBuilder: (context) => [
+                  if (!unit.isActive)
+                    const PopupMenuItem(
+                      value: _ServiceMenuAction.start,
+                      child: Text('Start'),
+                    ),
+                  if (unit.isActive) ...[
+                    const PopupMenuItem(
+                      value: _ServiceMenuAction.stop,
+                      child: Text('Stop'),
+                    ),
+                    const PopupMenuItem(
+                      value: _ServiceMenuAction.restart,
+                      child: Text('Restart'),
+                    ),
+                    const PopupMenuItem(
+                      value: _ServiceMenuAction.reload,
+                      child: Text('Reload'),
+                    ),
+                  ],
+                  if (unit.canEnable)
+                    const PopupMenuItem(
+                      value: _ServiceMenuAction.enable,
+                      child: Text('Enable on boot'),
+                    ),
+                  if (unit.canDisable)
+                    const PopupMenuItem(
+                      value: _ServiceMenuAction.disable,
+                      child: Text('Disable on boot'),
+                    ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: _ServiceMenuAction.status,
+                    child: Text('Status'),
+                  ),
+                  const PopupMenuItem(
+                    value: _ServiceMenuAction.logs,
+                    child: Text('Logs'),
+                  ),
+                ],
               ),
         onTap: busy ? null : onStatus,
       ),
     );
   }
+}
+
+enum _ServiceMenuAction {
+  start,
+  stop,
+  restart,
+  reload,
+  enable,
+  disable,
+  status,
+  logs,
 }
 
 class _UnitTextSheet extends StatefulWidget {

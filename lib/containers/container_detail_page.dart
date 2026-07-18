@@ -8,14 +8,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
-import 'package:super_context_menu/super_context_menu.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/ansi_log_view.dart';
-import 'package:maid_kit/shared/presentation/app_context_menu.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
@@ -453,36 +451,37 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
                 : null,
             icon: const Icon(Symbols.refresh),
           ),
-          AppContextMenuButton(
+          PopupMenuButton<String>(
             enabled: connected && !_actionBusy,
-            menuBuilder: () => Menu(
-              children: [
-                MenuAction(
-                  title: 'Start',
-                  image: MenuImage.icon(Symbols.play_arrow),
-                  attributes: MenuActionAttributes(disabled: running),
-                  callback: () => unawaited(_runAction(ContainerAction.start)),
-                ),
-                MenuAction(
-                  title: 'Stop',
-                  image: MenuImage.icon(Symbols.stop),
-                  attributes: MenuActionAttributes(disabled: !running),
-                  callback: () => unawaited(_runAction(ContainerAction.stop)),
-                ),
-                MenuAction(
-                  title: 'Restart',
-                  image: MenuImage.icon(Symbols.restart_alt),
-                  callback: () =>
-                      unawaited(_runAction(ContainerAction.restart)),
-                ),
-                MenuSeparator(),
-                MenuAction(
-                  title: 'Re-create from inspect',
-                  image: MenuImage.icon(Symbols.replay),
-                  callback: () => unawaited(_recreateFromInspect()),
-                ),
-              ],
-            ),
+            onSelected: (value) {
+              switch (value) {
+                case 'start':
+                  unawaited(_runAction(ContainerAction.start));
+                case 'stop':
+                  unawaited(_runAction(ContainerAction.stop));
+                case 'restart':
+                  unawaited(_runAction(ContainerAction.restart));
+                case 'recreate':
+                  unawaited(_recreateFromInspect());
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'start',
+                enabled: !running,
+                child: const Text('Start'),
+              ),
+              PopupMenuItem(
+                value: 'stop',
+                enabled: running,
+                child: const Text('Stop'),
+              ),
+              const PopupMenuItem(value: 'restart', child: Text('Restart')),
+              const PopupMenuItem(
+                value: 'recreate',
+                child: Text('Re-create from inspect'),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
         ],

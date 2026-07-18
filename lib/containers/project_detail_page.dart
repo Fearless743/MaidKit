@@ -6,14 +6,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
-import 'package:super_context_menu/super_context_menu.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
-import 'package:maid_kit/shared/presentation/app_context_menu.dart';
 import 'package:maid_kit/theme.dart';
 import 'compose_project_actions.dart';
 import 'container_cache_repository.dart';
@@ -440,16 +438,12 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
                 : null,
             icon: const Icon(Symbols.refresh),
           ),
-          AppContextMenuButton(
-            menuBuilder: () => Menu(
-              children: [
-                for (final action in ComposeProjectAction.values)
-                  MenuAction(
-                    title: action.label,
-                    callback: () => unawaited(_action(server, action)),
-                  ),
-              ],
-            ),
+          PopupMenuButton<ComposeProjectAction>(
+            onSelected: (action) => unawaited(_action(server, action)),
+            itemBuilder: (_) => [
+              for (final action in ComposeProjectAction.values)
+                PopupMenuItem(value: action, child: Text(action.label)),
+            ],
           ),
           const SizedBox(width: 8),
         ],

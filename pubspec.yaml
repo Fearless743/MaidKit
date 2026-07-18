@@ -54,7 +54,6 @@ dependencies:
   libghostty: ^0.0.11
   shared_preferences: ^2.5.5
   super_context_menu: ^0.9.1
-  super_native_extensions: ^0.9.1
   uuid: ^4.6.0
   xterm: ^4.0.0
 

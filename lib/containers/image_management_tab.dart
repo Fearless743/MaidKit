@@ -571,9 +571,22 @@ class _ImageEnvironmentSection extends StatelessWidget {
       child: ContainerImageListTile(
         image: image,
         contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-        trailing: AppContextMenuButton(
+        trailing: PopupMenuButton<ImageAction>(
           tooltip: 'Image actions',
-          menuBuilder: menu,
+          onSelected: (action) => onAction(environment, image, action),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: ImageAction.remove,
+              child: Row(
+                children: [
+                  Icon(Symbols.delete, size: 20),
+                  SizedBox(width: 12),
+                  Text('Remove'),
+                ],
+              ),
+            ),
+          ],
+          icon: const Icon(Symbols.more_vert),
         ),
       ),
     );

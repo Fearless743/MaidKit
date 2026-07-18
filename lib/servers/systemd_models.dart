@@ -1,11 +1,12 @@
 /// Systemd unit lifecycle actions exposed in the Services tab.
-enum SystemdUnitAction { start, stop, restart, enable, disable }
+enum SystemdUnitAction { start, stop, restart, reload, enable, disable }
 
 extension SystemdUnitActionX on SystemdUnitAction {
   String get label => switch (this) {
     SystemdUnitAction.start => 'Start',
     SystemdUnitAction.stop => 'Stop',
     SystemdUnitAction.restart => 'Restart',
+    SystemdUnitAction.reload => 'Reload',
     SystemdUnitAction.enable => 'Enable',
     SystemdUnitAction.disable => 'Disable',
   };
@@ -14,6 +15,7 @@ extension SystemdUnitActionX on SystemdUnitAction {
     SystemdUnitAction.start => 'Started',
     SystemdUnitAction.stop => 'Stopped',
     SystemdUnitAction.restart => 'Restarted',
+    SystemdUnitAction.reload => 'Reloaded',
     SystemdUnitAction.enable => 'Enabled',
     SystemdUnitAction.disable => 'Disabled',
   };
