@@ -504,17 +504,6 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
       unawaited(_paste());
       return KeyEventResult.handled;
     }
-    final character = event.character;
-    if (character != null && character.isNotEmpty) {
-      final control = HardwareKeyboard.instance.isControlPressed;
-      final alt = HardwareKeyboard.instance.isAltPressed;
-      final value = control && character.length == 1
-          ? String.fromCharCode(character.toUpperCase().codeUnitAt(0) & 0x1f)
-          : character;
-      widget.adapter.sendInput('${alt ? '\u001b' : ''}$value');
-      return KeyEventResult.handled;
-    }
-
     final key = event.logicalKey;
     final ghosttyKey = switch (key) {
       LogicalKeyboardKey.arrowUp => ghostty.Key.arrowUp,
@@ -529,6 +518,7 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
       widget.adapter.sendKey(ghosttyKey);
       return KeyEventResult.handled;
     }
+
     final escape = switch (key) {
       LogicalKeyboardKey.enter => '\r',
       LogicalKeyboardKey.tab => '\t',
@@ -539,9 +529,23 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
       LogicalKeyboardKey.pageDown => '\u001b[6~',
       _ => null,
     };
-    if (escape == null) return KeyEventResult.ignored;
-    widget.adapter.sendInput(escape);
-    return KeyEventResult.handled;
+    if (escape != null) {
+      widget.adapter.sendInput(escape);
+      return KeyEventResult.handled;
+    }
+
+    final character = event.character;
+    if (character != null && character.isNotEmpty) {
+      final control = HardwareKeyboard.instance.isControlPressed;
+      final alt = HardwareKeyboard.instance.isAltPressed;
+      final value = control && character.length == 1
+          ? String.fromCharCode(character.toUpperCase().codeUnitAt(0) & 0x1f)
+          : character;
+      widget.adapter.sendInput('${alt ? '\u001b' : ''}$value');
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -714,6 +718,27 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (!_editingValue.composing.isCollapsed) {
       return KeyEventResult.skipRemainingHandlers;
+    }
+    // TextInput consumes these keys as editing commands, which prevents them
+    // reaching the PTY. They are terminal controls, not edits to our invisible
+    // composing buffer, so pass them directly to the terminal handler.
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.backspace:
+      case LogicalKeyboardKey.delete:
+      case LogicalKeyboardKey.tab:
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.escape:
+      case LogicalKeyboardKey.arrowUp:
+      case LogicalKeyboardKey.arrowDown:
+      case LogicalKeyboardKey.arrowRight:
+      case LogicalKeyboardKey.arrowLeft:
+      case LogicalKeyboardKey.home:
+      case LogicalKeyboardKey.end:
+      case LogicalKeyboardKey.pageUp:
+      case LogicalKeyboardKey.pageDown:
+        return widget.onKeyEvent(node, event);
+      default:
+        break;
     }
     final isTerminalShortcut =
         HardwareKeyboard.instance.isControlPressed ||
