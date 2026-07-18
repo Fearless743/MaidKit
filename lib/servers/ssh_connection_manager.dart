@@ -6,6 +6,9 @@ import 'package:dartssh2/dartssh2.dart';
 
 import 'package:maid_kit/containers/container_models.dart';
 import 'package:maid_kit/data/local/app_database.dart';
+import 'activity_models.dart';
+import 'crontab_models.dart';
+import 'firewall_models.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
@@ -159,6 +162,596 @@ class SshConnectionManager {
           .whereType<ServerProcess>()
           .toList();
     });
+  }
+
+  /// Collects raw host counters for the Activity tab in a single SSH round-trip.
+  Future<ActivityCounters> collectActivityCounters(int serverId) async {
+    return withClient(serverId, (client) async {
+      final result = await _execute(client, r'''
+sh -c '
+echo --STAT--
+head -n 1 /proc/stat 2>/dev/null || true
+echo --LOAD--
+cat /proc/loadavg 2>/dev/null || true
+echo --CPU--
+getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 1
+echo --MEM--
+cat /proc/meminfo 2>/dev/null || true
+echo --DISK--
+df -Pk / 2>/dev/null | tail -n 1 || true
+echo --NET--
+cat /proc/net/dev 2>/dev/null || true
+echo --UPTIME--
+cut -d. -f1 /proc/uptime 2>/dev/null || true
+'
+''');
+      if (result.exitCode != 0 && result.stdout.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      return _parseActivityCounters(result.stdout);
+    });
+  }
+
+  ActivityCounters _parseActivityCounters(String output) {
+    String section(String name) {
+      final start = output.indexOf('--$name--');
+      if (start < 0) return '';
+      final after = start + name.length + 4;
+      final next = output.indexOf('--', after);
+      return (next < 0
+              ? output.substring(after)
+              : output.substring(after, next))
+          .trim();
+    }
+
+    final statLine = section('STAT');
+    int? cpuIdle;
+    int? cpuTotal;
+    if (statLine.startsWith('cpu')) {
+      final fields = statLine
+          .split(RegExp(r'\s+'))
+          .skip(1)
+          .map(int.tryParse)
+          .whereType<int>()
+          .toList();
+      if (fields.length >= 4) {
+        // user nice system idle iowait irq softirq steal …
+        final idle = fields[3] + (fields.length > 4 ? fields[4] : 0);
+        final total = fields.fold<int>(0, (sum, value) => sum + value);
+        cpuIdle = idle;
+        cpuTotal = total;
+      }
+    }
+
+    final loads = section('LOAD').split(RegExp(r'\s+'));
+    int? memValue(String label) {
+      final match = RegExp('$label:\\s+(\\d+)').firstMatch(section('MEM'));
+      return match == null ? null : int.tryParse(match.group(1)!);
+    }
+
+    final diskFields = section('DISK').split(RegExp(r'\s+'));
+    var netRx = 0;
+    var netTx = 0;
+    var hasNet = false;
+    for (final line in section('NET').split('\n')) {
+      final trimmed = line.trim();
+      if (!trimmed.contains(':')) continue;
+      final parts = trimmed.split(':');
+      if (parts.length < 2) continue;
+      final iface = parts[0].trim();
+      if (iface == 'lo') continue;
+      final cols = parts[1].trim().split(RegExp(r'\s+'));
+      if (cols.length < 9) continue;
+      final rx = int.tryParse(cols[0]);
+      final tx = int.tryParse(cols[8]);
+      if (rx == null || tx == null) continue;
+      netRx += rx;
+      netTx += tx;
+      hasNet = true;
+    }
+
+    return ActivityCounters(
+      at: DateTime.now(),
+      cpuIdle: cpuIdle,
+      cpuTotal: cpuTotal,
+      load1: loads.isNotEmpty ? double.tryParse(loads[0]) : null,
+      load5: loads.length > 1 ? double.tryParse(loads[1]) : null,
+      load15: loads.length > 2 ? double.tryParse(loads[2]) : null,
+      cpuCount: int.tryParse(section('CPU')),
+      memoryTotalKb: memValue('MemTotal'),
+      memoryAvailableKb: memValue('MemAvailable'),
+      swapTotalKb: memValue('SwapTotal'),
+      swapFreeKb: memValue('SwapFree'),
+      diskTotalKb: diskFields.length > 1 ? int.tryParse(diskFields[1]) : null,
+      diskAvailableKb: diskFields.length > 3
+          ? int.tryParse(diskFields[3])
+          : null,
+      netRxBytes: hasNet ? netRx : null,
+      netTxBytes: hasNet ? netTx : null,
+      uptime: Duration(seconds: int.tryParse(section('UPTIME')) ?? 0),
+    );
+  }
+
+  /// Reads the current user's crontab (`crontab -l`).
+  Future<CrontabDocument> listCrontab(int serverId) async {
+    return withClient(serverId, (client) async {
+      final result = await _execute(client, 'crontab -l');
+      final combined = '${result.stderr}\n${result.stdout}'.toLowerCase();
+      if (result.exitCode != 0) {
+        if (combined.contains('no crontab')) {
+          return const CrontabDocument(entries: [], exists: false);
+        }
+        throw StateError(_commandError(result));
+      }
+      return parseCrontab(result.stdout);
+    });
+  }
+
+  /// Replaces the current user's crontab with [document].
+  Future<void> installCrontab(int serverId, CrontabDocument document) async {
+    await withClient(serverId, (client) async {
+      final text = document.toCrontabText();
+      // Empty crontab: remove it rather than installing a blank file.
+      if (text.trim().isEmpty) {
+        final result = await _execute(client, 'crontab -r');
+        // "no crontab" is fine when removing.
+        if (result.exitCode != 0) {
+          final message = _commandError(result).toLowerCase();
+          if (!message.contains('no crontab')) {
+            throw StateError(_commandError(result));
+          }
+        }
+        return;
+      }
+      final encoded = base64.encode(
+        utf8.encode(text.endsWith('\n') ? text : '$text\n'),
+      );
+      final result = await _execute(
+        client,
+        "echo $encoded | base64 -d | crontab -",
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  /// Detects and reads the host firewall status (UFW, firewalld, nft, iptables).
+  Future<FirewallStatus> getFirewallStatus(
+    int serverId, {
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    return withClient(serverId, (client) async {
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+
+      Future<_CommandResult> run(String command) =>
+          _execute(client, '$prefix$command', stdin: stdin);
+
+      // Prefer the friendliest management CLIs first.
+      final ufwPath = await _execute(client, 'command -v ufw');
+      if (ufwPath.exitCode == 0 && ufwPath.stdout.trim().isNotEmpty) {
+        final numbered = await run('ufw status numbered');
+        final verbose = await run('ufw status verbose');
+        return _parseUfwStatus(numbered, verbose: verbose);
+      }
+
+      final firewallCmd = await _execute(client, 'command -v firewall-cmd');
+      if (firewallCmd.exitCode == 0 && firewallCmd.stdout.trim().isNotEmpty) {
+        return _parseFirewalldStatus(
+          await run('firewall-cmd --state'),
+          await run('firewall-cmd --list-all'),
+        );
+      }
+
+      final nft = await _execute(client, 'command -v nft');
+      if (nft.exitCode == 0 && nft.stdout.trim().isNotEmpty) {
+        final ruleset = await run('nft list ruleset');
+        return _parseNftStatus(ruleset);
+      }
+
+      final iptables = await _execute(client, 'command -v iptables');
+      if (iptables.exitCode == 0 && iptables.stdout.trim().isNotEmpty) {
+        final rules = await run('iptables -L -n -v --line-numbers');
+        return _parseIptablesStatus(rules);
+      }
+
+      return const FirewallStatus(
+        backend: FirewallBackend.none,
+        active: false,
+        error:
+            'No supported firewall tool was found (ufw, firewalld, nft, iptables).',
+      );
+    });
+  }
+
+  Future<void> setFirewallEnabled(
+    int serverId, {
+    required bool enabled,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    await withClient(serverId, (client) async {
+      final status = await getFirewallStatus(
+        serverId,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+      final command = switch (status.backend) {
+        FirewallBackend.ufw => enabled ? 'ufw --force enable' : 'ufw disable',
+        FirewallBackend.firewalld =>
+          enabled ? 'systemctl start firewalld' : 'systemctl stop firewalld',
+        FirewallBackend.nftables ||
+        FirewallBackend.iptables ||
+        FirewallBackend.none => throw StateError(
+          'Enabling/disabling is only supported for UFW and firewalld.',
+        ),
+      };
+      final result = await _execute(client, '$prefix$command', stdin: stdin);
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  Future<void> addFirewallRule(
+    int serverId, {
+    required FirewallRuleDraft draft,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final port = draft.port.trim();
+    if (!RegExp(r'^[0-9]{1,5}(:[0-9]{1,5})?$').hasMatch(port) &&
+        !RegExp(r'^[a-zA-Z0-9/_-]+$').hasMatch(port)) {
+      throw ArgumentError.value(port, 'port', 'Invalid port or service name.');
+    }
+    final protocol = draft.protocol.trim().toLowerCase();
+    if (protocol.isNotEmpty &&
+        !const {'tcp', 'udp', 'any', ''}.contains(protocol)) {
+      throw ArgumentError.value(protocol, 'protocol', 'Use tcp, udp, or any.');
+    }
+    await withClient(serverId, (client) async {
+      final status = await getFirewallStatus(
+        serverId,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+      final result = switch (status.backend) {
+        FirewallBackend.ufw => await _execute(
+          client,
+          '$prefix${_ufwAddCommand(draft)}',
+          stdin: stdin,
+        ),
+        FirewallBackend.firewalld => await _execute(
+          client,
+          '$prefix${_firewalldAddCommand(draft)}',
+          stdin: stdin,
+        ),
+        _ => throw StateError(
+          'Adding rules is only supported for UFW and firewalld.',
+        ),
+      };
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  Future<void> deleteFirewallRule(
+    int serverId, {
+    required FirewallRule rule,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    await withClient(serverId, (client) async {
+      final status = await getFirewallStatus(
+        serverId,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+      final result = switch (status.backend) {
+        FirewallBackend.ufw => await _execute(
+          client,
+          // Prefer numbered delete when the id is a UFW rule number.
+          RegExp(r'^\d+$').hasMatch(rule.id)
+              ? '${prefix}ufw --force delete ${rule.id}'
+              : '${prefix}ufw delete ${_shellSingleQuote(rule.display)}',
+          stdin: stdin,
+        ),
+        FirewallBackend.firewalld => await _execute(
+          client,
+          rule.id.startsWith('service:')
+              ? '${prefix}sh -c "firewall-cmd --permanent --remove-service=${rule.id.substring('service:'.length)} && firewall-cmd --reload"'
+              : '${prefix}sh -c "firewall-cmd --permanent --remove-port=${rule.id} && firewall-cmd --reload"',
+          stdin: stdin,
+        ),
+        _ => throw StateError(
+          'Deleting rules is only supported for UFW and firewalld.',
+        ),
+      };
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  String _rootPrefix(bool sshUserIsRoot, String? sudoPassword) {
+    if (sshUserIsRoot) return '';
+    return sudoPassword == null ? 'sudo -n ' : 'sudo -S -p "" ';
+  }
+
+  String? _rootStdin(bool sshUserIsRoot, String? sudoPassword) {
+    if (sshUserIsRoot) return null;
+    return sudoPassword;
+  }
+
+  String _ufwAddCommand(FirewallRuleDraft draft) {
+    final action = switch (draft.action) {
+      FirewallAction.allow => 'allow',
+      FirewallAction.deny => 'deny',
+      FirewallAction.reject => 'reject',
+      FirewallAction.drop => 'deny',
+    };
+    final port = draft.port.trim();
+    final protocol = draft.protocol.trim().toLowerCase();
+    final target = protocol.isEmpty || protocol == 'any'
+        ? port
+        : '$port/$protocol';
+    final from = draft.source?.trim();
+    if (from != null && from.isNotEmpty) {
+      return 'ufw $action from ${_shellSingleQuote(from)} to any port '
+          '${protocol.isEmpty || protocol == 'any' ? port : '$port proto $protocol'}';
+    }
+    return 'ufw $action $target';
+  }
+
+  String _firewalldAddCommand(FirewallRuleDraft draft) {
+    final port = draft.port.trim();
+    final protocol = draft.protocol.trim().toLowerCase();
+    final proto = protocol.isEmpty || protocol == 'any' ? 'tcp' : protocol;
+    final portSpec = port.contains('/') ? port : '$port/$proto';
+    // Single sudo session so both permanent write and reload succeed.
+    return 'sh -c "firewall-cmd --permanent --add-port=$portSpec && firewall-cmd --reload"';
+  }
+
+  FirewallStatus _parseUfwStatus(
+    _CommandResult result, {
+    _CommandResult? verbose,
+  }) {
+    final text = result.stdout.isNotEmpty ? result.stdout : result.stderr;
+    final verboseText = verbose == null
+        ? text
+        : (verbose.stdout.isNotEmpty ? verbose.stdout : verbose.stderr);
+    if (result.exitCode != 0 && text.trim().isEmpty) {
+      return FirewallStatus(
+        backend: FirewallBackend.ufw,
+        active: false,
+        error: _commandError(result),
+      );
+    }
+    final statusSource = verboseText.isNotEmpty ? verboseText : text;
+    final lower = statusSource.toLowerCase();
+    final active = lower.contains('status: active');
+    String? defaultIncoming;
+    String? defaultOutgoing;
+    final defaultMatch = RegExp(
+      r'Default:\s*(\w+)\s*\(incoming\),\s*(\w+)\s*\(outgoing\)',
+      caseSensitive: false,
+    ).firstMatch(statusSource);
+    if (defaultMatch != null) {
+      defaultIncoming = defaultMatch.group(1);
+      defaultOutgoing = defaultMatch.group(2);
+    }
+
+    final rules = <FirewallRule>[];
+    // Prefer numbered status if present; otherwise parse verbose rows.
+    final numbered = RegExp(r'^\s*\[\s*(\d+)\s*\]\s+(.+)$', multiLine: true);
+    final numberedMatches = numbered.allMatches(text).toList();
+    if (numberedMatches.isNotEmpty) {
+      for (final match in numberedMatches) {
+        final id = match.group(1)!;
+        // Strip trailing ANSI/color leftovers and "(v6)" annotations stay.
+        final body = match
+            .group(2)!
+            .replaceAll(RegExp(r'\x1B\[[0-9;]*[A-Za-z]'), '')
+            .trim();
+        rules.add(
+          FirewallRule(
+            id: id,
+            display: body,
+            action: _guessFirewallAction(body),
+          ),
+        );
+      }
+    } else {
+      var inRules = false;
+      var index = 1;
+      for (final line in statusSource.split('\n')) {
+        final trimmed = line.trimRight();
+        if (trimmed.toLowerCase().startsWith('to ') &&
+            trimmed.toLowerCase().contains('action')) {
+          inRules = true;
+          continue;
+        }
+        if (!inRules) continue;
+        if (trimmed.isEmpty || trimmed.startsWith('--')) continue;
+        final fields = trimmed.split(RegExp(r'\s{2,}'));
+        if (fields.isEmpty) continue;
+        final display = trimmed.trim();
+        rules.add(
+          FirewallRule(
+            id: '$index',
+            display: display,
+            action: _guessFirewallAction(display),
+            port: fields.firstOrNull?.trim(),
+          ),
+        );
+        index++;
+      }
+    }
+
+    return FirewallStatus(
+      backend: FirewallBackend.ufw,
+      active: active,
+      rules: rules,
+      defaultIncoming: defaultIncoming,
+      defaultOutgoing: defaultOutgoing,
+      rawStatus: statusSource,
+      error: result.exitCode != 0 && !active ? _commandError(result) : null,
+    );
+  }
+
+  FirewallStatus _parseFirewalldStatus(
+    _CommandResult stateResult,
+    _CommandResult listResult,
+  ) {
+    final active =
+        stateResult.stdout.trim().toLowerCase() == 'running' ||
+        stateResult.stderr.trim().toLowerCase() == 'running';
+    final text = listResult.stdout.isNotEmpty
+        ? listResult.stdout
+        : listResult.stderr;
+    final rules = <FirewallRule>[];
+    final zones = <String>[];
+    final zoneMatch = RegExp(
+      r'^(\S+)\s*\(active\)',
+      multiLine: true,
+    ).firstMatch(text);
+    if (zoneMatch != null) zones.add(zoneMatch.group(1)!);
+
+    final portsMatch = RegExp(
+      r'ports:\s*(.*)$',
+      multiLine: true,
+    ).firstMatch(text);
+    if (portsMatch != null) {
+      for (final port in portsMatch.group(1)!.split(RegExp(r'\s+'))) {
+        final value = port.trim();
+        if (value.isEmpty) continue;
+        rules.add(
+          FirewallRule(
+            id: value,
+            display: 'ALLOW $value',
+            action: FirewallAction.allow,
+            port: value,
+          ),
+        );
+      }
+    }
+    final servicesMatch = RegExp(
+      r'services:\s*(.*)$',
+      multiLine: true,
+    ).firstMatch(text);
+    if (servicesMatch != null) {
+      for (final service in servicesMatch.group(1)!.split(RegExp(r'\s+'))) {
+        final value = service.trim();
+        if (value.isEmpty) continue;
+        rules.add(
+          FirewallRule(
+            id: 'service:$value',
+            display: 'ALLOW service $value',
+            action: FirewallAction.allow,
+            port: value,
+          ),
+        );
+      }
+    }
+
+    return FirewallStatus(
+      backend: FirewallBackend.firewalld,
+      active: active,
+      rules: rules,
+      zones: zones,
+      rawStatus: text,
+      error: !active && stateResult.exitCode != 0
+          ? _commandError(stateResult)
+          : null,
+    );
+  }
+
+  FirewallStatus _parseNftStatus(_CommandResult result) {
+    final text = result.stdout.isNotEmpty ? result.stdout : result.stderr;
+    if (result.exitCode != 0 && text.trim().isEmpty) {
+      return FirewallStatus(
+        backend: FirewallBackend.nftables,
+        active: false,
+        error: _commandError(result),
+      );
+    }
+    final rules = <FirewallRule>[];
+    var index = 1;
+    for (final line in text.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.startsWith('table ') ||
+          trimmed.startsWith('chain ') ||
+          trimmed == '{' ||
+          trimmed == '}') {
+        continue;
+      }
+      rules.add(
+        FirewallRule(
+          id: '$index',
+          display: trimmed,
+          action: _guessFirewallAction(trimmed),
+        ),
+      );
+      index++;
+      if (rules.length >= 200) break;
+    }
+    return FirewallStatus(
+      backend: FirewallBackend.nftables,
+      active: text.trim().isNotEmpty,
+      rules: rules,
+      rawStatus: text,
+    );
+  }
+
+  FirewallStatus _parseIptablesStatus(_CommandResult result) {
+    final text = result.stdout.isNotEmpty ? result.stdout : result.stderr;
+    if (result.exitCode != 0 && text.trim().isEmpty) {
+      return FirewallStatus(
+        backend: FirewallBackend.iptables,
+        active: false,
+        error: _commandError(result),
+      );
+    }
+    final rules = <FirewallRule>[];
+    for (final line in text.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty ||
+          trimmed.startsWith('Chain ') ||
+          trimmed.startsWith('num ') ||
+          trimmed.startsWith('target ')) {
+        continue;
+      }
+      final match = RegExp(r'^(\d+)\s+(.+)$').firstMatch(trimmed);
+      if (match == null) continue;
+      rules.add(
+        FirewallRule(
+          id: match.group(1)!,
+          display: match.group(2)!.trim(),
+          action: _guessFirewallAction(match.group(2)!),
+        ),
+      );
+      if (rules.length >= 200) break;
+    }
+    return FirewallStatus(
+      backend: FirewallBackend.iptables,
+      active: rules.isNotEmpty || text.contains('Chain'),
+      rules: rules,
+      rawStatus: text,
+    );
+  }
+
+  FirewallAction? _guessFirewallAction(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('allow') || lower.contains('accept')) {
+      return FirewallAction.allow;
+    }
+    if (lower.contains('deny') || lower.contains('drop')) {
+      return FirewallAction.deny;
+    }
+    if (lower.contains('reject')) return FirewallAction.reject;
+    return null;
   }
 
   /// Lists every installed Docker and Podman environment for both the SSH user

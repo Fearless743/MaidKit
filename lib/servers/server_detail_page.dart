@@ -9,6 +9,9 @@ import 'package:styled_widget/styled_widget.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/containers/container_management_tab.dart';
 import 'package:maid_kit/containers/image_management_tab.dart';
+import 'activity_tab.dart';
+import 'crontab_tab.dart';
+import 'firewall_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -413,7 +416,7 @@ class _InspectorTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 3,
+      length: 6,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -422,17 +425,27 @@ class _InspectorTabs extends StatelessWidget {
             tabAlignment: TabAlignment.start,
             dividerColor: scheme.outlineVariant,
             tabs: const [
+              Tab(icon: Icon(Symbols.monitoring, size: 18), text: 'Activity'),
               Tab(icon: Icon(Symbols.terminal, size: 18), text: 'Processes'),
               Tab(
                 icon: Icon(Symbols.deployed_code, size: 18),
                 text: 'Containers',
               ),
               Tab(icon: Icon(Symbols.image, size: 18), text: 'Images'),
+              Tab(icon: Icon(Symbols.schedule, size: 18), text: 'Crontab'),
+              Tab(icon: Icon(Symbols.shield, size: 18), text: 'Firewall'),
             ],
           ),
           Expanded(
             child: TabBarView(
               children: [
+                ActivityTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                  refreshInterval: refreshInterval,
+                ),
                 connected
                     ? _ProcessTable(
                         processes: processes,
@@ -457,6 +470,18 @@ class _InspectorTabs extends StatelessWidget {
                   connectionError: connectionError,
                   onConnect: onConnect,
                   refreshInterval: refreshInterval,
+                ),
+                CrontabTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                ),
+                FirewallTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
                 ),
               ],
             ),
