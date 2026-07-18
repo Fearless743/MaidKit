@@ -49,6 +49,11 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
   String _writtenText = '';
   var _writeGeneration = 0;
 
+  /// True while a deferred bulk write is scheduled for the current adapter.
+  /// Prevents [build] / parent rebuilds from cancelling that write by forcing
+  /// a recreate loop (which left the log pane blank).
+  var _writeScheduled = false;
+
   @override
   void initState() {
     super.initState();
@@ -68,12 +73,15 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
     if (widget.streaming) {
       _appendStreamDelta();
     } else {
+      // Full dumps replace the buffer; recreate so old lines do not linger.
       _bindAdapter(force: true);
     }
   }
 
   @override
   void dispose() {
+    _writeGeneration++;
+    _writeScheduled = false;
     unawaited(_adapter?.dispose() ?? Future<void>.value());
     _adapter = null;
     super.dispose();
@@ -86,36 +94,57 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
     if (!recreate) {
       if (widget.streaming) {
         _appendStreamDelta();
+      } else if (_writtenText != widget.text) {
+        _scheduleLogDump(_adapter!);
       }
       return;
     }
 
     final previous = _adapter;
     final adapter = factory.create();
-    final generation = ++_writeGeneration;
+    _writeGeneration++;
     _adapter = adapter;
     _boundAdapterId = selectedId;
     _writtenText = '';
+    _writeScheduled = false;
     setState(() {});
 
-    // Let the renderer perform its first layout/resize before feeding a bulk
-    // log dump. Ghostty sizes the grid in a post-frame callback; writing too
-    // early wraps every line at the default 80 columns.
+    if (widget.streaming) {
+      _scheduleStreamingWrite(adapter);
+    } else {
+      _scheduleLogDump(adapter);
+    }
+
+    unawaited(previous?.dispose() ?? Future<void>.value());
+  }
+
+  /// Wait two frames so Ghostty/xterm can size the grid before a bulk dump.
+  void _scheduleLogDump(TerminalSessionAdapter adapter) {
+    final generation = ++_writeGeneration;
+    _writeScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || generation != _writeGeneration) return;
         if (!identical(_adapter, adapter)) return;
-        if (widget.streaming) {
-          _writeStreaming(adapter, widget.text);
-          _writtenText = widget.text;
-        } else {
-          _writeLogDump(adapter, widget.text);
-          _writtenText = widget.text;
-        }
+        _writeLogDump(adapter, widget.text);
+        _writtenText = widget.text;
+        _writeScheduled = false;
       });
     });
+  }
 
-    unawaited(previous?.dispose() ?? Future<void>.value());
+  void _scheduleStreamingWrite(TerminalSessionAdapter adapter) {
+    final generation = ++_writeGeneration;
+    _writeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || generation != _writeGeneration) return;
+        if (!identical(_adapter, adapter)) return;
+        _writeStreaming(adapter, widget.text);
+        _writtenText = widget.text;
+        _writeScheduled = false;
+      });
+    });
   }
 
   void _appendStreamDelta() {
@@ -184,9 +213,13 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (!widget.streaming && _writtenText != widget.text) {
+    // If a dump never landed (e.g. interrupted by dispose/recreate), schedule
+    // a write — never force-recreate here, or we cancel the deferred write.
+    if (!widget.streaming && _writtenText != widget.text && !_writeScheduled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _bindAdapter(force: true);
+        if (!mounted || _writtenText == widget.text || _writeScheduled) return;
+        final current = _adapter;
+        if (current != null) _scheduleLogDump(current);
       });
     }
 

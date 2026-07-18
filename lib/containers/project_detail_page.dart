@@ -162,16 +162,17 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Future<String?> _sudoPassword(Server server) async {
-    final credential = await ref
-        .read(serverRepositoryProvider)
-        .credentialFor(server);
+    if (!mounted) return null;
+    final repository = ref.read(serverRepositoryProvider);
+    final credential = await repository.credentialFor(server);
+    if (!mounted) return null;
     return credential.type == CredentialType.password
         ? credential.password
         : null;
   }
 
   Future<void> _loadCompose() async {
-    if (_loadingCompose) return;
+    if (_loadingCompose || !mounted) return;
     final server = _serverOrNull();
     if (server == null) return;
     final manager = ref.read(connectionManagerProvider);
@@ -184,13 +185,15 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
       _composeError = null;
     });
     try {
+      final sudoPassword = await _sudoPassword(server);
+      if (!mounted) return;
       final file = await ref
           .read(connectionManagerProvider)
           .readComposeFile(
             server.id,
             scope: _scope,
             directory: widget.link.directory,
-            sudoPassword: await _sudoPassword(server),
+            sudoPassword: sudoPassword,
           );
       if (mounted) setState(() => _compose = file?.$1);
     } catch (error) {
@@ -201,7 +204,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Future<void> _refresh() async {
-    if (_refreshing) return;
+    if (_refreshing || !mounted) return;
     final server = _serverOrNull();
     if (server == null) {
       _scheduleRetry();
@@ -218,6 +221,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
     try {
       // Stats need the current running set, so load containers first.
       await _loadLiveContainers(server);
+      if (!mounted) return;
       await _loadStats(server);
     } finally {
       _refreshing = false;
@@ -225,14 +229,17 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Future<void> _loadLiveContainers(Server server) async {
+    if (!mounted) return;
     try {
-      final environments = await ref
-          .read(connectionManagerProvider)
-          .listContainers(
-            server.id,
-            sshUserIsRoot: server.username == 'root',
-            sudoPassword: await _sudoPassword(server),
-          );
+      final manager = ref.read(connectionManagerProvider);
+      final sudoPassword = await _sudoPassword(server);
+      if (!mounted) return;
+      final environments = await manager.listContainers(
+        server.id,
+        sshUserIsRoot: server.username == 'root',
+        sudoPassword: sudoPassword,
+      );
+      if (!mounted) return;
       final containers = environments
           .where(
             (environment) =>
@@ -241,13 +248,11 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
           .expand((environment) => environment.containers)
           .where((container) => container.composeProject == widget.link.name)
           .toList();
-      if (mounted) {
-        setState(() {
-          _hasLoadedLive = true;
-          _liveContainers = containers;
-          _containersError = null;
-        });
-      }
+      setState(() {
+        _hasLoadedLive = true;
+        _liveContainers = containers;
+        _containersError = null;
+      });
     } catch (error) {
       if (mounted && !_hasLoadedLive) {
         setState(() => _containersError = error);
@@ -256,6 +261,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Future<void> _loadStats(Server server) async {
+    if (!mounted) return;
     final containers = _containersFor(server);
     final runningIds = [
       for (final container in containers)
@@ -272,15 +278,16 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
       return;
     }
     try {
-      final samples = await ref
-          .read(connectionManagerProvider)
-          .listContainerStats(
-            server.id,
-            runtime: _runtime,
-            scope: _scope,
-            containerIds: runningIds,
-            sudoPassword: await _sudoPassword(server),
-          );
+      final manager = ref.read(connectionManagerProvider);
+      final sudoPassword = await _sudoPassword(server);
+      if (!mounted) return;
+      final samples = await manager.listContainerStats(
+        server.id,
+        runtime: _runtime,
+        scope: _scope,
+        containerIds: runningIds,
+        sudoPassword: sudoPassword,
+      );
       if (!mounted) return;
       setState(() {
         _statsById = {
@@ -321,7 +328,10 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Future<void> _action(Server server, ComposeProjectAction action) async {
+    if (!mounted) return;
     try {
+      final sudoPassword = await _sudoPassword(server);
+      if (!mounted) return;
       await runComposeProjectActionWithTerminal(
         ref: ref,
         serverId: server.id,
@@ -331,18 +341,17 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
         projectName: widget.link.name,
         directory: widget.link.directory,
         action: action,
-        sudoPassword: await _sudoPassword(server),
+        sudoPassword: sudoPassword,
       );
+      if (!mounted) return;
       ref.invalidate(containerCacheEntriesProvider);
-      if (mounted) {
-        showStyledSnackBar(
-          message:
-              '${widget.link.name} · ${action.label.toLowerCase()} finished.',
-          title: 'Project updated',
-          icon: Symbols.check_circle,
-          accentColor: Theme.of(context).colorScheme.primary,
-        );
-      }
+      showStyledSnackBar(
+        message:
+            '${widget.link.name} · ${action.label.toLowerCase()} finished.',
+        title: 'Project updated',
+        icon: Symbols.check_circle,
+        accentColor: Theme.of(context).colorScheme.primary,
+      );
       await _refresh();
     } catch (error) {
       if (!mounted) return;
@@ -370,6 +379,9 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
     if (source == null || !mounted) return;
 
     try {
+      final manager = ref.read(connectionManagerProvider);
+      final sudoPassword = await _sudoPassword(server);
+      if (!mounted) return;
       await runWithDeployTerminal(
         ref: ref,
         title: 'Deploy ${widget.link.name}',
@@ -377,18 +389,16 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
         command:
             '${_runtime.name} compose -p ${widget.link.name} up -d  (${widget.link.directory})',
         run: (onOutput) async {
-          await ref
-              .read(connectionManagerProvider)
-              .deployComposeProject(
-                server.id,
-                runtime: _runtime,
-                scope: _scope,
-                projectName: widget.link.name,
-                directory: widget.link.directory,
-                composeSource: source,
-                sudoPassword: await _sudoPassword(server),
-                onOutput: onOutput,
-              );
+          await manager.deployComposeProject(
+            server.id,
+            runtime: _runtime,
+            scope: _scope,
+            projectName: widget.link.name,
+            directory: widget.link.directory,
+            composeSource: source,
+            sudoPassword: sudoPassword,
+            onOutput: onOutput,
+          );
         },
       );
       if (!mounted) return;
@@ -411,12 +421,15 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   }
 
   Server? _serverOrNull() {
+    if (!mounted) return null;
     final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
     return servers.where((item) => item.id == widget.link.serverId).firstOrNull;
   }
 
   List<ServerContainer> _containersFor(Server server) {
     if (_liveContainers.isNotEmpty || _hasLoadedLive) return _liveContainers;
+    // Avoid ref after dispose — live load may have been interrupted mid-await.
+    if (!mounted) return _liveContainers;
     final cached = ContainerCacheRepository.groupByServer(
       ref.read(containerCacheEntriesProvider).asData?.value ??
           const <ContainerCacheEntry>[],

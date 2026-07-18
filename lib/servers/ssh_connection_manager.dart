@@ -1780,6 +1780,9 @@ fi
   }
 
   /// Recent container logs (`stdout`/`stderr` merged by the runtime).
+  ///
+  /// Docker/Podman send the container's stdout to the CLI's stdout and the
+  /// container's stderr to the CLI's stderr, so both streams must be merged.
   Future<String> readContainerLogs(
     int serverId, {
     required ContainerRuntime runtime,
@@ -1802,16 +1805,23 @@ fi
         '${runtime.name} logs $flags $containerId',
         stdin: scope == ContainerScope.root ? sudoPassword : null,
       );
-      // Docker returns non-zero for missing containers; still surface stderr.
-      if (result.exitCode != 0 && result.stdout.trim().isEmpty) {
+      final merged = _mergeContainerLogStreams(result.stdout, result.stderr);
+      // Missing container / permission errors have no log body.
+      if (result.exitCode != 0 && merged.trim().isEmpty) {
         throw StateError(_commandError(result));
       }
-      final output = result.stdout.isEmpty ? result.stderr : result.stdout;
-      if (result.stderr.trim().isNotEmpty && result.stdout.isNotEmpty) {
-        return '${result.stdout}\n${result.stderr}';
-      }
-      return output;
+      return merged;
     });
+  }
+
+  /// Joins CLI stdout and stderr without dropping either stream.
+  String _mergeContainerLogStreams(String stdout, String stderr) {
+    final out = stdout;
+    final err = stderr;
+    if (out.isEmpty) return err;
+    if (err.isEmpty) return out;
+    if (out.endsWith('\n') || out.endsWith('\r')) return '$out$err';
+    return '$out\n$err';
   }
 
   Future<void> removeContainer(
