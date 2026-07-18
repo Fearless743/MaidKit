@@ -9,6 +9,7 @@ import 'package:super_context_menu/super_context_menu.dart';
 
 import 'container_list_tile.dart';
 import 'container_models.dart';
+import 'container_runtime_install.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_models.dart';
@@ -177,6 +178,35 @@ class _ContainerManagementTabState
     }
   }
 
+  Future<void> _installRuntime() async {
+    final runtime = await chooseContainerRuntimeToInstall(context);
+    if (runtime == null || !mounted) return;
+    try {
+      await installContainerRuntime(
+        ref: ref,
+        server: widget.server,
+        runtime: runtime,
+        sudoPassword: await _storedSudoPassword(),
+      );
+      if (!mounted) return;
+      showStyledSnackBar(
+        title: '${runtime.name} installed',
+        message: 'Refreshing available container environments.',
+        icon: Symbols.check_circle,
+        accentColor: Theme.of(context).colorScheme.primary,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      showStyledSnackBar(
+        title: 'Could not install ${runtime.name}',
+        message: error.toString(),
+        icon: Symbols.error,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.connected) {
@@ -202,6 +232,7 @@ class _ContainerManagementTabState
         environments: environments,
         onRefresh: _load,
         onAction: _runAction,
+        onInstallRuntime: _installRuntime,
       ),
     );
   }
@@ -213,6 +244,7 @@ class _ContainerEnvironments extends StatelessWidget {
     required this.environments,
     required this.onRefresh,
     required this.onAction,
+    required this.onInstallRuntime,
   });
 
   final Server server;
@@ -224,6 +256,7 @@ class _ContainerEnvironments extends StatelessWidget {
     ContainerAction,
   )
   onAction;
+  final Future<void> Function() onInstallRuntime;
 
   @override
   Widget build(BuildContext context) {
@@ -234,8 +267,10 @@ class _ContainerEnvironments extends StatelessWidget {
       return _ContainerEmptyPanel(
         icon: Symbols.deployed_code,
         message: 'Docker and Podman are not installed for this server user.',
-        actionLabel: 'Refresh',
-        onAction: onRefresh,
+        actionLabel: 'Install runtime',
+        onAction: onInstallRuntime,
+        filledAction: true,
+        actionIcon: Symbols.download,
       );
     }
 

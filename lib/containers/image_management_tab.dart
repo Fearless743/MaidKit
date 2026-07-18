@@ -8,6 +8,7 @@ import 'package:super_context_menu/super_context_menu.dart';
 
 import 'container_image_list_tile.dart';
 import 'container_models.dart';
+import 'container_runtime_install.dart';
 import 'image_actions.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_models.dart';
@@ -224,6 +225,35 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
     }
   }
 
+  Future<void> _installRuntime() async {
+    final runtime = await chooseContainerRuntimeToInstall(context);
+    if (runtime == null || !mounted) return;
+    try {
+      await installContainerRuntime(
+        ref: ref,
+        server: widget.server,
+        runtime: runtime,
+        sudoPassword: await _storedSudoPassword(),
+      );
+      if (!mounted) return;
+      showStyledSnackBar(
+        title: '${runtime.name} installed',
+        message: 'Refreshing available image environments.',
+        icon: Symbols.check_circle,
+        accentColor: Theme.of(context).colorScheme.primary,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      showStyledSnackBar(
+        title: 'Could not install ${runtime.name}',
+        message: error.toString(),
+        icon: Symbols.error,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.connected) {
@@ -249,6 +279,7 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
         onRefresh: _load,
         onAction: _runAction,
         onPrune: _prune,
+        onInstallRuntime: _installRuntime,
       ),
     );
   }
@@ -443,6 +474,7 @@ class _ImageEnvironments extends StatelessWidget {
     required this.onRefresh,
     required this.onAction,
     required this.onPrune,
+    required this.onInstallRuntime,
   });
 
   final List<ImageEnvironment> environments;
@@ -454,6 +486,7 @@ class _ImageEnvironments extends StatelessWidget {
   )
   onAction;
   final Future<void> Function(ImageEnvironment environment) onPrune;
+  final Future<void> Function() onInstallRuntime;
 
   @override
   Widget build(BuildContext context) {
@@ -464,8 +497,10 @@ class _ImageEnvironments extends StatelessWidget {
       return _ImageEmptyPanel(
         icon: Symbols.image,
         message: 'Docker and Podman are not installed for this server user.',
-        actionLabel: 'Refresh',
-        onAction: onRefresh,
+        actionLabel: 'Install runtime',
+        onAction: onInstallRuntime,
+        filledAction: true,
+        actionIcon: Symbols.download,
       );
     }
 
