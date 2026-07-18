@@ -11,6 +11,7 @@ import 'crontab_models.dart';
 import 'firewall_models.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
+import 'systemd_models.dart';
 import 'terminal_session_adapter.dart';
 
 typedef HostKeyApproval = Future<bool> Function(HostKeyPrompt prompt);
@@ -311,6 +312,118 @@ cut -d. -f1 /proc/uptime 2>/dev/null || true
         "echo $encoded | base64 -d | crontab -",
       );
       if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  /// Lists system-level systemd service units (active state + enablement).
+  ///
+  /// Listing is unprivileged; [sshUserIsRoot] / [sudoPassword] are accepted for
+  /// API symmetry with mutating calls but are not required for the probe.
+  Future<SystemdUnitsSnapshot> listSystemdUnits(
+    int serverId, {
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    return withClient(serverId, (client) async {
+      // Unprivileged systemctl list-* works for normal SSH users. Avoid sudo
+      // here so key-only sessions without passwordless sudo can still browse.
+      const script =
+          r'''sh -c 'if ! command -v systemctl >/dev/null 2>&1; then echo --NOSYSTEMD--; exit 0; fi; echo --UNITS--; systemctl list-units --type=service --all --no-pager --plain --no-legend 2>/dev/null || true; echo --FILES--; systemctl list-unit-files --type=service --no-pager --plain --no-legend 2>/dev/null || true' ''';
+      final result = await _execute(client, script);
+      if (result.exitCode != 0 &&
+          !result.stdout.contains('--NOSYSTEMD--') &&
+          result.stdout.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      return parseSystemdProbeOutput(result.stdout);
+    });
+  }
+
+  /// Runs start/stop/restart/enable/disable for a system unit.
+  Future<void> runSystemdUnitAction(
+    int serverId, {
+    required String unit,
+    required SystemdUnitAction action,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final name = normalizeSystemdUnitName(unit);
+    if (!isValidSystemdUnitName(name)) {
+      throw ArgumentError.value(unit, 'unit', 'Invalid systemd unit name.');
+    }
+    await withClient(serverId, (client) async {
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+      final quoted = _shellSingleQuote(name);
+      final result = await _execute(
+        client,
+        '${prefix}systemctl ${action.systemctlVerb} $quoted',
+        stdin: stdin,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  /// Returns `systemctl status` text for [unit].
+  Future<String> getSystemdUnitStatus(
+    int serverId, {
+    required String unit,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final name = normalizeSystemdUnitName(unit);
+    if (!isValidSystemdUnitName(name)) {
+      throw ArgumentError.value(unit, 'unit', 'Invalid systemd unit name.');
+    }
+    return withClient(serverId, (client) async {
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+      final quoted = _shellSingleQuote(name);
+      // status exits non-zero for inactive/failed units; still return stdout.
+      final result = await _execute(
+        client,
+        '${prefix}systemctl status $quoted --no-pager -l -n 30',
+        stdin: stdin,
+      );
+      final text = result.stdout.trim().isNotEmpty
+          ? result.stdout
+          : result.stderr;
+      if (text.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      return text;
+    });
+  }
+
+  /// Returns recent journal lines for [unit] via `journalctl -u`.
+  Future<String> getSystemdUnitLogs(
+    int serverId, {
+    required String unit,
+    int lines = 200,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final name = normalizeSystemdUnitName(unit);
+    if (!isValidSystemdUnitName(name)) {
+      throw ArgumentError.value(unit, 'unit', 'Invalid systemd unit name.');
+    }
+    final n = lines.clamp(1, 2000);
+    return withClient(serverId, (client) async {
+      final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+      final stdin = _rootStdin(sshUserIsRoot, sudoPassword);
+      final quoted = _shellSingleQuote(name);
+      final result = await _execute(
+        client,
+        '${prefix}journalctl -u $quoted -n $n --no-pager -o short-iso',
+        stdin: stdin,
+      );
+      if (result.exitCode != 0 && result.stdout.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      final text = result.stdout.trim().isNotEmpty
+          ? result.stdout
+          : result.stderr;
+      return text.trim().isEmpty ? 'No journal entries for $name.' : text;
     });
   }
 

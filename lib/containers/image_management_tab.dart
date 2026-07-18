@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:super_context_menu/super_context_menu.dart';
 
 import 'container_image_list_tile.dart';
 import 'container_models.dart';
@@ -11,6 +12,7 @@ import 'image_actions.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/app_context_menu.dart';
 import 'package:maid_kit/theme.dart';
 
 /// Image management surface for a single server, scoped by runtime and
@@ -554,25 +556,25 @@ class _ImageEnvironmentSection extends StatelessWidget {
   };
 
   Widget _imageTile({required ServerContainerImage image}) {
-    return ContainerImageListTile(
-      image: image,
-      contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-      trailing: PopupMenuButton<ImageAction>(
-        tooltip: 'Image actions',
-        onSelected: (action) => onAction(environment, image, action),
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: ImageAction.remove,
-            child: Row(
-              children: [
-                Icon(Symbols.delete, size: 20),
-                SizedBox(width: 12),
-                Text('Remove'),
-              ],
-            ),
-          ),
-        ],
-        icon: const Icon(Symbols.more_vert),
+    Menu menu() => Menu(
+      children: [
+        MenuAction(
+          title: 'Remove',
+          image: MenuImage.icon(Symbols.delete),
+          attributes: const MenuActionAttributes(destructive: true),
+          callback: () => onAction(environment, image, ImageAction.remove),
+        ),
+      ],
+    );
+    return AppContextMenuRegion(
+      menuBuilder: menu,
+      child: ContainerImageListTile(
+        image: image,
+        contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        trailing: AppContextMenuButton(
+          tooltip: 'Image actions',
+          menuBuilder: menu,
+        ),
       ),
     );
   }

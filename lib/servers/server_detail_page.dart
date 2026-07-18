@@ -15,6 +15,7 @@ import 'firewall_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'systemd_tab.dart';
 
 @RoutePage()
 class ServerDetailPage extends ConsumerStatefulWidget {
@@ -416,7 +417,7 @@ class _InspectorTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -427,6 +428,10 @@ class _InspectorTabs extends StatelessWidget {
             tabs: const [
               Tab(icon: Icon(Symbols.monitoring, size: 18), text: 'Activity'),
               Tab(icon: Icon(Symbols.terminal, size: 18), text: 'Processes'),
+              Tab(
+                icon: Icon(Symbols.settings_applications, size: 18),
+                text: 'Services',
+              ),
               Tab(
                 icon: Icon(Symbols.deployed_code, size: 18),
                 text: 'Containers',
@@ -457,6 +462,12 @@ class _InspectorTabs extends StatelessWidget {
                             'Connect to collect live server data.',
                         onConnect: onConnect,
                       ),
+                SystemdTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                ),
                 ContainerManagementTab(
                   server: server,
                   connected: connected,

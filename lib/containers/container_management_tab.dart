@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:super_context_menu/super_context_menu.dart';
 
 import 'container_list_tile.dart';
 import 'container_models.dart';
@@ -12,6 +13,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/app_context_menu.dart';
 
 /// A reusable container-management surface for a single server. Its data is
 /// scoped by runtime (Docker/Podman) and by user/root environment so it can be
@@ -323,56 +325,45 @@ class _ContainerEnvironmentSection extends StatelessWidget {
     required Future<void> Function(ContainerAction action) onAction,
   }) {
     final running = isContainerRunning(container);
-    return ContainerListTile(
-      container: container,
-      contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-      onOpen: () => context.router.push(
-        ContainerDetailRoute(
-          server: server,
-          runtime: environment.runtime,
-          scope: environment.scope,
-          containerId: container.id,
-          containerName: container.name,
+    Menu menu() => Menu(
+      children: [
+        MenuAction(
+          title: 'Start',
+          image: MenuImage.icon(Symbols.play_arrow),
+          attributes: MenuActionAttributes(disabled: running),
+          callback: () => onAction(ContainerAction.start),
         ),
-      ),
-      trailing: PopupMenuButton<ContainerAction>(
-        tooltip: 'Container actions',
-        onSelected: onAction,
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            value: ContainerAction.start,
-            enabled: !running,
-            child: const Row(
-              children: [
-                Icon(Symbols.play_arrow, size: 20),
-                SizedBox(width: 12),
-                Text('Start'),
-              ],
-            ),
+        MenuAction(
+          title: 'Stop',
+          image: MenuImage.icon(Symbols.stop),
+          attributes: MenuActionAttributes(disabled: !running),
+          callback: () => onAction(ContainerAction.stop),
+        ),
+        MenuAction(
+          title: 'Restart',
+          image: MenuImage.icon(Symbols.restart_alt),
+          callback: () => onAction(ContainerAction.restart),
+        ),
+      ],
+    );
+    return AppContextMenuRegion(
+      menuBuilder: menu,
+      child: ContainerListTile(
+        container: container,
+        contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        onOpen: () => context.router.push(
+          ContainerDetailRoute(
+            server: server,
+            runtime: environment.runtime,
+            scope: environment.scope,
+            containerId: container.id,
+            containerName: container.name,
           ),
-          PopupMenuItem(
-            value: ContainerAction.stop,
-            enabled: running,
-            child: const Row(
-              children: [
-                Icon(Symbols.stop, size: 20),
-                SizedBox(width: 12),
-                Text('Stop'),
-              ],
-            ),
-          ),
-          const PopupMenuItem(
-            value: ContainerAction.restart,
-            child: Row(
-              children: [
-                Icon(Symbols.restart_alt, size: 20),
-                SizedBox(width: 12),
-                Text('Restart'),
-              ],
-            ),
-          ),
-        ],
-        icon: const Icon(Symbols.more_vert),
+        ),
+        trailing: AppContextMenuButton(
+          tooltip: 'Container actions',
+          menuBuilder: menu,
+        ),
       ),
     );
   }
