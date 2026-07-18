@@ -112,25 +112,40 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
       );
       return;
     }
-    final approved = await showDialog<bool>(
+    final approved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(enabled ? 'Enable firewall?' : 'Disable firewall?'),
-        content: Text(
-          enabled
-              ? 'This will turn on ${status.backend.label}. Ensure SSH access is allowed before enabling.'
-              : 'This will turn off ${status.backend.label}. The host will no longer filter traffic with this firewall.',
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: enabled ? 'Enable firewall?' : 'Disable firewall?',
+        heightFactor: 0.36,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text(
+              enabled
+                  ? 'This will turn on ${status.backend.label}. Ensure SSH access is allowed before enabling.'
+                  : 'This will turn off ${status.backend.label}. The host will no longer filter traffic with this firewall.',
+              style: Theme.of(sheetContext).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  child: Text(enabled ? 'Enable' : 'Disable'),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(enabled ? 'Enable' : 'Disable'),
-          ),
-        ],
       ),
     );
     if (approved != true || !mounted) return;
@@ -149,7 +164,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
   Future<void> _addRule() async {
     final status = _status.asData?.value;
     if (status == null || !status.backend.supportsRuleEditing) return;
-    final draft = await _showAddRuleDialog(context);
+    final draft = await _showAddRuleSheet(context);
     if (draft == null || !mounted) return;
     await _run(() async {
       await ref
@@ -166,21 +181,41 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
   Future<void> _deleteRule(FirewallRule rule) async {
     final status = _status.asData?.value;
     if (status == null || !status.backend.supportsRuleEditing) return;
-    final approved = await showDialog<bool>(
+    final approved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete rule?'),
-        content: Text(rule.display),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'Delete rule?',
+        heightFactor: 0.36,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text(
+              rule.display,
+              style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                fontFamily: 'IBM Plex Mono',
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
     if (approved != true || !mounted) return;
@@ -432,126 +467,143 @@ class _ActiveChip extends StatelessWidget {
   }
 }
 
-Future<FirewallRuleDraft?> _showAddRuleDialog(BuildContext context) async {
-  final port = TextEditingController();
-  final source = TextEditingController();
-  var action = FirewallAction.allow;
-  var protocol = 'tcp';
-  final formKey = GlobalKey<FormState>();
-
-  final result = await showDialog<FirewallRuleDraft>(
+Future<FirewallRuleDraft?> _showAddRuleSheet(BuildContext context) {
+  return showModalBottomSheet<FirewallRuleDraft>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setLocal) => AlertDialog(
-        title: const Text('Add firewall rule'),
-        content: SizedBox(
-          width: 400,
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                DropdownButtonFormField<FirewallAction>(
-                  // ignore: deprecated_member_use
-                  value: action,
-                  decoration: const InputDecoration(
-                    labelText: 'Action',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: FirewallAction.allow,
-                      child: Text('Allow'),
-                    ),
-                    DropdownMenuItem(
-                      value: FirewallAction.deny,
-                      child: Text('Deny'),
-                    ),
-                    DropdownMenuItem(
-                      value: FirewallAction.reject,
-                      child: Text('Reject'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setLocal(() => action = value);
-                  },
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (_) => const _AddFirewallRuleSheet(),
+  );
+}
+
+class _AddFirewallRuleSheet extends StatefulWidget {
+  const _AddFirewallRuleSheet();
+
+  @override
+  State<_AddFirewallRuleSheet> createState() => _AddFirewallRuleSheetState();
+}
+
+class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
+  final _port = TextEditingController();
+  final _source = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  var _action = FirewallAction.allow;
+  var _protocol = 'tcp';
+
+  @override
+  void dispose() {
+    _port.dispose();
+    _source.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(
+      context,
+      FirewallRuleDraft(
+        action: _action,
+        port: _port.text.trim(),
+        protocol: _protocol,
+        source: _source.text.trim().isEmpty ? null : _source.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SheetScaffold(
+      titleText: 'Add firewall rule',
+      heightFactor: 0.68,
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            DropdownButtonFormField<FirewallAction>(
+              // ignore: deprecated_member_use
+              value: _action,
+              decoration: const InputDecoration(
+                labelText: 'Action',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: FirewallAction.allow,
+                  child: Text('Allow'),
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: port,
-                  decoration: const InputDecoration(
-                    labelText: 'Port or service',
-                    hintText: '22 or 80:443 or ssh',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Port is required';
-                    }
-                    return null;
-                  },
+                DropdownMenuItem(
+                  value: FirewallAction.deny,
+                  child: Text('Deny'),
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  // ignore: deprecated_member_use
-                  value: protocol,
-                  decoration: const InputDecoration(
-                    labelText: 'Protocol',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'tcp', child: Text('TCP')),
-                    DropdownMenuItem(value: 'udp', child: Text('UDP')),
-                    DropdownMenuItem(value: 'any', child: Text('Any')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setLocal(() => protocol = value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: source,
-                  decoration: const InputDecoration(
-                    labelText: 'Source (optional)',
-                    hintText: '192.168.1.0/24',
-                    border: OutlineInputBorder(),
-                  ),
+                DropdownMenuItem(
+                  value: FirewallAction.reject,
+                  child: Text('Reject'),
                 ),
               ],
+              onChanged: (value) {
+                if (value != null) setState(() => _action = value);
+              },
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              Navigator.pop(
-                context,
-                FirewallRuleDraft(
-                  action: action,
-                  port: port.text.trim(),
-                  protocol: protocol,
-                  source: source.text.trim().isEmpty
-                      ? null
-                      : source.text.trim(),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _port,
+              decoration: const InputDecoration(
+                labelText: 'Port or service',
+                hintText: '22 or 80:443 or ssh',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Port is required';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: _protocol,
+              decoration: const InputDecoration(
+                labelText: 'Protocol',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'tcp', child: Text('TCP')),
+                DropdownMenuItem(value: 'udp', child: Text('UDP')),
+                DropdownMenuItem(value: 'any', child: Text('Any')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _protocol = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _source,
+              decoration: const InputDecoration(
+                labelText: 'Source (optional)',
+                hintText: '192.168.1.0/24',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
                 ),
-              );
-            },
-            child: const Text('Add'),
-          ),
-        ],
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _submit, child: const Text('Add')),
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-
-  port.dispose();
-  source.dispose();
-  return result;
+    );
+  }
 }
 
 class _FirewallEmpty extends StatelessWidget {

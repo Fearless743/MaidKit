@@ -92,7 +92,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
   Future<void> _addJob() async {
     final current = _document.asData?.value;
     if (current == null) return;
-    final draft = await _showJobDialog(context);
+    final draft = await _showJobSheet(context);
     if (draft == null || !mounted) return;
     final line = CronEntry.formatJob(
       minute: draft.minute,
@@ -118,7 +118,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
   Future<void> _editJob(int jobIndex, CronEntry entry) async {
     final current = _document.asData?.value;
     if (current == null) return;
-    final draft = await _showJobDialog(
+    final draft = await _showJobSheet(
       context,
       initial: _JobDraft(
         minute: entry.minute ?? '*',
@@ -157,26 +157,52 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
   Future<void> _deleteJob(int jobIndex, CronEntry entry) async {
     final current = _document.asData?.value;
     if (current == null) return;
-    final approved = await showDialog<bool>(
+    final approved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove cron job?'),
-        content: Text(
-          entry.command ?? entry.raw,
-          maxLines: 4,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SheetScaffold(
+          titleText: 'Remove cron job?',
+          heightFactor: 0.36,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              Text(
+                entry.command ?? entry.raw,
+                style: theme.textTheme.bodyMedium,
+              ),
+              if (entry.scheduleSummary.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  entry.scheduleSummary,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontFamily: 'IBM Plex Mono',
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheetContext, false),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext, true),
+                    child: const Text('Remove'),
+                  ),
+                ],
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+        );
+      },
     );
     if (approved != true || !mounted) return;
     await _persist(current.removingJob(jobIndex), success: 'Job removed.');
@@ -337,145 +363,183 @@ class _JobDraft {
   final String command;
 }
 
-Future<_JobDraft?> _showJobDialog(
-  BuildContext context, {
-  _JobDraft? initial,
-}) async {
-  final minute = TextEditingController(text: initial?.minute ?? '0');
-  final hour = TextEditingController(text: initial?.hour ?? '*');
-  final dayOfMonth = TextEditingController(text: initial?.dayOfMonth ?? '*');
-  final month = TextEditingController(text: initial?.month ?? '*');
-  final dayOfWeek = TextEditingController(text: initial?.dayOfWeek ?? '*');
-  final command = TextEditingController(text: initial?.command ?? '');
-  final formKey = GlobalKey<FormState>();
-
-  final result = await showDialog<_JobDraft>(
+Future<_JobDraft?> _showJobSheet(BuildContext context, {_JobDraft? initial}) {
+  return showModalBottomSheet<_JobDraft>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(initial == null ? 'Add cron job' : 'Edit cron job'),
-      content: SizedBox(
-        width: 420,
-        child: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (_) => _CronJobSheet(initial: initial),
+  );
+}
+
+class _CronJobSheet extends StatefulWidget {
+  const _CronJobSheet({this.initial});
+
+  final _JobDraft? initial;
+
+  @override
+  State<_CronJobSheet> createState() => _CronJobSheetState();
+}
+
+class _CronJobSheetState extends State<_CronJobSheet> {
+  late final TextEditingController _minute;
+  late final TextEditingController _hour;
+  late final TextEditingController _dayOfMonth;
+  late final TextEditingController _month;
+  late final TextEditingController _dayOfWeek;
+  late final TextEditingController _command;
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initial;
+    _minute = TextEditingController(text: initial?.minute ?? '0');
+    _hour = TextEditingController(text: initial?.hour ?? '*');
+    _dayOfMonth = TextEditingController(text: initial?.dayOfMonth ?? '*');
+    _month = TextEditingController(text: initial?.month ?? '*');
+    _dayOfWeek = TextEditingController(text: initial?.dayOfWeek ?? '*');
+    _command = TextEditingController(text: initial?.command ?? '');
+  }
+
+  @override
+  void dispose() {
+    _minute.dispose();
+    _hour.dispose();
+    _dayOfMonth.dispose();
+    _month.dispose();
+    _dayOfWeek.dispose();
+    _command.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(
+      context,
+      _JobDraft(
+        minute: _minute.text,
+        hour: _hour.text,
+        dayOfMonth: _dayOfMonth.text,
+        month: _month.text,
+        dayOfWeek: _dayOfWeek.text,
+        command: _command.text,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isEdit = widget.initial != null;
+    return SheetScaffold(
+      titleText: isEdit ? 'Edit cron job' : 'Add cron job',
+      heightFactor: 0.72,
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text(
+              'Schedule (standard five-field cron)',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
               children: [
-                Text(
-                  'Schedule (standard five-field cron)',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _CronField(
-                        controller: minute,
-                        label: 'Minute',
-                        hint: '0-59',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CronField(
-                        controller: hour,
-                        label: 'Hour',
-                        hint: '0-23',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _CronField(
-                        controller: dayOfMonth,
-                        label: 'Day',
-                        hint: '1-31',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CronField(
-                        controller: month,
-                        label: 'Month',
-                        hint: '1-12',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CronField(
-                        controller: dayOfWeek,
-                        label: 'Weekday',
-                        hint: '0-7',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: command,
-                  decoration: const InputDecoration(
-                    labelText: 'Command',
-                    hintText: '/usr/bin/example --flag',
-                    border: OutlineInputBorder(),
+                Expanded(
+                  child: _CronField(
+                    controller: _minute,
+                    label: 'Minute',
+                    hint: '0-59',
                   ),
-                  minLines: 2,
-                  maxLines: 4,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Command is required';
-                    }
-                    return null;
-                  },
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Examples: 0 2 * * * nightly · */15 * * * * every 15 minutes',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _CronField(
+                    controller: _hour,
+                    label: 'Hour',
+                    hint: '0-23',
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _CronField(
+                    controller: _dayOfMonth,
+                    label: 'Day',
+                    hint: '1-31',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _CronField(
+                    controller: _month,
+                    label: 'Month',
+                    hint: '1-12',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _CronField(
+                    controller: _dayOfWeek,
+                    label: 'Weekday',
+                    hint: '0-7',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _command,
+              decoration: const InputDecoration(
+                labelText: 'Command',
+                hintText: '/usr/bin/example --flag',
+                border: OutlineInputBorder(),
+              ),
+              minLines: 2,
+              maxLines: 4,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Command is required';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Examples: 0 2 * * * nightly · */15 * * * * every 15 minutes',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _submit,
+                  child: Text(isEdit ? 'Save' : 'Add'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (!(formKey.currentState?.validate() ?? false)) return;
-            Navigator.pop(
-              context,
-              _JobDraft(
-                minute: minute.text,
-                hour: hour.text,
-                dayOfMonth: dayOfMonth.text,
-                month: month.text,
-                dayOfWeek: dayOfWeek.text,
-                command: command.text,
-              ),
-            );
-          },
-          child: Text(initial == null ? 'Add' : 'Save'),
-        ),
-      ],
-    ),
-  );
-
-  minute.dispose();
-  hour.dispose();
-  dayOfMonth.dispose();
-  month.dispose();
-  dayOfWeek.dispose();
-  command.dispose();
-  return result;
+    );
+  }
 }
 
 class _CronField extends StatelessWidget {
