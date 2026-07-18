@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -6,14 +7,17 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
+import 'package:yaml/yaml.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/theme.dart';
 import 'compose_project_actions.dart';
+import 'compose_project_editor.dart';
 import 'container_cache_repository.dart';
 import 'container_list_tile.dart';
 import 'container_models.dart';
@@ -351,6 +355,61 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
     }
   }
 
+  Future<void> _deploy(Server server) async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (_) => _ComposeDeploymentSheet(
+        projectName: widget.link.name,
+        directory: widget.link.directory,
+        initialSource: _compose,
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      await runWithDeployTerminal(
+        ref: ref,
+        title: 'Deploy ${widget.link.name}',
+        subtitle: server.name,
+        command:
+            '${_runtime.name} compose -p ${widget.link.name} up -d  (${widget.link.directory})',
+        run: (onOutput) async {
+          await ref
+              .read(connectionManagerProvider)
+              .deployComposeProject(
+                server.id,
+                runtime: _runtime,
+                scope: _scope,
+                projectName: widget.link.name,
+                directory: widget.link.directory,
+                composeSource: source,
+                sudoPassword: await _sudoPassword(server),
+                onOutput: onOutput,
+              );
+        },
+      );
+      if (!mounted) return;
+      showStyledSnackBar(
+        message: '${widget.link.name} was deployed to ${server.name}.',
+        title: 'Project deployed',
+        icon: Symbols.check_circle,
+        accentColor: Theme.of(context).colorScheme.primary,
+      );
+      await Future.wait([_loadCompose(), _refresh()]);
+    } catch (error) {
+      if (!mounted) return;
+      showStyledSnackBar(
+        message: error.toString(),
+        title: 'Could not deploy project',
+        icon: Symbols.error,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+    }
+  }
+
   Server? _serverOrNull() {
     final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
     return servers.where((item) => item.id == widget.link.serverId).firstOrNull;
@@ -437,6 +496,11 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
                   }
                 : null,
             icon: const Icon(Symbols.refresh),
+          ),
+          IconButton(
+            tooltip: 'Deploy configuration',
+            onPressed: connected ? () => unawaited(_deploy(server)) : null,
+            icon: const Icon(Symbols.rocket_launch),
           ),
           PopupMenuButton<ComposeProjectAction>(
             onSelected: (action) => unawaited(_action(server, action)),
@@ -1685,6 +1749,449 @@ class _EmptyPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _ComposeFormMode { guided, advanced }
+
+class _ComposeServiceDraft {
+  _ComposeServiceDraft({
+    String name = '',
+    String image = '',
+    String ports = '',
+    String environment = '',
+    String volumes = '',
+  }) : name = TextEditingController(text: name),
+       image = TextEditingController(text: image),
+       ports = TextEditingController(text: ports),
+       environment = TextEditingController(text: environment),
+       volumes = TextEditingController(text: volumes);
+
+  final TextEditingController name;
+  final TextEditingController image;
+  final TextEditingController ports;
+  final TextEditingController environment;
+  final TextEditingController volumes;
+
+  void dispose() {
+    name.dispose();
+    image.dispose();
+    ports.dispose();
+    environment.dispose();
+    volumes.dispose();
+  }
+}
+
+class _ComposeDeploymentSheet extends StatefulWidget {
+  const _ComposeDeploymentSheet({
+    required this.projectName,
+    required this.directory,
+    this.initialSource,
+  });
+
+  final String projectName;
+  final String directory;
+  final String? initialSource;
+
+  @override
+  State<_ComposeDeploymentSheet> createState() =>
+      _ComposeDeploymentSheetState();
+}
+
+class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
+  late String _sharedSource = widget.initialSource ?? '';
+  late final List<_ComposeServiceDraft> _services;
+  late final _source = TextEditingController(text: widget.initialSource ?? '');
+  late _ComposeFormMode _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    final parsed = _servicesFromCompose(widget.initialSource);
+    _services =
+        parsed ?? [_ComposeServiceDraft(name: 'app', image: 'nginx:alpine')];
+    // Keep an unrecognised existing file intact until the user explicitly
+    // chooses the guided form. Advanced mode is never lossy.
+    _mode = widget.initialSource?.trim().isNotEmpty == true && parsed == null
+        ? _ComposeFormMode.advanced
+        : _ComposeFormMode.guided;
+  }
+
+  @override
+  void dispose() {
+    _source.dispose();
+    for (final service in _services) {
+      service.dispose();
+    }
+    super.dispose();
+  }
+
+  bool get _canDeploy {
+    if (_mode == _ComposeFormMode.advanced) {
+      return _source.text.trim().isNotEmpty;
+    }
+    return _services.isNotEmpty &&
+        _services.every(
+          (service) =>
+              _isServiceName(service.name.text.trim()) &&
+              service.image.text.trim().isNotEmpty,
+        );
+  }
+
+  bool _isServiceName(String value) =>
+      RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]*$').hasMatch(value);
+
+  List<_ComposeServiceDraft>? _servicesFromCompose(String? source) {
+    if (source == null || source.trim().isEmpty) return null;
+    try {
+      final root = loadYaml(source);
+      if (root is! YamlMap || root['services'] is! YamlMap) return null;
+      if (root.keys.any((key) => key.toString() != 'services')) return null;
+      final drafts = <_ComposeServiceDraft>[];
+      for (final entry in (root['services'] as YamlMap).entries) {
+        final serviceName = entry.key.toString();
+        final service = entry.value;
+        if (!_isServiceName(serviceName) || service is! YamlMap) continue;
+        const supportedKeys = {'image', 'ports', 'environment', 'volumes'};
+        if (service.keys.any(
+          (key) => !supportedKeys.contains(key.toString()),
+        )) {
+          return null;
+        }
+        if (!_isSimpleList(service['ports']) ||
+            !_isSimpleEnvironment(service['environment']) ||
+            !_isSimpleList(service['volumes'])) {
+          return null;
+        }
+        final image = service['image']?.toString().trim() ?? '';
+        // Image-less services (for example `build:` projects) stay available
+        // in advanced mode so the guided form never discards their settings.
+        if (image.isEmpty) return null;
+        drafts.add(
+          _ComposeServiceDraft(
+            name: serviceName,
+            image: image,
+            ports: _composeLines(service['ports']),
+            environment: _environmentLines(service['environment']),
+            volumes: _composeLines(service['volumes']),
+          ),
+        );
+      }
+      return drafts.isEmpty ? null : drafts;
+    } on YamlException {
+      return null;
+    }
+  }
+
+  String _composeLines(Object? value) {
+    if (value is Iterable) {
+      return value.map((item) => item.toString()).join('\n');
+    }
+    return value?.toString() ?? '';
+  }
+
+  bool _isSimpleList(Object? value) =>
+      value == null ||
+      value is String ||
+      value is Iterable && value.every((item) => item is String || item is num);
+
+  bool _isSimpleEnvironment(Object? value) =>
+      _isSimpleList(value) ||
+      value is Map &&
+          value.entries.every(
+            (entry) =>
+                entry.key is String &&
+                (entry.value == null ||
+                    entry.value is String ||
+                    entry.value is num ||
+                    entry.value is bool),
+          );
+
+  String _environmentLines(Object? value) {
+    if (value is Map) {
+      return value.entries
+          .map((entry) => '${entry.key}=${entry.value ?? ''}')
+          .join('\n');
+    }
+    return _composeLines(value);
+  }
+
+  List<String> _lines(TextEditingController controller) => controller.text
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+
+  String _buildCompose() {
+    final buffer = StringBuffer('services:\n');
+    for (final service in _services) {
+      buffer.writeln('  ${service.name.text.trim()}:');
+      buffer.writeln('    image: ${jsonEncode(service.image.text.trim())}');
+      _writeList(buffer, 'ports', _lines(service.ports));
+      _writeEnvironment(buffer, _lines(service.environment));
+      _writeList(buffer, 'volumes', _lines(service.volumes));
+    }
+    return buffer.toString();
+  }
+
+  void _writeList(StringBuffer buffer, String label, List<String> values) {
+    if (values.isEmpty) return;
+    buffer.writeln('    $label:');
+    for (final value in values) {
+      buffer.writeln('      - ${jsonEncode(value)}');
+    }
+  }
+
+  void _writeEnvironment(StringBuffer buffer, List<String> values) {
+    if (values.isEmpty) return;
+    buffer.writeln('    environment:');
+    for (final value in values) {
+      final separator = value.indexOf('=');
+      if (separator <= 0) {
+        buffer.writeln('      - ${jsonEncode(value)}');
+      } else {
+        final key = value.substring(0, separator).trim();
+        final content = value.substring(separator + 1);
+        buffer.writeln('      $key: ${jsonEncode(content)}');
+      }
+    }
+  }
+
+  void _submit() {
+    if (!_canDeploy) return;
+    Navigator.pop(
+      context,
+      _mode == _ComposeFormMode.advanced ? _source.text : _buildCompose(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _sharedEditor(context);
+  }
+
+  Widget _sharedEditor(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SheetScaffold(
+      titleText: 'Deploy ${widget.projectName}',
+      heightFactor: 0.9,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          Text(
+            'Writes compose.yaml to ${widget.directory} and starts the project.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ComposeProjectEditor(
+            initialSource: widget.initialSource,
+            onChanged: (value) => _sharedSource = value,
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () {
+                  if (_sharedSource.trim().isNotEmpty) {
+                    Navigator.pop(context, _sharedSource);
+                  }
+                },
+                icon: const Icon(Symbols.rocket_launch, size: 18),
+                label: const Text('Deploy'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Kept temporarily for the import-only sheet controls below; new-project
+  // deployment uses the shared editor above.
+  // ignore: unused_element
+  Widget _legacyBuild(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SheetScaffold(
+      titleText: 'Deploy ${widget.projectName}',
+      heightFactor: 0.9,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          Text(
+            'Writes compose.yaml to ${widget.directory} and starts the project.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SegmentedButton<_ComposeFormMode>(
+            segments: const [
+              ButtonSegment(
+                value: _ComposeFormMode.guided,
+                icon: Icon(Symbols.tune, size: 18),
+                label: Text('Guided'),
+              ),
+              ButtonSegment(
+                value: _ComposeFormMode.advanced,
+                icon: Icon(Symbols.code, size: 18),
+                label: Text('Advanced'),
+              ),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (selection) =>
+                setState(() => _mode = selection.first),
+          ),
+          const SizedBox(height: 16),
+          if (_mode == _ComposeFormMode.guided) ...[
+            Text(
+              widget.initialSource?.trim().isNotEmpty == true
+                  ? 'Services were loaded from the existing Compose file. Put each port, variable, or folder on its own line.'
+                  : 'Add one or more services. Put each port, variable, or folder on its own line.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (var index = 0; index < _services.length; index++)
+              _serviceEditor(index, _services[index]),
+            TextButton.icon(
+              onPressed: () =>
+                  setState(() => _services.add(_ComposeServiceDraft())),
+              icon: const Icon(Symbols.add, size: 18),
+              label: const Text('Add service'),
+            ),
+          ] else ...[
+            TextField(
+              controller: _source,
+              onChanged: (_) => setState(() {}),
+              minLines: 18,
+              maxLines: 28,
+              style: const TextStyle(
+                fontFamily: MaidKitFonts.mono,
+                fontSize: 13,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'compose.yaml',
+                alignLabelWithHint: true,
+                helperText:
+                    'Paste or write the complete Compose file. It replaces compose.yaml in this project directory.',
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _canDeploy ? _submit : null,
+                icon: const Icon(Symbols.rocket_launch, size: 18),
+                label: const Text('Deploy'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _serviceEditor(int index, _ComposeServiceDraft service) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Service ${index + 1}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const Spacer(),
+                if (_services.length > 1)
+                  IconButton(
+                    tooltip: 'Remove service',
+                    onPressed: () =>
+                        setState(() => _services.removeAt(index).dispose()),
+                    icon: const Icon(Symbols.close, size: 18),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: service.name,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Service name',
+                helperText: 'For example: app, database, or worker',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.image,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Image',
+                hintText: 'nginx:alpine',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.ports,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Ports (optional)',
+                hintText: '8080:80',
+                helperText: 'One mapping per line',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.environment,
+              minLines: 1,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Environment variables (optional)',
+                hintText: 'DATABASE_URL=postgres://database/app',
+                helperText: 'One NAME=value entry per line',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.volumes,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Folders (optional)',
+                hintText: '/opt/app-data:/var/lib/app',
+                helperText: 'One host-path:container-path mapping per line',
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 bool _isRunning(ServerContainer container) => isContainerRunning(container);

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -15,6 +17,7 @@ import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/theme.dart';
 import 'compose_project_actions.dart';
+import 'compose_project_editor.dart';
 import 'container_models.dart';
 import 'container_cache_repository.dart';
 import 'project_repository.dart';
@@ -1508,6 +1511,9 @@ class _ComposeProjectSheet extends ConsumerStatefulWidget {
 }
 
 class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
+  late String _sharedSource =
+      widget.initialSource ??
+      'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n';
   late Server? server =
       widget.initialServer ??
       (widget.servers.isEmpty ? null : widget.servers.first);
@@ -1522,6 +1528,10 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
   );
   late ContainerRuntime runtime = widget.initialRuntime;
   late ContainerScope scope = widget.initialScope;
+  final _services = <_ComposeProjectService>[
+    _ComposeProjectService(name: 'app', image: 'nginx:alpine'),
+  ];
+  var _composeMode = _ComposeProjectMode.guided;
   var _browsingDirectory = false;
 
   @override
@@ -1529,6 +1539,9 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
     name.dispose();
     directory.dispose();
     source.dispose();
+    for (final service in _services) {
+      service.dispose();
+    }
     super.dispose();
   }
 
@@ -1556,7 +1569,13 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
 
   void _submit() {
     final selected = server;
-    if (selected == null || name.text.trim().isEmpty) return;
+    final composeSource = widget.importMode ? source.text : _sharedSource;
+    if (selected == null ||
+        name.text.trim().isEmpty ||
+        composeSource.trim().isEmpty ||
+        (widget.importMode && !_canSubmit)) {
+      return;
+    }
     Navigator.pop(
       context,
       _ComposeDraft(
@@ -1565,14 +1584,70 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
         scope,
         name.text.trim(),
         directory.text.trim(),
-        source.text,
+        composeSource,
         !widget.importMode,
       ),
     );
   }
 
+  bool get _canSubmit =>
+      widget.importMode ||
+      _composeMode == _ComposeProjectMode.advanced ||
+      _services.isNotEmpty &&
+          _services.every(
+            (service) =>
+                RegExp(
+                  r'^[a-zA-Z0-9][a-zA-Z0-9_.-]*$',
+                ).hasMatch(service.name.text.trim()) &&
+                service.image.text.trim().isNotEmpty,
+          );
+
+  List<String> _lines(TextEditingController controller) => controller.text
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+
+  // ignore: unused_element
+  String _buildCompose() {
+    final buffer = StringBuffer('services:\n');
+    for (final service in _services) {
+      buffer.writeln('  ${service.name.text.trim()}:');
+      buffer.writeln('    image: ${jsonEncode(service.image.text.trim())}');
+      _writeList(buffer, 'ports', _lines(service.ports));
+      _writeEnvironment(buffer, _lines(service.environment));
+      _writeList(buffer, 'volumes', _lines(service.volumes));
+    }
+    return buffer.toString();
+  }
+
+  void _writeList(StringBuffer buffer, String label, List<String> values) {
+    if (values.isEmpty) return;
+    buffer.writeln('    $label:');
+    for (final value in values) {
+      buffer.writeln('      - ${jsonEncode(value)}');
+    }
+  }
+
+  void _writeEnvironment(StringBuffer buffer, List<String> values) {
+    if (values.isEmpty) return;
+    buffer.writeln('    environment:');
+    for (final value in values) {
+      final separator = value.indexOf('=');
+      if (separator <= 0) {
+        buffer.writeln('      - ${jsonEncode(value)}');
+      } else {
+        buffer.writeln(
+          '      ${value.substring(0, separator).trim()}: ${jsonEncode(value.substring(separator + 1))}',
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!widget.importMode) return _sharedNewProjectForm(context);
+    // ignore: unused_local_variable
     final theme = Theme.of(context);
     return SheetScaffold(
       titleText: widget.importMode
@@ -1667,18 +1742,181 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
             ],
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: source,
-            minLines: 12,
-            maxLines: 18,
-            style: const TextStyle(fontFamily: MaidKitFonts.mono, fontSize: 13),
-
-            decoration: InputDecoration(
-              labelText: widget.importMode
-                  ? 'compose file (from remote)'
-                  : 'compose.yaml',
-              alignLabelWithHint: true,
+          if (widget.importMode)
+            TextField(
+              controller: source,
+              readOnly: true,
+              minLines: 12,
+              maxLines: 18,
+              style: const TextStyle(
+                fontFamily: MaidKitFonts.mono,
+                fontSize: 13,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'compose file (from remote)',
+                alignLabelWithHint: true,
+              ),
+            )
+          else ...[
+            SegmentedButton<_ComposeProjectMode>(
+              segments: const [
+                ButtonSegment(
+                  value: _ComposeProjectMode.guided,
+                  icon: Icon(Symbols.tune, size: 18),
+                  label: Text('Guided'),
+                ),
+                ButtonSegment(
+                  value: _ComposeProjectMode.advanced,
+                  icon: Icon(Symbols.code, size: 18),
+                  label: Text('Advanced'),
+                ),
+              ],
+              selected: {_composeMode},
+              onSelectionChanged: (selection) =>
+                  setState(() => _composeMode = selection.first),
             ),
+            const SizedBox(height: 16),
+            if (_composeMode == _ComposeProjectMode.guided) ...[
+              Text(
+                'Add one or more services. Put each port, variable, or folder on its own line.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (var index = 0; index < _services.length; index++)
+                _serviceEditor(index, _services[index]),
+              TextButton.icon(
+                onPressed: () =>
+                    setState(() => _services.add(_ComposeProjectService())),
+                icon: const Icon(Symbols.add, size: 18),
+                label: const Text('Add service'),
+              ),
+            ] else
+              TextField(
+                controller: source,
+                onChanged: (_) => setState(() {}),
+                minLines: 12,
+                maxLines: 18,
+                style: const TextStyle(
+                  fontFamily: MaidKitFonts.mono,
+                  fontSize: 13,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'compose.yaml',
+                  alignLabelWithHint: true,
+                  helperText:
+                      'Write the complete Compose file. It will be saved as compose.yaml.',
+                ),
+              ),
+          ],
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed:
+                    server == null || name.text.trim().isEmpty || !_canSubmit
+                    ? null
+                    : _submit,
+                child: Text(widget.importMode ? 'Link project' : 'Deploy'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sharedNewProjectForm(BuildContext context) {
+    return SheetScaffold(
+      titleText: 'New compose project',
+      heightFactor: 0.9,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          DropdownButtonFormField<Server>(
+            initialValue: server,
+            decoration: const InputDecoration(labelText: 'Server'),
+            items: widget.servers
+                .map(
+                  (item) =>
+                      DropdownMenuItem(value: item, child: Text(item.name)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => server = value),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: name,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(labelText: 'Project name'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: directory,
+            decoration: InputDecoration(
+              labelText: 'Remote directory',
+              suffixIcon: IconButton(
+                tooltip: 'Browse remote folder',
+                onPressed: server == null || _browsingDirectory
+                    ? null
+                    : _browseRemoteDirectory,
+                icon: _browsingDirectory
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Symbols.folder_open),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<ContainerRuntime>(
+                  initialValue: runtime,
+                  decoration: const InputDecoration(labelText: 'Runtime'),
+                  items: ContainerRuntime.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(value.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => runtime = value!),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<ContainerScope>(
+                  initialValue: scope,
+                  decoration: const InputDecoration(labelText: 'Scope'),
+                  items: ContainerScope.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(value.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => scope = value!),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ComposeProjectEditor(
+            initialSource: _sharedSource,
+            onChanged: (value) => _sharedSource = value,
           ),
           const SizedBox(height: 20),
           Row(
@@ -1693,13 +1931,120 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
                 onPressed: server == null || name.text.trim().isEmpty
                     ? null
                     : _submit,
-                child: Text(widget.importMode ? 'Link project' : 'Deploy'),
+                child: const Text('Deploy'),
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Widget _serviceEditor(int index, _ComposeProjectService service) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Service ${index + 1}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const Spacer(),
+                if (_services.length > 1)
+                  IconButton(
+                    tooltip: 'Remove service',
+                    onPressed: () =>
+                        setState(() => _services.removeAt(index).dispose()),
+                    icon: const Icon(Symbols.close, size: 18),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: service.name,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Service name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.image,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Image',
+                hintText: 'nginx:alpine',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.ports,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Ports (optional)',
+                hintText: '8080:80',
+                helperText: 'One mapping per line',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.environment,
+              minLines: 1,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Environment variables (optional)',
+                hintText: 'DATABASE_URL=postgres://database/app',
+                helperText: 'One NAME=value entry per line',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: service.volumes,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Folders (optional)',
+                hintText: '/opt/app-data:/var/lib/app',
+                helperText: 'One host-path:container-path mapping per line',
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+enum _ComposeProjectMode { guided, advanced }
+
+class _ComposeProjectService {
+  _ComposeProjectService({String name = '', String image = ''})
+    : name = TextEditingController(text: name),
+      image = TextEditingController(text: image),
+      ports = TextEditingController(),
+      environment = TextEditingController(),
+      volumes = TextEditingController();
+
+  final TextEditingController name;
+  final TextEditingController image;
+  final TextEditingController ports;
+  final TextEditingController environment;
+  final TextEditingController volumes;
+
+  void dispose() {
+    name.dispose();
+    image.dispose();
+    ports.dispose();
+    environment.dispose();
+    volumes.dispose();
   }
 }
 
