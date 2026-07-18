@@ -58,6 +58,7 @@ class SshConnectionManager {
     ServerCredential credential,
     HostKeyApproval approve, {
     String? knownHostKeyFingerprint,
+    String? initialDirectory,
   }) async {
     final client = await _createClient(
       server,
@@ -101,12 +102,22 @@ class SshConnectionManager {
         }
       }),
     );
+    final directory = initialDirectory?.trim();
+    if (directory != null && directory.isNotEmpty) {
+      // Move into the requested remote folder after the shell starts. Quote the
+      // path so spaces and special characters remain literal.
+      shell.write(utf8.encode('cd ${_shellSingleQuote(directory)}\n'));
+    }
     return TerminalSessionHandle(
       id: terminalId,
       adapter: terminal,
       done: shell.done,
     );
   }
+
+  /// POSIX-safe single-quoted string for remote shell commands.
+  String _shellSingleQuote(String value) =>
+      "'${value.replaceAll("'", "'\\''")}'";
 
   Future<void> closeTerminal(String terminalId) async {
     final terminal = _terminals.remove(terminalId);
@@ -155,6 +166,7 @@ class SshConnectionManager {
   /// or transports a sudo password.
   Future<List<ContainerEnvironment>> listContainers(
     int serverId, {
+    bool sshUserIsRoot = false,
     String? sudoPassword,
   }) async {
     return withClient(serverId, (client) async {
@@ -162,7 +174,10 @@ class SshConnectionManager {
       for (final runtime in ContainerRuntime.values) {
         final available = await _runtimeAvailable(client, runtime);
         if (!available) continue;
-        for (final scope in ContainerScope.values) {
+        final scopes = sshUserIsRoot
+            ? const [ContainerScope.root]
+            : ContainerScope.values;
+        for (final scope in scopes) {
           environments.add(
             await _listContainerEnvironment(
               client,
@@ -173,8 +188,42 @@ class SshConnectionManager {
           );
         }
       }
-      return environments;
+      return _deduplicateContainerEnvironments(environments);
     });
+  }
+
+  /// A Docker compatibility shim backed by Podman reports the exact same
+  /// containers through both CLIs. Keep one result per ID and scope, with the
+  /// native Podman runtime taking precedence so future project actions use it.
+  List<ContainerEnvironment> _deduplicateContainerEnvironments(
+    List<ContainerEnvironment> environments,
+  ) {
+    final seenByScope = <ContainerScope, Set<String>>{
+      for (final scope in ContainerScope.values) scope: <String>{},
+    };
+    final keptByEnvironment = <ContainerEnvironment, List<ServerContainer>>{};
+    for (final environment in [
+      ...environments,
+    ]..sort((a, b) => b.runtime.index.compareTo(a.runtime.index))) {
+      if (!environment.isAvailable) continue;
+      final seen = seenByScope[environment.scope]!;
+      keptByEnvironment[environment] = [
+        for (final container in environment.containers)
+          if (seen.add(container.id)) container,
+      ];
+    }
+    return [
+      for (final environment in environments)
+        if (!keptByEnvironment.containsKey(environment) ||
+            keptByEnvironment[environment]!.isNotEmpty)
+          ContainerEnvironment(
+            runtime: environment.runtime,
+            scope: environment.scope,
+            containers:
+                keptByEnvironment[environment] ?? environment.containers,
+            error: environment.error,
+          ),
+    ];
   }
 
   Future<void> runContainerAction(
@@ -218,9 +267,20 @@ class SshConnectionManager {
     ContainerScope scope, {
     String? sudoPassword,
   }) async {
+    // Podman's `ps` reporter does not implement Docker's `.Label` template
+    // field. Read the portable basic fields first, then inspect labels per
+    // container; both Docker and Podman expose `.Config.Labels` there.
+    final script =
+        '''
+${runtime.name} ps -a --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}' |
+while IFS="\$(printf '\t')" read -r id name image state status; do
+  labels=\$(${runtime.name} inspect --format '{{with index .Config.Labels "com.docker.compose.project"}}{{.}}{{end}}\t{{with index .Config.Labels "io.podman.compose.project"}}{{.}}{{end}}' "\$id")
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "\$id" "\$name" "\$image" "\$state" "\$status" "\$labels"
+done
+''';
     final result = await _execute(
       client,
-      '${_scopePrefix(scope, sudoPassword)}${runtime.name} ps -a --format "{{.ID}}\\t{{.Names}}\\t{{.Image}}\\t{{.State}}\\t{{.Status}}"',
+      _scopedShell(scope, sudoPassword, script),
       stdin: scope == ContainerScope.root ? sudoPassword : null,
     );
     if (result.exitCode != 0) {
@@ -263,14 +323,276 @@ class SshConnectionManager {
 
   ServerContainer? _parseContainer(String line) {
     final fields = line.split('\t');
-    if (fields.length != 5 || fields.any((field) => field.isEmpty)) return null;
+    if (fields.length != 7 || fields.take(5).any((field) => field.isEmpty)) {
+      return null;
+    }
     return ServerContainer(
       id: fields[0],
       name: fields[1],
       image: fields[2],
       state: fields[3],
       status: fields[4],
+      composeProject: fields[5].isEmpty
+          ? (fields[6].isEmpty ? null : fields[6])
+          : fields[5],
     );
+  }
+
+  Future<void> deployComposeProject(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String projectName,
+    required String directory,
+    required String composeSource,
+    String? sudoPassword,
+  }) async {
+    if (!_safeProjectName(projectName) || !_safeRemoteDirectory(directory)) {
+      throw ArgumentError('Project name or remote directory is invalid.');
+    }
+    final encoded = base64.encode(utf8.encode(composeSource));
+    await withClient(serverId, (client) async {
+      // Keep every part of the deployment in the same privileged shell. A
+      // prefix on only `mkdir` leaves the redirected file write running as the
+      // SSH user, which fails for folders such as /srv.
+      final script =
+          'mkdir -p $directory && '
+          'printf %s $encoded | base64 -d > $directory/compose.yaml && '
+          'cd $directory && ${runtime.name} compose -p $projectName up -d';
+      final result = await _execute(
+        client,
+        _scopedShell(scope, sudoPassword, script),
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  /// Reads the first conventional compose file from a directory using the
+  /// selected container scope. This is intentionally command based rather
+  /// than SFTP so root-owned project folders can be imported as well.
+  Future<(String source, String fileName)?> readComposeFile(
+    int serverId, {
+    required ContainerScope scope,
+    required String directory,
+    String? sudoPassword,
+  }) async {
+    if (!_safeRemoteDirectory(directory)) {
+      throw ArgumentError.value(directory, 'directory', 'Invalid directory.');
+    }
+    const names = [
+      'compose.yaml',
+      'compose.yml',
+      'docker-compose.yaml',
+      'docker-compose.yml',
+    ];
+    final checks = names
+        .map(
+          (name) =>
+              'if [ -f $directory/$name ]; then '
+              'printf "%s\\n" $name; cat $directory/$name; exit 0; fi',
+        )
+        .join('; ');
+    return withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        _scopedShell(scope, sudoPassword, '$checks; exit 2'),
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode == 2) return null;
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+      final split = result.stdout.indexOf('\n');
+      if (split <= 0) return null;
+      return (
+        result.stdout.substring(split + 1).trimRight(),
+        result.stdout.substring(0, split),
+      );
+    });
+  }
+
+  Future<void> startRawContainer(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String image,
+    required String name,
+    String arguments = '',
+    String? sudoPassword,
+  }) async {
+    if (!_safeProjectName(name) || image.trim().isEmpty) {
+      throw ArgumentError('Container name and image are required.');
+    }
+    // Arguments are deliberately a terminal-like escape hatch. The image and
+    // name remain validated, while advanced runtime flags stay available.
+    await withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        '${_scopePrefix(scope, sudoPassword)}${runtime.name} run -d --name $name $arguments $image',
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  Future<void> runComposeProjectAction(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String projectName,
+    required String directory,
+    required ComposeProjectAction action,
+    String? sudoPassword,
+  }) async {
+    if (!_safeProjectName(projectName) || !_safeRemoteDirectory(directory)) {
+      throw ArgumentError('Project name or remote directory is invalid.');
+    }
+    final command = switch (action) {
+      ComposeProjectAction.stop => 'stop',
+      ComposeProjectAction.restart => 'restart',
+      ComposeProjectAction.recreate => 'up -d --force-recreate',
+    };
+    await withClient(serverId, (client) async {
+      final result = await _execute(
+        client,
+        _scopedShell(
+          scope,
+          sudoPassword,
+          'cd $directory && ${runtime.name} compose -p $projectName $command',
+        ),
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) throw StateError(_commandError(result));
+    });
+  }
+
+  /// One-shot resource sample from `docker stats` / `podman stats`.
+  ///
+  /// When [containerIds] is non-empty, only those containers are sampled.
+  /// Stopped IDs are ignored by the runtime and simply omit a row.
+  Future<List<ContainerStats>> listContainerStats(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    List<String> containerIds = const [],
+    String? sudoPassword,
+  }) async {
+    for (final id in containerIds) {
+      if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$').hasMatch(id)) {
+        throw ArgumentError.value(id, 'containerIds', 'Invalid container ID.');
+      }
+    }
+    return withClient(serverId, (client) async {
+      final targets = containerIds.isEmpty ? '' : ' ${containerIds.join(' ')}';
+      // Go templates are portable across Docker and Podman for these fields.
+      final script =
+          '${runtime.name} stats --no-stream --format '
+          "'{{.ID}}\\t{{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}\\t{{.MemPerc}}"
+          "\\t{{.NetIO}}\\t{{.BlockIO}}\\t{{.PIDs}}'$targets";
+      final result = await _execute(
+        client,
+        _scopedShell(scope, sudoPassword, script),
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      if (result.exitCode != 0) {
+        // Empty set (no running containers) is not an error for the UI.
+        final message = _commandError(result).toLowerCase();
+        if (message.contains('no such container') ||
+            message.contains('you must provide at least one') ||
+            message.contains('no containers') ||
+            result.stdout.trim().isEmpty) {
+          return const [];
+        }
+        throw StateError(_commandError(result));
+      }
+      return result.stdout
+          .split('\n')
+          .map(_parseContainerStats)
+          .whereType<ContainerStats>()
+          .toList();
+    });
+  }
+
+  ContainerStats? _parseContainerStats(String line) {
+    final fields = line.split('\t');
+    if (fields.length < 8) return null;
+    final id = fields[0].trim();
+    final name = fields[1].trim();
+    if (id.isEmpty || name.isEmpty) return null;
+    final memParts = _splitIoPair(fields[3]);
+    final netParts = _splitIoPair(fields[5]);
+    final blockParts = _splitIoPair(fields[6]);
+    return ContainerStats(
+      id: id,
+      name: name,
+      cpuPercent: _parsePercent(fields[2]),
+      memUsage: fields[3].trim(),
+      memPercent: _parsePercent(fields[4]),
+      memUsedBytes: memParts.$1,
+      memLimitBytes: memParts.$2,
+      netIO: fields[5].trim(),
+      netRxBytes: netParts.$1,
+      netTxBytes: netParts.$2,
+      blockIO: fields[6].trim(),
+      blockReadBytes: blockParts.$1,
+      blockWriteBytes: blockParts.$2,
+      pids: int.tryParse(fields[7].trim()),
+    );
+  }
+
+  double? _parsePercent(String raw) {
+    final cleaned = raw.trim().replaceAll('%', '');
+    if (cleaned.isEmpty || cleaned == '--') return null;
+    return double.tryParse(cleaned);
+  }
+
+  /// Parses Docker/Podman pairs such as `1.2MiB / 2GiB` or `1.1kB / 2.2kB`.
+  (int?, int?) _splitIoPair(String raw) {
+    final parts = raw.split('/');
+    if (parts.length != 2) return (null, null);
+    return (_parseHumanSize(parts[0]), _parseHumanSize(parts[1]));
+  }
+
+  int? _parseHumanSize(String raw) {
+    final match = RegExp(
+      r'^\s*([\d.]+)\s*([A-Za-z]+)?\s*$',
+    ).firstMatch(raw.trim());
+    if (match == null) return null;
+    final value = double.tryParse(match.group(1)!);
+    if (value == null) return null;
+    final unit = (match.group(2) ?? 'B').toLowerCase();
+    final multiplier = switch (unit) {
+      'b' => 1,
+      'kb' || 'k' => 1000,
+      'kib' => 1024,
+      'mb' || 'm' => 1000 * 1000,
+      'mib' => 1024 * 1024,
+      'gb' || 'g' => 1000 * 1000 * 1000,
+      'gib' => 1024 * 1024 * 1024,
+      'tb' || 't' => 1000 * 1000 * 1000 * 1000,
+      'tib' => 1024 * 1024 * 1024 * 1024,
+      _ => 1,
+    };
+    return (value * multiplier).round();
+  }
+
+  bool _safeProjectName(String value) =>
+      RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]*$').hasMatch(value);
+
+  bool _safeRemoteDirectory(String value) =>
+      RegExp(r'^/[a-zA-Z0-9_./-]+$').hasMatch(value) && !value.contains('..');
+
+  String _scopedShell(
+    ContainerScope scope,
+    String? sudoPassword,
+    String script,
+  ) {
+    final encoded = base64.encode(utf8.encode(script));
+    final shell = 'echo $encoded | base64 -d | sh';
+    return switch (scope) {
+      ContainerScope.user => shell,
+      ContainerScope.root =>
+        '${_scopePrefix(scope, sudoPassword)}sh -c "$shell"',
+    };
   }
 
   String _scopePrefix(ContainerScope scope, String? sudoPassword) =>

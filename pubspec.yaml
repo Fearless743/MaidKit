@@ -99,22 +99,46 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  fonts:
+    - family: IBM Plex Sans
+      fonts:
+        - asset: assets/fonts/sans/IBMPlexSans-VariableFont_wdth,wght.ttf
+        - asset: assets/fonts/sans/IBMPlexSans-Italic-VariableFont_wdth,wght.ttf
+          style: italic
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/mono/IBMPlexMono-Thin.ttf
+          weight: 100
+        - asset: assets/fonts/mono/IBMPlexMono-ThinItalic.ttf
+          weight: 100
+          style: italic
+        - asset: assets/fonts/mono/IBMPlexMono-ExtraLight.ttf
+          weight: 200
+        - asset: assets/fonts/mono/IBMPlexMono-ExtraLightItalic.ttf
+          weight: 200
+          style: italic
+        - asset: assets/fonts/mono/IBMPlexMono-Light.ttf
+          weight: 300
+        - asset: assets/fonts/mono/IBMPlexMono-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: assets/fonts/mono/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/mono/IBMPlexMono-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/mono/IBMPlexMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/mono/IBMPlexMono-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/mono/IBMPlexMono-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/mono/IBMPlexMono-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: assets/fonts/mono/IBMPlexMono-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/mono/IBMPlexMono-BoldItalic.ttf
+          weight: 700
+          style: italic

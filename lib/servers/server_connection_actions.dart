@@ -4,10 +4,39 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/local/app_database.dart';
+import '../shared/presentation/cloud_file_picker.dart';
 import '../shared/presentation/maidkit_alert.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';
+
+/// Ensures the server is connected, then opens the reusable cloud file picker.
+///
+/// Returns `null` if the user cancels or the connection cannot be established.
+Future<List<CloudPickedPath>?> pickRemotePaths(
+  BuildContext context,
+  WidgetRef ref,
+  Server server, {
+  String? title,
+  String initialPath = '.',
+  CloudFilePickerSelection selection = CloudFilePickerSelection.file,
+  bool allowMultiple = false,
+}) async {
+  final manager = ref.read(connectionManagerProvider);
+  if (manager.clientFor(server.id) == null) {
+    final connected = await connectForStatistics(context, ref, server);
+    if (!connected || !context.mounted) return null;
+  }
+  return showCloudFilePicker(
+    context,
+    sftp: () => manager.withClient(server.id, (client) => client.sftp()),
+    title: title,
+    subtitle: server.name,
+    initialPath: initialPath,
+    selection: selection,
+    allowMultiple: allowMultiple,
+  );
+}
 
 Future<bool> connectForStatistics(
   BuildContext context,
@@ -50,20 +79,34 @@ Future<bool> connectForStatistics(
 Future<bool> openTerminalSession(
   BuildContext context,
   WidgetRef ref,
-  Server server,
-) async {
+  Server server, {
+  String? initialDirectory,
+}) async {
   HostKeyPrompt? approvedHostKey;
+  final loading = showMaidKitLoadingModal(
+    context,
+    message: 'Opening terminal on ${server.name}…',
+  );
   try {
     final credential = await ref
         .read(serverRepositoryProvider)
         .credentialFor(server);
-    await ref.read(terminalTabsProvider.notifier).open(server, credential, (
-      prompt,
-    ) async {
-      final approved = await _approveHostKey(context, prompt);
-      if (approved) approvedHostKey = prompt;
-      return approved;
-    }, knownHostKeyFingerprint: server.hostKeyFingerprint);
+    await ref
+        .read(terminalTabsProvider.notifier)
+        .open(
+          server,
+          credential,
+          (prompt) async {
+            // A host-key prompt must remain interactive, so release the blocking
+            // loading overlay before presenting it.
+            loading.dismiss();
+            final approved = await _approveHostKey(context, prompt);
+            if (approved) approvedHostKey = prompt;
+            return approved;
+          },
+          knownHostKeyFingerprint: server.hostKeyFingerprint,
+          initialDirectory: initialDirectory,
+        );
     if (approvedHostKey != null) {
       await ref
           .read(serverRepositoryProvider)
@@ -80,6 +123,8 @@ Future<bool> openTerminalSession(
       );
     }
     return false;
+  } finally {
+    loading.dismiss();
   }
 }
 

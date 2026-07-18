@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:libghostty/libghostty.dart' as ghostty;
 
+import '../theme.dart';
 import 'terminal_session_adapter.dart';
 
 /// Experimental terminal adapter backed by libghostty-vt.
@@ -619,8 +620,7 @@ class _GhosttyTerminalPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawColor(Color(frame.backgroundArgb), BlendMode.src);
     const textStyle = TextStyle(
-      fontFamily: 'Menlo',
-      fontFamilyFallback: ['Consolas', 'DejaVu Sans Mono', 'monospace'],
+      fontFamily: MaidKitFonts.mono,
       fontSize: 14,
       height: 1.2857,
     );

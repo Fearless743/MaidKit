@@ -4,6 +4,102 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
+import 'package:styled_widget/styled_widget.dart';
+
+class _FadeOverlay extends StatefulWidget {
+  const _FadeOverlay({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FadeOverlay> createState() => _FadeOverlayState();
+}
+
+class _FadeOverlayState extends State<_FadeOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+  )..forward();
+
+  Future<void> animateOut() => _controller.reverse();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: CurvedAnimation(parent: _controller, curve: Curves.linear),
+    child: widget.child,
+  );
+}
+
+/// A non-dismissible, app-wide progress overlay for operations that wait on a
+/// remote server. Keep the returned handle and always dismiss it in `finally`.
+MaidKitLoadingHandle showMaidKitLoadingModal(
+  BuildContext context, {
+  required String message,
+}) {
+  final overlay = IslandUIFoundation.overlayKey?.currentState;
+  if (overlay == null) return MaidKitLoadingHandle._();
+
+  final key = GlobalKey<_FadeOverlayState>();
+  late final OverlayEntry entry;
+  final handle = MaidKitLoadingHandle._(
+    onDismiss: () async {
+      final state = entry.mounted ? key.currentState : null;
+      if (state != null) await state.animateOut();
+      entry.remove();
+    },
+  );
+  entry = OverlayEntry(
+    builder: (context) => _FadeOverlay(
+      key: key,
+      child: Material(
+        color: Colors.black54,
+        child: Center(
+          child: AlertDialog(
+            content: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Island explicitly uses the 2024 Material spinner here.
+                CircularProgressIndicator(
+                  // ignore: deprecated_member_use
+                  year2023: false,
+                  padding: EdgeInsets.zero,
+                ).width(28).height(28).padding(horizontal: 8),
+                const SizedBox(width: 16),
+                Text(message),
+              ],
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 32,
+              vertical: 24,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  overlay.insert(entry);
+  return handle;
+}
+
+class MaidKitLoadingHandle {
+  MaidKitLoadingHandle._({this.onDismiss});
+
+  final Future<void> Function()? onDismiss;
+  var _dismissed = false;
+
+  Future<void> dismiss() async {
+    if (_dismissed) return;
+    _dismissed = true;
+    await onDismiss?.call();
+  }
+}
 
 /// An Overlay-based dialog patterned after Island's alert helper. It keeps
 /// transient confirmation UI above the desktop window frame and avoids route

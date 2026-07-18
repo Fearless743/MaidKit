@@ -11,7 +11,12 @@ class ServerWorkspacePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AutoTabsRouter(
-      routes: const [ServersRoute(), SessionsRoute(), SettingsRoute()],
+      routes: const [
+        ServersRoute(),
+        ProjectsRoute(),
+        SessionsRoute(),
+        SettingsRoute(),
+      ],
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       transitionBuilder: (context, child, animation) {
@@ -42,7 +47,7 @@ class _ServerTabsShell extends StatelessWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex < 2
+                      selectedIndex: tabsRouter.activeIndex < 3
                           ? tabsRouter.activeIndex
                           : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
@@ -51,7 +56,7 @@ class _ServerTabsShell extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 16),
                         child: IconButton(
                           tooltip: 'Settings',
-                          onPressed: () => tabsRouter.setActiveIndex(2),
+                          onPressed: () => tabsRouter.setActiveIndex(3),
                           icon: const Icon(Symbols.settings),
                         ),
                       ),
@@ -60,6 +65,11 @@ class _ServerTabsShell extends StatelessWidget {
                           icon: Icon(Symbols.dns),
                           selectedIcon: Icon(Symbols.dns, fill: 1),
                           label: Text('Servers'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Symbols.deployed_code),
+                          selectedIcon: Icon(Symbols.deployed_code, fill: 1),
+                          label: Text('Projects'),
                         ),
                         NavigationRailDestination(
                           icon: Icon(Symbols.terminal),
@@ -94,6 +104,11 @@ class _ServerTabsShell extends StatelessWidget {
                       icon: Icon(Symbols.dns),
                       selectedIcon: Icon(Symbols.dns, fill: 1),
                       label: 'Servers',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Symbols.deployed_code),
+                      selectedIcon: Icon(Symbols.deployed_code, fill: 1),
+                      label: 'Projects',
                     ),
                     NavigationDestination(
                       icon: Icon(Symbols.terminal, fill: 1),

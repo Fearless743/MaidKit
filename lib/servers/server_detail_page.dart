@@ -25,16 +25,18 @@ class ServerDetailPage extends ConsumerStatefulWidget {
 class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
   AsyncValue<List<ServerProcess>> _processes = const AsyncValue.data([]);
   Timer? _refreshTimer;
+  late final FocusedServerNotifier _focusedServerNotifier;
   var _refreshing = false;
   var _hasLoadedProcesses = false;
 
   @override
   void initState() {
     super.initState();
+    _focusedServerNotifier = ref.read(focusedServerIdProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadProcesses());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(focusedServerIdProvider.notifier).focus(widget.server.id);
+        _focusedServerNotifier.focus(widget.server.id);
       }
     });
     _startRefreshTimer(ref.read(focusedServerRefreshIntervalProvider));
@@ -49,9 +51,8 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    final focusedServer = ref.read(focusedServerIdProvider.notifier);
     final serverId = widget.server.id;
-    Future<void>.microtask(() => focusedServer.clear(serverId));
+    _focusedServerNotifier.clear(serverId);
     super.dispose();
   }
 
@@ -746,16 +747,65 @@ class _ProcessTable extends StatelessWidget {
   );
 }
 
-class _ProcessList extends StatelessWidget {
+enum _ProcessSort { pid, user, cpu, mem, rss, command }
+
+class _ProcessList extends StatefulWidget {
   const _ProcessList({required this.items, required this.onRefresh});
 
   final List<ServerProcess> items;
   final Future<void> Function() onRefresh;
 
   @override
+  State<_ProcessList> createState() => _ProcessListState();
+}
+
+class _ProcessListState extends State<_ProcessList> {
+  // Default to highest CPU first so cost hotspots surface immediately.
+  _ProcessSort _sort = _ProcessSort.cpu;
+  var _ascending = false;
+
+  void _toggleSort(_ProcessSort column) {
+    setState(() {
+      if (_sort == column) {
+        _ascending = !_ascending;
+      } else {
+        _sort = column;
+        // Perf columns default high→low; identity columns low→high.
+        _ascending = switch (column) {
+          _ProcessSort.cpu || _ProcessSort.mem || _ProcessSort.rss => false,
+          _ProcessSort.pid || _ProcessSort.user || _ProcessSort.command => true,
+        };
+      }
+    });
+  }
+
+  List<ServerProcess> get _sorted {
+    final items = [...widget.items];
+    int compare(ServerProcess a, ServerProcess b) {
+      final result = switch (_sort) {
+        _ProcessSort.pid => a.pid.compareTo(b.pid),
+        _ProcessSort.user => a.user.toLowerCase().compareTo(
+          b.user.toLowerCase(),
+        ),
+        _ProcessSort.cpu => a.cpuPercent.compareTo(b.cpuPercent),
+        _ProcessSort.mem => a.memoryPercent.compareTo(b.memoryPercent),
+        _ProcessSort.rss => a.rssKb.compareTo(b.rssKb),
+        _ProcessSort.command => a.command.toLowerCase().compareTo(
+          b.command.toLowerCase(),
+        ),
+      };
+      return _ascending ? result : -result;
+    }
+
+    items.sort(compare);
+    return items;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final items = _sorted;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -773,7 +823,7 @@ class _ProcessList extends StatelessWidget {
               IconButton(
                 tooltip: 'Refresh processes',
                 visualDensity: VisualDensity.compact,
-                onPressed: onRefresh,
+                onPressed: widget.onRefresh,
                 icon: const Icon(Symbols.refresh),
               ),
             ],
@@ -786,7 +836,12 @@ class _ProcessList extends StatelessWidget {
               final wide = constraints.maxWidth >= 640;
               return Column(
                 children: [
-                  _ProcessHeaderRow(wide: wide),
+                  _ProcessHeaderRow(
+                    wide: wide,
+                    sort: _sort,
+                    ascending: _ascending,
+                    onSort: _toggleSort,
+                  ),
                   Divider(height: 1, color: scheme.outlineVariant),
                   Expanded(
                     child: ListView.separated(
@@ -810,40 +865,140 @@ class _ProcessList extends StatelessWidget {
 }
 
 class _ProcessHeaderRow extends StatelessWidget {
-  const _ProcessHeaderRow({required this.wide});
+  const _ProcessHeaderRow({
+    required this.wide,
+    required this.sort,
+    required this.ascending,
+    required this.onSort,
+  });
 
   final bool wide;
+  final _ProcessSort sort;
+  final bool ascending;
+  final ValueChanged<_ProcessSort> onSort;
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelMedium?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
-          SizedBox(width: 64, child: Text('PID', style: style)),
-          SizedBox(width: 88, child: Text('User', style: style)),
+          SizedBox(
+            width: 64,
+            child: _SortHeader(
+              label: 'PID',
+              active: sort == _ProcessSort.pid,
+              ascending: ascending,
+              onTap: () => onSort(_ProcessSort.pid),
+            ),
+          ),
+          SizedBox(
+            width: 88,
+            child: _SortHeader(
+              label: 'User',
+              active: sort == _ProcessSort.user,
+              ascending: ascending,
+              onTap: () => onSort(_ProcessSort.user),
+            ),
+          ),
           if (wide) ...[
             SizedBox(
               width: 64,
-              child: Text('CPU', style: style, textAlign: TextAlign.end),
+              child: _SortHeader(
+                label: 'CPU',
+                active: sort == _ProcessSort.cpu,
+                ascending: ascending,
+                alignEnd: true,
+                onTap: () => onSort(_ProcessSort.cpu),
+              ),
             ),
             const SizedBox(width: 12),
             SizedBox(
               width: 64,
-              child: Text('Mem', style: style, textAlign: TextAlign.end),
+              child: _SortHeader(
+                label: 'Mem',
+                active: sort == _ProcessSort.mem,
+                ascending: ascending,
+                alignEnd: true,
+                onTap: () => onSort(_ProcessSort.mem),
+              ),
             ),
             const SizedBox(width: 12),
             SizedBox(
               width: 72,
-              child: Text('RSS', style: style, textAlign: TextAlign.end),
+              child: _SortHeader(
+                label: 'RSS',
+                active: sort == _ProcessSort.rss,
+                ascending: ascending,
+                alignEnd: true,
+                onTap: () => onSort(_ProcessSort.rss),
+              ),
             ),
             const SizedBox(width: 16),
           ],
-          Expanded(child: Text('Command', style: style)),
+          Expanded(
+            child: _SortHeader(
+              label: 'Command',
+              active: sort == _ProcessSort.command,
+              ascending: ascending,
+              onTap: () => onSort(_ProcessSort.command),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _SortHeader extends StatelessWidget {
+  const _SortHeader({
+    required this.label,
+    required this.active,
+    required this.ascending,
+    required this.onTap,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final bool active;
+  final bool ascending;
+  final VoidCallback onTap;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = active ? scheme.primary : scheme.onSurfaceVariant;
+    final style = theme.textTheme.labelMedium?.copyWith(color: color);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisAlignment: alignEnd
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 2),
+              Icon(
+                ascending ? Symbols.arrow_upward : Symbols.arrow_downward,
+                size: 14,
+                color: color,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

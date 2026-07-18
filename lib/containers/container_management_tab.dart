@@ -86,6 +86,7 @@ class _ContainerManagementTabState
           .read(connectionManagerProvider)
           .listContainers(
             widget.server.id,
+            sshUserIsRoot: widget.server.username == 'root',
             sudoPassword: await _storedSudoPassword(),
           );
       if (mounted) {

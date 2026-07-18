@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
+import '../theme.dart';
+
 /// A terminal emulator instance attached to one remote shell.
 ///
 /// The adapter owns emulator-specific state and rendering. SSH transport code
@@ -110,6 +112,18 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
       autofocus: autofocus,
       backgroundOpacity: 0,
       padding: const EdgeInsets.all(12),
+      textStyle: const TerminalStyle(
+        fontFamily: MaidKitFonts.mono,
+        fontFamilyFallback: [
+          'Menlo',
+          'Monaco',
+          'Consolas',
+          'Noto Sans Mono CJK SC',
+          'Noto Color Emoji',
+          'monospace',
+        ],
+        fontSize: 14,
+      ),
     ),
   );
 

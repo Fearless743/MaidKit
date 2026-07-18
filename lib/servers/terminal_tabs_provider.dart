@@ -78,6 +78,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     ServerCredential credential,
     HostKeyApproval approve, {
     String? knownHostKeyFingerprint,
+    String? initialDirectory,
   }) async {
     final handle = await ref
         .read(connectionManagerProvider)
@@ -86,6 +87,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
           credential,
           approve,
           knownHostKeyFingerprint: knownHostKeyFingerprint,
+          initialDirectory: initialDirectory,
         );
     final tab = TerminalTab(
       id: handle.id,

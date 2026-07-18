@@ -1523,16 +1523,1092 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
   }
 }
 
+class $ComposeProjectLinksTable extends ComposeProjectLinks
+    with TableInfo<$ComposeProjectLinksTable, ComposeProjectLink> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ComposeProjectLinksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _serverIdMeta = const VerificationMeta(
+    'serverId',
+  );
+  @override
+  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
+    'server_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _directoryMeta = const VerificationMeta(
+    'directory',
+  );
+  @override
+  late final GeneratedColumn<String> directory = GeneratedColumn<String>(
+    'directory',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _runtimeMeta = const VerificationMeta(
+    'runtime',
+  );
+  @override
+  late final GeneratedColumn<String> runtime = GeneratedColumn<String>(
+    'runtime',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scopeMeta = const VerificationMeta('scope');
+  @override
+  late final GeneratedColumn<String> scope = GeneratedColumn<String>(
+    'scope',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _linkedAtMeta = const VerificationMeta(
+    'linkedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> linkedAt = GeneratedColumn<DateTime>(
+    'linked_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    serverId,
+    name,
+    directory,
+    runtime,
+    scope,
+    linkedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'compose_project_links';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ComposeProjectLink> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('server_id')) {
+      context.handle(
+        _serverIdMeta,
+        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_serverIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('directory')) {
+      context.handle(
+        _directoryMeta,
+        directory.isAcceptableOrUnknown(data['directory']!, _directoryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_directoryMeta);
+    }
+    if (data.containsKey('runtime')) {
+      context.handle(
+        _runtimeMeta,
+        runtime.isAcceptableOrUnknown(data['runtime']!, _runtimeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_runtimeMeta);
+    }
+    if (data.containsKey('scope')) {
+      context.handle(
+        _scopeMeta,
+        scope.isAcceptableOrUnknown(data['scope']!, _scopeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scopeMeta);
+    }
+    if (data.containsKey('linked_at')) {
+      context.handle(
+        _linkedAtMeta,
+        linkedAt.isAcceptableOrUnknown(data['linked_at']!, _linkedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_linkedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ComposeProjectLink map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ComposeProjectLink(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      serverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      directory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}directory'],
+      )!,
+      runtime: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}runtime'],
+      )!,
+      scope: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope'],
+      )!,
+      linkedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}linked_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ComposeProjectLinksTable createAlias(String alias) {
+    return $ComposeProjectLinksTable(attachedDatabase, alias);
+  }
+}
+
+class ComposeProjectLink extends DataClass
+    implements Insertable<ComposeProjectLink> {
+  final int id;
+  final int serverId;
+  final String name;
+  final String directory;
+  final String runtime;
+  final String scope;
+  final DateTime linkedAt;
+  const ComposeProjectLink({
+    required this.id,
+    required this.serverId,
+    required this.name,
+    required this.directory,
+    required this.runtime,
+    required this.scope,
+    required this.linkedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['server_id'] = Variable<int>(serverId);
+    map['name'] = Variable<String>(name);
+    map['directory'] = Variable<String>(directory);
+    map['runtime'] = Variable<String>(runtime);
+    map['scope'] = Variable<String>(scope);
+    map['linked_at'] = Variable<DateTime>(linkedAt);
+    return map;
+  }
+
+  ComposeProjectLinksCompanion toCompanion(bool nullToAbsent) {
+    return ComposeProjectLinksCompanion(
+      id: Value(id),
+      serverId: Value(serverId),
+      name: Value(name),
+      directory: Value(directory),
+      runtime: Value(runtime),
+      scope: Value(scope),
+      linkedAt: Value(linkedAt),
+    );
+  }
+
+  factory ComposeProjectLink.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ComposeProjectLink(
+      id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<int>(json['serverId']),
+      name: serializer.fromJson<String>(json['name']),
+      directory: serializer.fromJson<String>(json['directory']),
+      runtime: serializer.fromJson<String>(json['runtime']),
+      scope: serializer.fromJson<String>(json['scope']),
+      linkedAt: serializer.fromJson<DateTime>(json['linkedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<int>(serverId),
+      'name': serializer.toJson<String>(name),
+      'directory': serializer.toJson<String>(directory),
+      'runtime': serializer.toJson<String>(runtime),
+      'scope': serializer.toJson<String>(scope),
+      'linkedAt': serializer.toJson<DateTime>(linkedAt),
+    };
+  }
+
+  ComposeProjectLink copyWith({
+    int? id,
+    int? serverId,
+    String? name,
+    String? directory,
+    String? runtime,
+    String? scope,
+    DateTime? linkedAt,
+  }) => ComposeProjectLink(
+    id: id ?? this.id,
+    serverId: serverId ?? this.serverId,
+    name: name ?? this.name,
+    directory: directory ?? this.directory,
+    runtime: runtime ?? this.runtime,
+    scope: scope ?? this.scope,
+    linkedAt: linkedAt ?? this.linkedAt,
+  );
+  ComposeProjectLink copyWithCompanion(ComposeProjectLinksCompanion data) {
+    return ComposeProjectLink(
+      id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      name: data.name.present ? data.name.value : this.name,
+      directory: data.directory.present ? data.directory.value : this.directory,
+      runtime: data.runtime.present ? data.runtime.value : this.runtime,
+      scope: data.scope.present ? data.scope.value : this.scope,
+      linkedAt: data.linkedAt.present ? data.linkedAt.value : this.linkedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ComposeProjectLink(')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('name: $name, ')
+          ..write('directory: $directory, ')
+          ..write('runtime: $runtime, ')
+          ..write('scope: $scope, ')
+          ..write('linkedAt: $linkedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, serverId, name, directory, runtime, scope, linkedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ComposeProjectLink &&
+          other.id == this.id &&
+          other.serverId == this.serverId &&
+          other.name == this.name &&
+          other.directory == this.directory &&
+          other.runtime == this.runtime &&
+          other.scope == this.scope &&
+          other.linkedAt == this.linkedAt);
+}
+
+class ComposeProjectLinksCompanion extends UpdateCompanion<ComposeProjectLink> {
+  final Value<int> id;
+  final Value<int> serverId;
+  final Value<String> name;
+  final Value<String> directory;
+  final Value<String> runtime;
+  final Value<String> scope;
+  final Value<DateTime> linkedAt;
+  const ComposeProjectLinksCompanion({
+    this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.directory = const Value.absent(),
+    this.runtime = const Value.absent(),
+    this.scope = const Value.absent(),
+    this.linkedAt = const Value.absent(),
+  });
+  ComposeProjectLinksCompanion.insert({
+    this.id = const Value.absent(),
+    required int serverId,
+    required String name,
+    required String directory,
+    required String runtime,
+    required String scope,
+    required DateTime linkedAt,
+  }) : serverId = Value(serverId),
+       name = Value(name),
+       directory = Value(directory),
+       runtime = Value(runtime),
+       scope = Value(scope),
+       linkedAt = Value(linkedAt);
+  static Insertable<ComposeProjectLink> custom({
+    Expression<int>? id,
+    Expression<int>? serverId,
+    Expression<String>? name,
+    Expression<String>? directory,
+    Expression<String>? runtime,
+    Expression<String>? scope,
+    Expression<DateTime>? linkedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
+      if (name != null) 'name': name,
+      if (directory != null) 'directory': directory,
+      if (runtime != null) 'runtime': runtime,
+      if (scope != null) 'scope': scope,
+      if (linkedAt != null) 'linked_at': linkedAt,
+    });
+  }
+
+  ComposeProjectLinksCompanion copyWith({
+    Value<int>? id,
+    Value<int>? serverId,
+    Value<String>? name,
+    Value<String>? directory,
+    Value<String>? runtime,
+    Value<String>? scope,
+    Value<DateTime>? linkedAt,
+  }) {
+    return ComposeProjectLinksCompanion(
+      id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      name: name ?? this.name,
+      directory: directory ?? this.directory,
+      runtime: runtime ?? this.runtime,
+      scope: scope ?? this.scope,
+      linkedAt: linkedAt ?? this.linkedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (serverId.present) {
+      map['server_id'] = Variable<int>(serverId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (directory.present) {
+      map['directory'] = Variable<String>(directory.value);
+    }
+    if (runtime.present) {
+      map['runtime'] = Variable<String>(runtime.value);
+    }
+    if (scope.present) {
+      map['scope'] = Variable<String>(scope.value);
+    }
+    if (linkedAt.present) {
+      map['linked_at'] = Variable<DateTime>(linkedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ComposeProjectLinksCompanion(')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('name: $name, ')
+          ..write('directory: $directory, ')
+          ..write('runtime: $runtime, ')
+          ..write('scope: $scope, ')
+          ..write('linkedAt: $linkedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ContainerCacheEntriesTable extends ContainerCacheEntries
+    with TableInfo<$ContainerCacheEntriesTable, ContainerCacheEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ContainerCacheEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _serverIdMeta = const VerificationMeta(
+    'serverId',
+  );
+  @override
+  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
+    'server_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _runtimeMeta = const VerificationMeta(
+    'runtime',
+  );
+  @override
+  late final GeneratedColumn<String> runtime = GeneratedColumn<String>(
+    'runtime',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scopeMeta = const VerificationMeta('scope');
+  @override
+  late final GeneratedColumn<String> scope = GeneratedColumn<String>(
+    'scope',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _containerIdMeta = const VerificationMeta(
+    'containerId',
+  );
+  @override
+  late final GeneratedColumn<String> containerId = GeneratedColumn<String>(
+    'container_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imageMeta = const VerificationMeta('image');
+  @override
+  late final GeneratedColumn<String> image = GeneratedColumn<String>(
+    'image',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _composeProjectMeta = const VerificationMeta(
+    'composeProject',
+  );
+  @override
+  late final GeneratedColumn<String> composeProject = GeneratedColumn<String>(
+    'compose_project',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cachedAtMeta = const VerificationMeta(
+    'cachedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> cachedAt = GeneratedColumn<DateTime>(
+    'cached_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    serverId,
+    runtime,
+    scope,
+    containerId,
+    name,
+    image,
+    state,
+    status,
+    composeProject,
+    cachedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'container_cache_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ContainerCacheEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('server_id')) {
+      context.handle(
+        _serverIdMeta,
+        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_serverIdMeta);
+    }
+    if (data.containsKey('runtime')) {
+      context.handle(
+        _runtimeMeta,
+        runtime.isAcceptableOrUnknown(data['runtime']!, _runtimeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_runtimeMeta);
+    }
+    if (data.containsKey('scope')) {
+      context.handle(
+        _scopeMeta,
+        scope.isAcceptableOrUnknown(data['scope']!, _scopeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scopeMeta);
+    }
+    if (data.containsKey('container_id')) {
+      context.handle(
+        _containerIdMeta,
+        containerId.isAcceptableOrUnknown(
+          data['container_id']!,
+          _containerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_containerIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('image')) {
+      context.handle(
+        _imageMeta,
+        image.isAcceptableOrUnknown(data['image']!, _imageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_imageMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('compose_project')) {
+      context.handle(
+        _composeProjectMeta,
+        composeProject.isAcceptableOrUnknown(
+          data['compose_project']!,
+          _composeProjectMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cached_at')) {
+      context.handle(
+        _cachedAtMeta,
+        cachedAt.isAcceptableOrUnknown(data['cached_at']!, _cachedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_cachedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {
+    serverId,
+    runtime,
+    scope,
+    containerId,
+  };
+  @override
+  ContainerCacheEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ContainerCacheEntry(
+      serverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_id'],
+      )!,
+      runtime: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}runtime'],
+      )!,
+      scope: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope'],
+      )!,
+      containerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}container_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      image: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      composeProject: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}compose_project'],
+      ),
+      cachedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}cached_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ContainerCacheEntriesTable createAlias(String alias) {
+    return $ContainerCacheEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class ContainerCacheEntry extends DataClass
+    implements Insertable<ContainerCacheEntry> {
+  final int serverId;
+  final String runtime;
+  final String scope;
+  final String containerId;
+  final String name;
+  final String image;
+  final String state;
+  final String status;
+  final String? composeProject;
+  final DateTime cachedAt;
+  const ContainerCacheEntry({
+    required this.serverId,
+    required this.runtime,
+    required this.scope,
+    required this.containerId,
+    required this.name,
+    required this.image,
+    required this.state,
+    required this.status,
+    this.composeProject,
+    required this.cachedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['server_id'] = Variable<int>(serverId);
+    map['runtime'] = Variable<String>(runtime);
+    map['scope'] = Variable<String>(scope);
+    map['container_id'] = Variable<String>(containerId);
+    map['name'] = Variable<String>(name);
+    map['image'] = Variable<String>(image);
+    map['state'] = Variable<String>(state);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || composeProject != null) {
+      map['compose_project'] = Variable<String>(composeProject);
+    }
+    map['cached_at'] = Variable<DateTime>(cachedAt);
+    return map;
+  }
+
+  ContainerCacheEntriesCompanion toCompanion(bool nullToAbsent) {
+    return ContainerCacheEntriesCompanion(
+      serverId: Value(serverId),
+      runtime: Value(runtime),
+      scope: Value(scope),
+      containerId: Value(containerId),
+      name: Value(name),
+      image: Value(image),
+      state: Value(state),
+      status: Value(status),
+      composeProject: composeProject == null && nullToAbsent
+          ? const Value.absent()
+          : Value(composeProject),
+      cachedAt: Value(cachedAt),
+    );
+  }
+
+  factory ContainerCacheEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ContainerCacheEntry(
+      serverId: serializer.fromJson<int>(json['serverId']),
+      runtime: serializer.fromJson<String>(json['runtime']),
+      scope: serializer.fromJson<String>(json['scope']),
+      containerId: serializer.fromJson<String>(json['containerId']),
+      name: serializer.fromJson<String>(json['name']),
+      image: serializer.fromJson<String>(json['image']),
+      state: serializer.fromJson<String>(json['state']),
+      status: serializer.fromJson<String>(json['status']),
+      composeProject: serializer.fromJson<String?>(json['composeProject']),
+      cachedAt: serializer.fromJson<DateTime>(json['cachedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'serverId': serializer.toJson<int>(serverId),
+      'runtime': serializer.toJson<String>(runtime),
+      'scope': serializer.toJson<String>(scope),
+      'containerId': serializer.toJson<String>(containerId),
+      'name': serializer.toJson<String>(name),
+      'image': serializer.toJson<String>(image),
+      'state': serializer.toJson<String>(state),
+      'status': serializer.toJson<String>(status),
+      'composeProject': serializer.toJson<String?>(composeProject),
+      'cachedAt': serializer.toJson<DateTime>(cachedAt),
+    };
+  }
+
+  ContainerCacheEntry copyWith({
+    int? serverId,
+    String? runtime,
+    String? scope,
+    String? containerId,
+    String? name,
+    String? image,
+    String? state,
+    String? status,
+    Value<String?> composeProject = const Value.absent(),
+    DateTime? cachedAt,
+  }) => ContainerCacheEntry(
+    serverId: serverId ?? this.serverId,
+    runtime: runtime ?? this.runtime,
+    scope: scope ?? this.scope,
+    containerId: containerId ?? this.containerId,
+    name: name ?? this.name,
+    image: image ?? this.image,
+    state: state ?? this.state,
+    status: status ?? this.status,
+    composeProject: composeProject.present
+        ? composeProject.value
+        : this.composeProject,
+    cachedAt: cachedAt ?? this.cachedAt,
+  );
+  ContainerCacheEntry copyWithCompanion(ContainerCacheEntriesCompanion data) {
+    return ContainerCacheEntry(
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      runtime: data.runtime.present ? data.runtime.value : this.runtime,
+      scope: data.scope.present ? data.scope.value : this.scope,
+      containerId: data.containerId.present
+          ? data.containerId.value
+          : this.containerId,
+      name: data.name.present ? data.name.value : this.name,
+      image: data.image.present ? data.image.value : this.image,
+      state: data.state.present ? data.state.value : this.state,
+      status: data.status.present ? data.status.value : this.status,
+      composeProject: data.composeProject.present
+          ? data.composeProject.value
+          : this.composeProject,
+      cachedAt: data.cachedAt.present ? data.cachedAt.value : this.cachedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContainerCacheEntry(')
+          ..write('serverId: $serverId, ')
+          ..write('runtime: $runtime, ')
+          ..write('scope: $scope, ')
+          ..write('containerId: $containerId, ')
+          ..write('name: $name, ')
+          ..write('image: $image, ')
+          ..write('state: $state, ')
+          ..write('status: $status, ')
+          ..write('composeProject: $composeProject, ')
+          ..write('cachedAt: $cachedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    serverId,
+    runtime,
+    scope,
+    containerId,
+    name,
+    image,
+    state,
+    status,
+    composeProject,
+    cachedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ContainerCacheEntry &&
+          other.serverId == this.serverId &&
+          other.runtime == this.runtime &&
+          other.scope == this.scope &&
+          other.containerId == this.containerId &&
+          other.name == this.name &&
+          other.image == this.image &&
+          other.state == this.state &&
+          other.status == this.status &&
+          other.composeProject == this.composeProject &&
+          other.cachedAt == this.cachedAt);
+}
+
+class ContainerCacheEntriesCompanion
+    extends UpdateCompanion<ContainerCacheEntry> {
+  final Value<int> serverId;
+  final Value<String> runtime;
+  final Value<String> scope;
+  final Value<String> containerId;
+  final Value<String> name;
+  final Value<String> image;
+  final Value<String> state;
+  final Value<String> status;
+  final Value<String?> composeProject;
+  final Value<DateTime> cachedAt;
+  final Value<int> rowid;
+  const ContainerCacheEntriesCompanion({
+    this.serverId = const Value.absent(),
+    this.runtime = const Value.absent(),
+    this.scope = const Value.absent(),
+    this.containerId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.image = const Value.absent(),
+    this.state = const Value.absent(),
+    this.status = const Value.absent(),
+    this.composeProject = const Value.absent(),
+    this.cachedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ContainerCacheEntriesCompanion.insert({
+    required int serverId,
+    required String runtime,
+    required String scope,
+    required String containerId,
+    required String name,
+    required String image,
+    required String state,
+    required String status,
+    this.composeProject = const Value.absent(),
+    required DateTime cachedAt,
+    this.rowid = const Value.absent(),
+  }) : serverId = Value(serverId),
+       runtime = Value(runtime),
+       scope = Value(scope),
+       containerId = Value(containerId),
+       name = Value(name),
+       image = Value(image),
+       state = Value(state),
+       status = Value(status),
+       cachedAt = Value(cachedAt);
+  static Insertable<ContainerCacheEntry> custom({
+    Expression<int>? serverId,
+    Expression<String>? runtime,
+    Expression<String>? scope,
+    Expression<String>? containerId,
+    Expression<String>? name,
+    Expression<String>? image,
+    Expression<String>? state,
+    Expression<String>? status,
+    Expression<String>? composeProject,
+    Expression<DateTime>? cachedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (serverId != null) 'server_id': serverId,
+      if (runtime != null) 'runtime': runtime,
+      if (scope != null) 'scope': scope,
+      if (containerId != null) 'container_id': containerId,
+      if (name != null) 'name': name,
+      if (image != null) 'image': image,
+      if (state != null) 'state': state,
+      if (status != null) 'status': status,
+      if (composeProject != null) 'compose_project': composeProject,
+      if (cachedAt != null) 'cached_at': cachedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ContainerCacheEntriesCompanion copyWith({
+    Value<int>? serverId,
+    Value<String>? runtime,
+    Value<String>? scope,
+    Value<String>? containerId,
+    Value<String>? name,
+    Value<String>? image,
+    Value<String>? state,
+    Value<String>? status,
+    Value<String?>? composeProject,
+    Value<DateTime>? cachedAt,
+    Value<int>? rowid,
+  }) {
+    return ContainerCacheEntriesCompanion(
+      serverId: serverId ?? this.serverId,
+      runtime: runtime ?? this.runtime,
+      scope: scope ?? this.scope,
+      containerId: containerId ?? this.containerId,
+      name: name ?? this.name,
+      image: image ?? this.image,
+      state: state ?? this.state,
+      status: status ?? this.status,
+      composeProject: composeProject ?? this.composeProject,
+      cachedAt: cachedAt ?? this.cachedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (serverId.present) {
+      map['server_id'] = Variable<int>(serverId.value);
+    }
+    if (runtime.present) {
+      map['runtime'] = Variable<String>(runtime.value);
+    }
+    if (scope.present) {
+      map['scope'] = Variable<String>(scope.value);
+    }
+    if (containerId.present) {
+      map['container_id'] = Variable<String>(containerId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (image.present) {
+      map['image'] = Variable<String>(image.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (composeProject.present) {
+      map['compose_project'] = Variable<String>(composeProject.value);
+    }
+    if (cachedAt.present) {
+      map['cached_at'] = Variable<DateTime>(cachedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContainerCacheEntriesCompanion(')
+          ..write('serverId: $serverId, ')
+          ..write('runtime: $runtime, ')
+          ..write('scope: $scope, ')
+          ..write('containerId: $containerId, ')
+          ..write('name: $name, ')
+          ..write('image: $image, ')
+          ..write('state: $state, ')
+          ..write('status: $status, ')
+          ..write('composeProject: $composeProject, ')
+          ..write('cachedAt: $cachedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ServersTable servers = $ServersTable(this);
   late final $VaultMetadataTable vaultMetadata = $VaultMetadataTable(this);
+  late final $ComposeProjectLinksTable composeProjectLinks =
+      $ComposeProjectLinksTable(this);
+  late final $ContainerCacheEntriesTable containerCacheEntries =
+      $ContainerCacheEntriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [servers, vaultMetadata];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    servers,
+    vaultMetadata,
+    composeProjectLinks,
+    containerCacheEntries,
+  ];
 }
 
 typedef $$ServersTableCreateCompanionBuilder =
@@ -2230,6 +3306,572 @@ typedef $$VaultMetadataTableProcessedTableManager =
       VaultMetadataData,
       PrefetchHooks Function()
     >;
+typedef $$ComposeProjectLinksTableCreateCompanionBuilder =
+    ComposeProjectLinksCompanion Function({
+      Value<int> id,
+      required int serverId,
+      required String name,
+      required String directory,
+      required String runtime,
+      required String scope,
+      required DateTime linkedAt,
+    });
+typedef $$ComposeProjectLinksTableUpdateCompanionBuilder =
+    ComposeProjectLinksCompanion Function({
+      Value<int> id,
+      Value<int> serverId,
+      Value<String> name,
+      Value<String> directory,
+      Value<String> runtime,
+      Value<String> scope,
+      Value<DateTime> linkedAt,
+    });
+
+class $$ComposeProjectLinksTableFilterComposer
+    extends Composer<_$AppDatabase, $ComposeProjectLinksTable> {
+  $$ComposeProjectLinksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get directory => $composableBuilder(
+    column: $table.directory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runtime => $composableBuilder(
+    column: $table.runtime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get linkedAt => $composableBuilder(
+    column: $table.linkedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ComposeProjectLinksTableOrderingComposer
+    extends Composer<_$AppDatabase, $ComposeProjectLinksTable> {
+  $$ComposeProjectLinksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get directory => $composableBuilder(
+    column: $table.directory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get runtime => $composableBuilder(
+    column: $table.runtime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get linkedAt => $composableBuilder(
+    column: $table.linkedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ComposeProjectLinksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ComposeProjectLinksTable> {
+  $$ComposeProjectLinksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get directory =>
+      $composableBuilder(column: $table.directory, builder: (column) => column);
+
+  GeneratedColumn<String> get runtime =>
+      $composableBuilder(column: $table.runtime, builder: (column) => column);
+
+  GeneratedColumn<String> get scope =>
+      $composableBuilder(column: $table.scope, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get linkedAt =>
+      $composableBuilder(column: $table.linkedAt, builder: (column) => column);
+}
+
+class $$ComposeProjectLinksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ComposeProjectLinksTable,
+          ComposeProjectLink,
+          $$ComposeProjectLinksTableFilterComposer,
+          $$ComposeProjectLinksTableOrderingComposer,
+          $$ComposeProjectLinksTableAnnotationComposer,
+          $$ComposeProjectLinksTableCreateCompanionBuilder,
+          $$ComposeProjectLinksTableUpdateCompanionBuilder,
+          (
+            ComposeProjectLink,
+            BaseReferences<
+              _$AppDatabase,
+              $ComposeProjectLinksTable,
+              ComposeProjectLink
+            >,
+          ),
+          ComposeProjectLink,
+          PrefetchHooks Function()
+        > {
+  $$ComposeProjectLinksTableTableManager(
+    _$AppDatabase db,
+    $ComposeProjectLinksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ComposeProjectLinksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ComposeProjectLinksTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ComposeProjectLinksTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> serverId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> directory = const Value.absent(),
+                Value<String> runtime = const Value.absent(),
+                Value<String> scope = const Value.absent(),
+                Value<DateTime> linkedAt = const Value.absent(),
+              }) => ComposeProjectLinksCompanion(
+                id: id,
+                serverId: serverId,
+                name: name,
+                directory: directory,
+                runtime: runtime,
+                scope: scope,
+                linkedAt: linkedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int serverId,
+                required String name,
+                required String directory,
+                required String runtime,
+                required String scope,
+                required DateTime linkedAt,
+              }) => ComposeProjectLinksCompanion.insert(
+                id: id,
+                serverId: serverId,
+                name: name,
+                directory: directory,
+                runtime: runtime,
+                scope: scope,
+                linkedAt: linkedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ComposeProjectLinksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ComposeProjectLinksTable,
+      ComposeProjectLink,
+      $$ComposeProjectLinksTableFilterComposer,
+      $$ComposeProjectLinksTableOrderingComposer,
+      $$ComposeProjectLinksTableAnnotationComposer,
+      $$ComposeProjectLinksTableCreateCompanionBuilder,
+      $$ComposeProjectLinksTableUpdateCompanionBuilder,
+      (
+        ComposeProjectLink,
+        BaseReferences<
+          _$AppDatabase,
+          $ComposeProjectLinksTable,
+          ComposeProjectLink
+        >,
+      ),
+      ComposeProjectLink,
+      PrefetchHooks Function()
+    >;
+typedef $$ContainerCacheEntriesTableCreateCompanionBuilder =
+    ContainerCacheEntriesCompanion Function({
+      required int serverId,
+      required String runtime,
+      required String scope,
+      required String containerId,
+      required String name,
+      required String image,
+      required String state,
+      required String status,
+      Value<String?> composeProject,
+      required DateTime cachedAt,
+      Value<int> rowid,
+    });
+typedef $$ContainerCacheEntriesTableUpdateCompanionBuilder =
+    ContainerCacheEntriesCompanion Function({
+      Value<int> serverId,
+      Value<String> runtime,
+      Value<String> scope,
+      Value<String> containerId,
+      Value<String> name,
+      Value<String> image,
+      Value<String> state,
+      Value<String> status,
+      Value<String?> composeProject,
+      Value<DateTime> cachedAt,
+      Value<int> rowid,
+    });
+
+class $$ContainerCacheEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $ContainerCacheEntriesTable> {
+  $$ContainerCacheEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runtime => $composableBuilder(
+    column: $table.runtime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get containerId => $composableBuilder(
+    column: $table.containerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get image => $composableBuilder(
+    column: $table.image,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get composeProject => $composableBuilder(
+    column: $table.composeProject,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get cachedAt => $composableBuilder(
+    column: $table.cachedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ContainerCacheEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ContainerCacheEntriesTable> {
+  $$ContainerCacheEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get runtime => $composableBuilder(
+    column: $table.runtime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get containerId => $composableBuilder(
+    column: $table.containerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get image => $composableBuilder(
+    column: $table.image,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get composeProject => $composableBuilder(
+    column: $table.composeProject,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get cachedAt => $composableBuilder(
+    column: $table.cachedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ContainerCacheEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ContainerCacheEntriesTable> {
+  $$ContainerCacheEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get runtime =>
+      $composableBuilder(column: $table.runtime, builder: (column) => column);
+
+  GeneratedColumn<String> get scope =>
+      $composableBuilder(column: $table.scope, builder: (column) => column);
+
+  GeneratedColumn<String> get containerId => $composableBuilder(
+    column: $table.containerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get image =>
+      $composableBuilder(column: $table.image, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get composeProject => $composableBuilder(
+    column: $table.composeProject,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get cachedAt =>
+      $composableBuilder(column: $table.cachedAt, builder: (column) => column);
+}
+
+class $$ContainerCacheEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ContainerCacheEntriesTable,
+          ContainerCacheEntry,
+          $$ContainerCacheEntriesTableFilterComposer,
+          $$ContainerCacheEntriesTableOrderingComposer,
+          $$ContainerCacheEntriesTableAnnotationComposer,
+          $$ContainerCacheEntriesTableCreateCompanionBuilder,
+          $$ContainerCacheEntriesTableUpdateCompanionBuilder,
+          (
+            ContainerCacheEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $ContainerCacheEntriesTable,
+              ContainerCacheEntry
+            >,
+          ),
+          ContainerCacheEntry,
+          PrefetchHooks Function()
+        > {
+  $$ContainerCacheEntriesTableTableManager(
+    _$AppDatabase db,
+    $ContainerCacheEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ContainerCacheEntriesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ContainerCacheEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ContainerCacheEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> serverId = const Value.absent(),
+                Value<String> runtime = const Value.absent(),
+                Value<String> scope = const Value.absent(),
+                Value<String> containerId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> image = const Value.absent(),
+                Value<String> state = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> composeProject = const Value.absent(),
+                Value<DateTime> cachedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ContainerCacheEntriesCompanion(
+                serverId: serverId,
+                runtime: runtime,
+                scope: scope,
+                containerId: containerId,
+                name: name,
+                image: image,
+                state: state,
+                status: status,
+                composeProject: composeProject,
+                cachedAt: cachedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int serverId,
+                required String runtime,
+                required String scope,
+                required String containerId,
+                required String name,
+                required String image,
+                required String state,
+                required String status,
+                Value<String?> composeProject = const Value.absent(),
+                required DateTime cachedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ContainerCacheEntriesCompanion.insert(
+                serverId: serverId,
+                runtime: runtime,
+                scope: scope,
+                containerId: containerId,
+                name: name,
+                image: image,
+                state: state,
+                status: status,
+                composeProject: composeProject,
+                cachedAt: cachedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ContainerCacheEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ContainerCacheEntriesTable,
+      ContainerCacheEntry,
+      $$ContainerCacheEntriesTableFilterComposer,
+      $$ContainerCacheEntriesTableOrderingComposer,
+      $$ContainerCacheEntriesTableAnnotationComposer,
+      $$ContainerCacheEntriesTableCreateCompanionBuilder,
+      $$ContainerCacheEntriesTableUpdateCompanionBuilder,
+      (
+        ContainerCacheEntry,
+        BaseReferences<
+          _$AppDatabase,
+          $ContainerCacheEntriesTable,
+          ContainerCacheEntry
+        >,
+      ),
+      ContainerCacheEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2238,4 +3880,8 @@ class $AppDatabaseManager {
       $$ServersTableTableManager(_db, _db.servers);
   $$VaultMetadataTableTableManager get vaultMetadata =>
       $$VaultMetadataTableTableManager(_db, _db.vaultMetadata);
+  $$ComposeProjectLinksTableTableManager get composeProjectLinks =>
+      $$ComposeProjectLinksTableTableManager(_db, _db.composeProjectLinks);
+  $$ContainerCacheEntriesTableTableManager get containerCacheEntries =>
+      $$ContainerCacheEntriesTableTableManager(_db, _db.containerCacheEntries);
 }

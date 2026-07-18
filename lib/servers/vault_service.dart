@@ -38,7 +38,7 @@ class VaultService {
   Future<bool> isBiometricUnlockEnabled() async =>
       await _secureStorage.containsKey(key: _biometricKey);
 
-  Future<void> create(String password, {bool enableBiometrics = false}) async {
+  Future<void> create(String password) async {
     if (password.length < 12) {
       throw ArgumentError('Use a vault password with at least 12 characters.');
     }
@@ -66,7 +66,6 @@ class VaultService {
           ),
         );
     _dataKey = dataKey;
-    if (enableBiometrics) await enableBiometricUnlock();
   }
 
   Future<bool> unlockWithPassword(String password) async {
@@ -99,7 +98,7 @@ class VaultService {
     final key = await _secureStorage.read(key: _biometricKey);
     if (key == null) {
       throw const BiometricUnlockException(
-        'Biometric unlock is not enabled. Unlock with your vault password once, then enable it below.',
+        'Biometric unlock is not enabled. Unlock with your vault password, then enable it in Settings.',
       );
     }
     final authentication = LocalAuthentication();
