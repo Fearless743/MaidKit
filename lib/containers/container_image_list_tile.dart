@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -168,7 +169,7 @@ class _UnusedLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final label = dangling ? 'Dangling' : 'Unused';
+    final label = dangling ? 'imagesPruneDanglingLabel'.tr() : 'imagesPruneUnusedLabel'.tr();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(

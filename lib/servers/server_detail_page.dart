@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -123,7 +124,7 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
         title: Text(widget.server.name),
         actions: [
           IconButton(
-            tooltip: 'Refresh details',
+            tooltip: 'detailRefreshDetails'.tr(),
             onPressed: connected ? _refresh : null,
             icon: const Icon(Symbols.refresh),
           ),
@@ -174,7 +175,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Text(
-      label,
+      label.tr(),
       style: theme.textTheme.titleSmall?.copyWith(
         color: theme.colorScheme.onSurfaceVariant,
       ),
@@ -265,7 +266,7 @@ class _OverviewPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SectionLabel('Overview'),
+        const _SectionLabel('detailOverview'),
         const SizedBox(height: 12),
         _ServerIdentity(server: server, session: session),
         const SizedBox(height: 16),
@@ -274,7 +275,7 @@ class _OverviewPanel extends StatelessWidget {
           systemInfo: session?.systemInfo,
         ),
         const SizedBox(height: 24),
-        const _SectionLabel('Performance'),
+        const _SectionLabel('detailPerformance'),
         const SizedBox(height: 12),
         _MetricGrid(stats: session?.stats),
       ],
@@ -295,26 +296,26 @@ class _ServerSpecifications extends StatelessWidget {
     final specs = [
       _SpecItem(
         icon: Symbols.memory,
-        label: 'CPU',
+        label: 'detailCpu',
         value: stats?.cpuCount == null ? '—' : '${stats!.cpuCount} cores',
       ),
       _SpecItem(
         icon: Symbols.developer_board,
-        label: 'Memory',
+        label: 'detailMemory',
         value: stats?.memoryTotalKb == null
             ? '—'
             : _formatKb(stats!.memoryTotalKb!),
       ),
       _SpecItem(
         icon: Symbols.storage,
-        label: 'Root disk',
+        label: 'detailRootDisk',
         value: stats?.diskTotalKb == null
             ? '—'
             : _formatKb(stats!.diskTotalKb!),
       ),
       _SpecItem(
         icon: Symbols.terminal,
-        label: 'System',
+        label: 'detailSystem',
         value: [
           systemInfo?.distribution,
           systemInfo?.kernel,
@@ -332,11 +333,11 @@ class _ServerSpecifications extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Specifications',
+              'detailSpecifications',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
-            ),
+            ).tr(),
             const SizedBox(height: 12),
             for (final spec in specs) ...[
               _SpecificationRow(spec: spec),
@@ -376,7 +377,7 @@ class _SpecificationRow extends StatelessWidget {
         SizedBox(
           width: 72,
           child: Text(
-            spec.label,
+            spec.label.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -427,24 +428,24 @@ class _InspectorTabs extends StatelessWidget {
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             dividerColor: scheme.outlineVariant,
-            tabs: const [
-              Tab(icon: Icon(Symbols.monitoring, size: 18), text: 'Activity'),
-              Tab(icon: Icon(Symbols.terminal, size: 18), text: 'Processes'),
+            tabs: [
+              Tab(icon: Icon(Symbols.monitoring, size: 18), text: 'detailActivity'.tr()),
+              Tab(icon: Icon(Symbols.terminal, size: 18), text: 'detailProcesses'.tr()),
               Tab(
                 icon: Icon(Symbols.settings_applications, size: 18),
-                text: 'Services',
+                text: 'detailServices'.tr(),
               ),
               Tab(
                 icon: Icon(Symbols.deployed_code, size: 18),
-                text: 'Containers',
+                text: 'detailContainers'.tr(),
               ),
-              Tab(icon: Icon(Symbols.image, size: 18), text: 'Images'),
-              Tab(icon: Icon(Symbols.schedule, size: 18), text: 'Crontab'),
-              Tab(icon: Icon(Symbols.inventory_2, size: 18), text: 'Packages'),
-              Tab(icon: Icon(Symbols.shield, size: 18), text: 'Firewall'),
+              Tab(icon: Icon(Symbols.image, size: 18), text: 'detailImages'.tr()),
+              Tab(icon: Icon(Symbols.schedule, size: 18), text: 'detailCrontab'.tr()),
+              Tab(icon: Icon(Symbols.inventory_2, size: 18), text: 'detailPackages'.tr()),
+              Tab(icon: Icon(Symbols.shield, size: 18), text: 'detailFirewall'.tr()),
               Tab(
                 icon: Icon(Symbols.swap_horiz, size: 18),
-                text: 'Port forwarding',
+                text: 'detailPortForwarding'.tr(),
               ),
             ],
           ),
@@ -466,7 +467,7 @@ class _InspectorTabs extends StatelessWidget {
                     : _ConnectionPrompt(
                         message:
                             connectionError ??
-                            'Connect to collect live server data.',
+                            'detailConnectToCollect'.tr(),
                         onConnect: onConnect,
                       ),
                 SystemdTab(
@@ -554,12 +555,12 @@ class _ServerIdentity extends StatelessWidget {
                 children: [
                   _StatusChip(connected: connected, status: session?.status),
                   if (session?.stats?.updatedAt != null)
-                    Text(
-                      'Updated ${_formatTimestamp(session!.stats!.updatedAt)}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
+                        Text(
+                          'detailUpdated'.tr(args: [_formatTimestamp(session!.stats!.updatedAt)]),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
                 ],
               ),
             ],
@@ -581,22 +582,22 @@ class _StatusChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (label, color, bg) = switch (status) {
       SessionStatus.connected => (
-        'Connected',
+        'commonConnected'.tr(),
         scheme.onSecondaryContainer,
         scheme.secondaryContainer,
       ),
       SessionStatus.connecting => (
-        'Connecting',
+        'commonConnecting'.tr(),
         scheme.onTertiaryContainer,
         scheme.tertiaryContainer,
       ),
       SessionStatus.failed => (
-        'Failed',
+        'commonFailed'.tr(),
         scheme.onErrorContainer,
         scheme.errorContainer,
       ),
       _ => (
-        'Not connected',
+        'commonNotConnected'.tr(),
         scheme.onSurfaceVariant,
         scheme.surfaceContainerHighest,
       ),
@@ -641,7 +642,7 @@ class _ConnectionPrompt extends StatelessWidget {
   Widget build(BuildContext context) => _EmptyPanel(
     icon: Symbols.link_off,
     message: message,
-    actionLabel: 'Connect for metrics',
+    actionLabel: 'detailConnectForMetrics'.tr(),
     onAction: onConnect,
     actionIcon: Symbols.link,
     filledAction: true,
@@ -656,9 +657,9 @@ class _MetricGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (stats == null) {
-      return const _EmptyPanel(
+      return _EmptyPanel(
         icon: Symbols.monitoring,
-        message: 'Metrics are being collected…',
+        message: 'detailMetricsCollecting'.tr(),
         compact: true,
       );
     }
@@ -677,38 +678,38 @@ class _MetricGrid extends StatelessWidget {
       children: [
         _MetricCard(
           icon: Symbols.speed,
-          label: 'Load average',
+          label: 'detailLoadAverage',
           value: _loadLabel(stats!),
-          detail: stats!.cpuCount == null ? null : '${stats!.cpuCount} CPUs',
+          detail: stats!.cpuCount == null ? null : 'detailCpuCount'.tr(args: ['${stats!.cpuCount}']),
         ),
         const SizedBox(height: 8),
         _MetricCard(
           icon: Symbols.memory,
-          label: 'Memory',
+          label: 'detailMemory',
           value: memoryUsed == null ? '—' : _formatKb(memoryUsed),
           detail: stats!.memoryTotalKb == null
               ? null
-              : 'of ${_formatKb(stats!.memoryTotalKb!)}',
+              : 'detailOf'.tr(args: [_formatKb(stats!.memoryTotalKb!)]),
           progress: _ratio(memoryUsed, stats!.memoryTotalKb),
         ),
         const SizedBox(height: 8),
         _MetricCard(
           icon: Symbols.storage,
-          label: 'Root disk',
+          label: 'detailRootDisk',
           value: diskUsed == null ? '—' : _formatKb(diskUsed),
           detail: stats!.diskTotalKb == null
               ? null
-              : 'of ${_formatKb(stats!.diskTotalKb!)}',
+              : 'detailOf'.tr(args: [_formatKb(stats!.diskTotalKb!)]),
           progress: _ratio(diskUsed, stats!.diskTotalKb),
         ),
         const SizedBox(height: 8),
         _MetricCard(
           icon: Symbols.timer,
-          label: 'Uptime',
+          label: 'detailUptime',
           value: _formatUptime(stats!.uptime),
           detail: swapUsed == null || stats!.swapTotalKb == null
               ? null
-              : 'Swap ${_formatKb(swapUsed)} / ${_formatKb(stats!.swapTotalKb!)}',
+              : 'detailSwap'.tr(args: [_formatKb(swapUsed), _formatKb(stats!.swapTotalKb!)]),
         ),
       ],
     );
@@ -750,7 +751,7 @@ class _MetricCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    label,
+                    label.tr(),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -793,15 +794,15 @@ class _ProcessTable extends StatelessWidget {
     loading: () => const Center(child: CircularProgressIndicator()),
     error: (error, _) => _EmptyPanel(
       icon: Symbols.error_outline,
-      message: 'Could not retrieve processes: $error',
-      actionLabel: 'Try again',
+      message: 'detailCouldNotRetrieveProcesses'.tr(args: ['$error']),
+      actionLabel: 'commonRetry'.tr(),
       onAction: onRefresh,
     ),
     data: (items) => items.isEmpty
         ? _EmptyPanel(
             icon: Symbols.terminal,
-            message: 'No process information is available.',
-            actionLabel: 'Refresh',
+            message: 'detailNoProcessesAvailable'.tr(),
+            actionLabel: 'commonRefresh'.tr(),
             onAction: onRefresh,
           )
         : _ProcessList(items: items, onRefresh: onRefresh),
@@ -875,14 +876,14 @@ class _ProcessListState extends State<_ProcessList> {
           child: Row(
             children: [
               Text(
-                '${items.length} processes',
+                'detailProcessCount'.tr(args: ['${items.length}']),
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),
               const Spacer(),
               IconButton(
-                tooltip: 'Refresh processes',
+                tooltip: 'detailRefreshProcesses'.tr(),
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.onRefresh,
                 icon: const Icon(Symbols.refresh),
@@ -944,67 +945,67 @@ class _ProcessHeaderRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
-          SizedBox(
-            width: 64,
-            child: _SortHeader(
-              label: 'PID',
-              active: sort == _ProcessSort.pid,
-              ascending: ascending,
-              onTap: () => onSort(_ProcessSort.pid),
-            ),
-          ),
-          SizedBox(
-            width: 88,
-            child: _SortHeader(
-              label: 'User',
-              active: sort == _ProcessSort.user,
-              ascending: ascending,
-              onTap: () => onSort(_ProcessSort.user),
-            ),
-          ),
-          if (wide) ...[
             SizedBox(
               width: 64,
               child: _SortHeader(
-                label: 'CPU',
-                active: sort == _ProcessSort.cpu,
+                label: 'detailPid',
+                active: sort == _ProcessSort.pid,
                 ascending: ascending,
-                alignEnd: true,
-                onTap: () => onSort(_ProcessSort.cpu),
+                onTap: () => onSort(_ProcessSort.pid),
               ),
             ),
-            const SizedBox(width: 12),
             SizedBox(
-              width: 64,
+              width: 88,
               child: _SortHeader(
-                label: 'Mem',
-                active: sort == _ProcessSort.mem,
+                label: 'commonUser',
+                active: sort == _ProcessSort.user,
                 ascending: ascending,
-                alignEnd: true,
-                onTap: () => onSort(_ProcessSort.mem),
+                onTap: () => onSort(_ProcessSort.user),
               ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 72,
+            if (wide) ...[
+              SizedBox(
+                width: 64,
+                child: _SortHeader(
+                  label: 'detailCpu',
+                  active: sort == _ProcessSort.cpu,
+                  ascending: ascending,
+                  alignEnd: true,
+                  onTap: () => onSort(_ProcessSort.cpu),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: _SortHeader(
+                  label: 'detailMemory',
+                  active: sort == _ProcessSort.mem,
+                  ascending: ascending,
+                  alignEnd: true,
+                  onTap: () => onSort(_ProcessSort.mem),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 72,
+                child: _SortHeader(
+                  label: 'detailRss',
+                  active: sort == _ProcessSort.rss,
+                  ascending: ascending,
+                  alignEnd: true,
+                  onTap: () => onSort(_ProcessSort.rss),
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
+            Expanded(
               child: _SortHeader(
-                label: 'RSS',
-                active: sort == _ProcessSort.rss,
+                label: 'detailCommand',
+                active: sort == _ProcessSort.command,
                 ascending: ascending,
-                alignEnd: true,
-                onTap: () => onSort(_ProcessSort.rss),
+                onTap: () => onSort(_ProcessSort.command),
               ),
             ),
-            const SizedBox(width: 16),
-          ],
-          Expanded(
-            child: _SortHeader(
-              label: 'Command',
-              active: sort == _ProcessSort.command,
-              ascending: ascending,
-              onTap: () => onSort(_ProcessSort.command),
-            ),
-          ),
         ],
       ),
     );
@@ -1044,7 +1045,7 @@ class _SortHeader extends StatelessWidget {
           children: [
             Flexible(
               child: Text(
-                label,
+                label.tr(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: style,

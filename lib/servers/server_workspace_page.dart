@@ -1,4 +1,5 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -65,28 +66,28 @@ class _ServerTabsShell extends ConsumerWidget {
                             const SizedBox(height: 8),
                             const DeploySessionsRailButton(),
                             IconButton(
-                              tooltip: 'Settings',
+                              tooltip: 'tabSettings'.tr(),
                               onPressed: () => tabsRouter.setActiveIndex(3),
                               icon: const Icon(Symbols.settings),
                             ),
                           ],
                         ),
                       ),
-                      destinations: const [
+                      destinations: [
                         NavigationRailDestination(
-                          icon: Icon(Symbols.dns),
-                          selectedIcon: Icon(Symbols.dns, fill: 1),
-                          label: Text('Servers'),
+                          icon: const Icon(Symbols.dns),
+                          selectedIcon: const Icon(Symbols.dns, fill: 1),
+                          label: Text('tabServers').tr(),
                         ),
                         NavigationRailDestination(
-                          icon: Icon(Symbols.deployed_code),
-                          selectedIcon: Icon(Symbols.deployed_code, fill: 1),
-                          label: Text('Projects'),
+                          icon: const Icon(Symbols.deployed_code),
+                          selectedIcon: const Icon(Symbols.deployed_code, fill: 1),
+                          label: Text('tabProjects').tr(),
                         ),
                         NavigationRailDestination(
-                          icon: Icon(Symbols.terminal),
-                          selectedIcon: Icon(Symbols.terminal, fill: 1),
-                          label: Text('Sessions'),
+                          icon: const Icon(Symbols.terminal),
+                          selectedIcon: const Icon(Symbols.terminal, fill: 1),
+                          label: Text('tabSessions').tr(),
                         ),
                       ],
                     ),
@@ -111,26 +112,26 @@ class _ServerTabsShell extends ConsumerWidget {
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
                   selectedIndex: tabsRouter.activeIndex,
                   onDestinationSelected: tabsRouter.setActiveIndex,
-                  destinations: const [
+                  destinations: [
                     NavigationDestination(
-                      icon: Icon(Symbols.dns),
-                      selectedIcon: Icon(Symbols.dns, fill: 1),
-                      label: 'Servers',
+                      icon: const Icon(Symbols.dns),
+                      selectedIcon: const Icon(Symbols.dns, fill: 1),
+                      label: 'tabServers'.tr(),
                     ),
                     NavigationDestination(
-                      icon: Icon(Symbols.deployed_code),
-                      selectedIcon: Icon(Symbols.deployed_code, fill: 1),
-                      label: 'Projects',
+                      icon: const Icon(Symbols.deployed_code),
+                      selectedIcon: const Icon(Symbols.deployed_code, fill: 1),
+                      label: 'tabProjects'.tr(),
                     ),
                     NavigationDestination(
-                      icon: Icon(Symbols.terminal, fill: 1),
-                      selectedIcon: Icon(Symbols.terminal),
-                      label: 'Sessions',
+                      icon: const Icon(Symbols.terminal, fill: 1),
+                      selectedIcon: const Icon(Symbols.terminal),
+                      label: 'tabSessions'.tr(),
                     ),
                     NavigationDestination(
-                      icon: Icon(Symbols.settings, fill: 1),
-                      selectedIcon: Icon(Symbols.settings),
-                      label: 'Settings',
+                      icon: const Icon(Symbols.settings, fill: 1),
+                      selectedIcon: const Icon(Symbols.settings),
+                      label: 'tabSettings'.tr(),
                     ),
                   ],
                 ),
@@ -148,10 +149,9 @@ class _PortForwardRailIndicator extends ConsumerWidget {
     final forwards = ref.watch(portForwardsProvider).asData?.value ?? const [];
     if (forwards.isEmpty) return const SizedBox.shrink();
     return Badge(
-      label: Text('${forwards.length}'),
+      label: Text('portForwardCount').tr(args: ['${forwards.length}']),
       child: PopupMenuButton<ActivePortForward>(
-        tooltip:
-            '${forwards.length} active port forward${forwards.length == 1 ? '' : 's'}',
+        tooltip: 'activePortForwards'.plural(forwards.length),
         icon: const Icon(Symbols.swap_horiz),
         onSelected: (forward) =>
             ref.read(connectionManagerProvider).stopPortForward(forward.id),

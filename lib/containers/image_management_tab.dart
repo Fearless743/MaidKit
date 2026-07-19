@@ -6,6 +6,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'container_image_list_tile.dart';
 import 'container_models.dart';
 import 'container_runtime_install.dart';
@@ -122,9 +123,8 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
   ) async {
     if (action == ImageAction.remove) {
       final approved = await showMaidKitConfirmAlert(
-        'The image will be deleted from this environment. '
-        'Containers still using it will fail to start until pulled again.',
-        'Remove ${image.reference}?',
+        'imagesRemoveConfirm'.tr(),
+        'imagesRemoveTitle'.tr(args: [image.reference]),
         isDanger: true,
       );
       if (!approved || !mounted) return;
@@ -142,7 +142,7 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
       );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Image removed',
+        title: 'imagesRemoveSuccess'.tr(),
         message: image.reference,
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
@@ -151,7 +151,7 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not remove image',
+        title: 'imagesRemoveError'.tr(),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -193,10 +193,10 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
       );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Image prune finished',
+        title: 'imagesPruneFinished'.tr(),
         message: result.allUnused
-            ? 'Unused ${environment.runtime.name} images cleaned.'
-            : 'Dangling ${environment.runtime.name} images cleaned.',
+            ? 'imagesPruneUnused'.tr(args: [environment.runtime.name])
+            : 'imagesPruneDangling'.tr(args: [environment.runtime.name]),
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
@@ -204,7 +204,7 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not prune images',
+        title: 'imagesPruneError'.tr(),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -224,8 +224,8 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
       );
       if (!mounted) return;
       showStyledSnackBar(
-        title: '${runtime.name} installed',
-        message: 'Refreshing available image environments.',
+        title: 'imagesRuntimeInstalled'.tr(args: [runtime.name]),
+        message: 'imagesRuntimeRefreshing'.tr(),
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
@@ -233,7 +233,7 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not install ${runtime.name}',
+        title: 'imagesRuntimeInstallError'.tr(args: [runtime.name]),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -246,8 +246,8 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
     if (!widget.connected) {
       return _ImageEmptyPanel(
         icon: Symbols.link_off,
-        message: widget.connectionError ?? 'Connect to manage images.',
-        actionLabel: 'Connect',
+        message: widget.connectionError ?? 'imagesConnectToManage'.tr(),
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filledAction: true,
         actionIcon: Symbols.link,
@@ -257,8 +257,8 @@ class _ImageManagementTabState extends ConsumerState<ImageManagementTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _ImageEmptyPanel(
         icon: Symbols.error_outline,
-        message: 'Could not retrieve images: $error',
-        actionLabel: 'Try again',
+        message: 'imagesLoadError'.tr(args: [error.toString()]),
+        actionLabel: 'imagesTryAgain'.tr(),
         onAction: _load,
       ),
       data: (environments) => _ImageEnvironments(
@@ -309,7 +309,9 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
   String get _runtimeName => widget.runtime.name;
 
   String get _scopeLabel =>
-      widget.scope == ContainerScope.root ? 'Root' : 'User';
+      widget.scope == ContainerScope.root
+          ? 'commonRoot'.tr()
+          : 'commonUser'.tr();
 
   String get _commandPreview {
     final flags = [if (_allUnused) '-a', if (_force) '-f'].join(' ');
@@ -328,14 +330,13 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return SheetScaffold(
-      titleText: 'Prune $_runtimeName images',
+      titleText: 'imagesPruneTitle'.tr(args: [_runtimeName]),
       heightFactor: 0.62,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           Text(
-            'Clean local images on ${widget.serverName} · $_scopeLabel. '
-            'Output streams in the task terminal after you run prune.',
+            'imagesPruneInfo'.tr(args: [widget.serverName, _scopeLabel]),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -343,10 +344,13 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
           const SizedBox(height: 16),
           Row(
             children: [
-              _CountChip(label: 'Dangling', count: widget.danglingCount),
+              _CountChip(
+                label: 'imagesPruneDanglingLabel'.tr(),
+                count: widget.danglingCount,
+              ),
               const SizedBox(width: 8),
               _CountChip(
-                label: 'Unused tagged',
+                label: 'imagesPruneUnusedLabel'.tr(),
                 count: widget.unusedTaggedCount,
               ),
             ],
@@ -354,10 +358,8 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
           const SizedBox(height: 8),
           Text(
             _allUnused
-                ? 'Removes every image not used by a container, including '
-                      'tagged ones labeled Unused.'
-                : 'Removes only dangling images (untagged layers). '
-                      'Tagged images labeled Unused stay on disk.',
+                ? 'imagesPruneAllInfo'.tr()
+                : 'imagesPruneDanglingInfo'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -365,25 +367,25 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
           const SizedBox(height: 16),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('All unused (-a)'),
-            subtitle: const Text(
-              'Also delete tagged images that no container uses.',
+            title: Text('imagesPruneAllUnused'.tr()),
+            subtitle: Text(
+              'imagesPruneAllUnusedHint'.tr(),
             ),
             value: _allUnused,
             onChanged: (value) => setState(() => _allUnused = value),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Force (-f)'),
-            subtitle: const Text(
-              'Skip the remote confirmation prompt. Recommended over SSH.',
+            title: Text('imagesPruneForce'.tr()),
+            subtitle: Text(
+              'imagesPruneForceHint'.tr(),
             ),
             value: _force,
             onChanged: (value) => setState(() => _force = value),
           ),
           const SizedBox(height: 16),
           Text(
-            'Command preview',
+            'imagesPruneCommandPreview'.tr(),
             style: theme.textTheme.labelLarge?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -412,13 +414,13 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
               const Spacer(),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: const Text('commonCancel').tr(),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _submit,
                 icon: const Icon(Symbols.play_arrow, size: 18),
-                label: const Text('Run prune'),
+                label: const Text('imagesPruneRun').tr(),
               ),
             ],
           ),
@@ -483,8 +485,8 @@ class _ImageEnvironments extends StatelessWidget {
     if (environments.isEmpty) {
       return _ImageEmptyPanel(
         icon: Symbols.image,
-        message: 'Docker and Podman are not installed for this server user.',
-        actionLabel: 'Install runtime',
+        message: 'containersNotInstalled'.tr(),
+        actionLabel: 'containersInstallRuntimeShort'.tr(),
         onAction: onInstallRuntime,
         filledAction: true,
         actionIcon: Symbols.download,
@@ -507,18 +509,24 @@ class _ImageEnvironments extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  [
-                    totalImages == 1 ? '1 image' : '$totalImages images',
-                    if (totalUnused > 0)
-                      totalUnused == 1 ? '1 unused' : '$totalUnused unused',
-                  ].join(' · '),
+                    [
+                      totalImages == 1
+                          ? 'imagesCountOne'.tr()
+                          : 'imagesCountOther'.tr(args: [totalImages.toString()]),
+                      if (totalUnused > 0)
+                        totalUnused == 1
+                            ? 'imagesUnusedOne'.tr()
+                            : 'imagesUnusedOther'.tr(
+                                args: [totalUnused.toString()],
+                              ),
+                    ].join(' · '),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
               ),
               IconButton(
-                tooltip: 'Refresh images',
+                tooltip: 'imagesRefreshTooltip'.tr(),
                 visualDensity: VisualDensity.compact,
                 onPressed: onRefresh,
                 icon: const Icon(Symbols.refresh),
@@ -570,7 +578,9 @@ class _ImageEnvironmentSection extends StatelessWidget {
   }
 
   String get _scopeLabel =>
-      environment.scope == ContainerScope.root ? 'Root' : 'User';
+      environment.scope == ContainerScope.root
+          ? 'commonRoot'.tr()
+          : 'commonUser'.tr();
 
   IconData get _runtimeIcon => switch (environment.runtime) {
     ContainerRuntime.docker => Symbols.deployed_code,
@@ -581,7 +591,7 @@ class _ImageEnvironmentSection extends StatelessWidget {
     Menu menu() => Menu(
       children: [
         MenuAction(
-          title: 'Remove',
+          title: 'commonRemove'.tr(),
           image: MenuImage.icon(Symbols.delete),
           attributes: const MenuActionAttributes(destructive: true),
           callback: () => onAction(environment, image, ImageAction.remove),
@@ -594,16 +604,16 @@ class _ImageEnvironmentSection extends StatelessWidget {
         image: image,
         contentPadding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
         trailing: PopupMenuButton<ImageAction>(
-          tooltip: 'Image actions',
+          tooltip: 'imagesActionsTooltip'.tr(),
           onSelected: (action) => onAction(environment, image, action),
           itemBuilder: (context) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: ImageAction.remove,
               child: Row(
                 children: [
-                  Icon(Symbols.delete, size: 20),
-                  SizedBox(width: 12),
-                  Text('Remove'),
+                  const Icon(Symbols.delete, size: 20),
+                  const SizedBox(width: 12),
+                  Text('commonRemove'.tr()),
                 ],
               ),
             ),
@@ -642,17 +652,21 @@ class _ImageEnvironmentSection extends StatelessWidget {
                   const SizedBox(width: 8),
                   _MetaChip(
                     label: environment.images.isEmpty
-                        ? 'Empty'
-                        : '${environment.images.length}',
+                        ? 'imagesEmptyMeta'.tr()
+                        : 'imagesCountOther'.tr(
+                            args: [environment.images.length.toString()],
+                          ),
                   ),
                   if (unused > 0) ...[
                     const SizedBox(width: 8),
-                    _MetaChip(label: '$unused unused'),
+                    _MetaChip(
+                      label: 'imagesUnusedCount'.tr(args: [unused.toString()]),
+                    ),
                   ],
                 ],
                 if (environment.isAvailable)
                   IconButton(
-                    tooltip: 'Prune dangling images',
+                    tooltip: 'imagesPruneDanglingLabel'.tr(),
                     visualDensity: VisualDensity.compact,
                     onPressed: onPrune,
                     icon: const Icon(Symbols.cleaning_services, size: 20),
@@ -670,7 +684,7 @@ class _ImageEnvironmentSection extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      environment.error ?? 'Unavailable',
+                      environment.error ?? 'imagesUnavailable'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -683,7 +697,7 @@ class _ImageEnvironmentSection extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               child: Text(
-                'No images in this environment.',
+                'containersNoContainersEnv'.tr(),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),

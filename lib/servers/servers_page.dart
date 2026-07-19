@@ -1,4 +1,5 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -33,8 +34,8 @@ class ServersPage extends ConsumerWidget {
     } catch (_) {
       if (context.mounted) {
         showStyledSnackBar(
-          message: 'Could not save the server.',
-          title: 'Server not saved',
+          message: 'serversSaveError'.tr(),
+          title: 'serversSaveError'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -79,7 +80,7 @@ class ServersPage extends ConsumerWidget {
       if (context.mounted) {
         showStyledSnackBar(
           message: error.toString(),
-          title: 'Could not edit server',
+          title: 'serversEditError'.tr(),
           icon: Symbols.error_outline,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -116,12 +117,12 @@ class ServersPage extends ConsumerWidget {
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
-            Center(child: Text('Could not load servers: $error')),
+             Center(child: Text('serversLoadError'.tr(args: [error.toString()]))),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _add(context, ref),
         icon: const Icon(Symbols.add),
-        label: const Text('Add server'),
+        label: Text('serversAddServer'.tr()),
       ),
     );
   }
@@ -164,10 +165,10 @@ class _ServerGrid extends StatelessWidget {
       return ContextMenuWidget(
         menuProvider: (_) => Menu(
           children: [
-            MenuAction(title: 'Edit server', callback: () => onEdit(server)),
+            MenuAction(title: 'serversEditServer'.tr(), callback: () => onEdit(server)),
             MenuSeparator(),
             MenuAction(
-              title: 'Delete server',
+              title: 'serversDeleteServer'.tr(),
               attributes: const MenuActionAttributes(destructive: true),
               callback: () => onDelete(server),
             ),
@@ -255,7 +256,7 @@ class _ServerCard extends StatelessWidget {
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Refresh statistics',
+                      tooltip: 'serversRefreshStatistics'.tr(),
                       visualDensity: VisualDensity.compact,
                       onPressed: connected ? onRefresh : null,
                       icon: const Icon(Symbols.refresh),
@@ -294,7 +295,7 @@ class _ServerCard extends StatelessWidget {
                   if (!connected && !connecting)
                     FilledButton.tonal(
                       onPressed: onConnect,
-                      child: const Text('Connect'),
+                      child: Text('serversConnect'.tr()),
                     ),
                   if (connecting)
                     SizedBox(
@@ -331,10 +332,10 @@ class _ConnectionStatus extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final (label, color) = switch ((connected, connecting, failed)) {
-      (true, _, _) => ('Connected', colorScheme.primary),
-      (_, true, _) => ('Connecting', colorScheme.tertiary),
-      (_, _, true) => ('Failed', colorScheme.error),
-      _ => ('Not connected', colorScheme.onSurfaceVariant),
+      (true, _, _) => ('serversConnected'.tr(), colorScheme.primary),
+      (_, true, _) => ('serversConnecting'.tr(), colorScheme.tertiary),
+      (_, _, true) => ('serversFailed'.tr(), colorScheme.error),
+      _ => ('serversNotConnected'.tr(), colorScheme.onSurfaceVariant),
     };
 
     return Row(
@@ -366,8 +367,8 @@ class _DisconnectedStats extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final message = connecting
-        ? 'Establishing SSH session…'
-        : (error ?? 'Connect to view load, memory, and uptime.');
+        ? 'serversEstablishingSession'.tr()
+        : (error ?? 'serversConnectToViewStats'.tr());
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -422,13 +423,13 @@ class _ServerStats extends StatelessWidget {
     if (!collectStats && !collectSystemInfo) {
       return _StatsMessage(
         icon: Symbols.visibility_off,
-        message: 'Information collection is disabled for this server.',
+        message: 'serversCollectionDisabled'.tr(),
       );
     }
     if (stats == null && systemInfo == null) {
       return _StatsMessage(
         icon: Symbols.sync,
-        message: 'Fetching server information…',
+        message: 'serversFetchingInfo'.tr(),
       );
     }
 
@@ -458,8 +459,8 @@ class _ServerStats extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _StatTile(
-                  label: 'Load',
+                  child: _StatTile(
+                  label: 'detailLoadAverage'.tr(),
                   value: stats!.loadAverage?.toStringAsFixed(2) ?? '—',
                   detail: _loadDetail(stats!.loadAverage),
                   valueColor: _loadColor(stats!.loadAverage, colorScheme),
@@ -468,7 +469,7 @@ class _ServerStats extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _StatTile(
-                  label: 'Memory',
+                  label: 'detailMemory'.tr(),
                   value: memoryPercent == null ? '—' : '$memoryPercent%',
                   detail: usedMemoryKb == null || stats!.memoryTotalKb == null
                       ? null
@@ -481,7 +482,7 @@ class _ServerStats extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _StatTile(
-                  label: 'Uptime',
+                  label: 'detailUptime'.tr(),
                   value: _formatUptime(stats!.uptime),
                   detail: _uptimeDetail(stats!.uptime),
                 ),
@@ -491,7 +492,7 @@ class _ServerStats extends StatelessWidget {
         else if (collectStats)
           _StatsMessage(
             icon: Symbols.query_stats,
-            message: 'Performance statistics are unavailable on this host.',
+            message: 'serversStatsUnavailable'.tr(),
           ),
         if (systemLabel.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -506,7 +507,7 @@ class _ServerStats extends StatelessWidget {
         ],
         if (stats?.updatedAt != null) ...[
           Text(
-            'Updated ${_formatRelative(stats!.updatedAt)}',
+            'detailRefreshDetails'.tr(args: [_formatRelative(stats!.updatedAt)]),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelSmall?.copyWith(color: colorScheme.outline),
@@ -518,16 +519,16 @@ class _ServerStats extends StatelessWidget {
 
   static String? _loadDetail(double? load) {
     if (load == null) return null;
-    if (load < 1) return 'Idle';
-    if (load < 2) return 'Normal';
-    if (load < 4) return 'Busy';
-    return 'High';
+    if (load < 1) return 'serversLoadIdle'.tr();
+    if (load < 2) return 'serversLoadNormal'.tr();
+    if (load < 4) return 'serversLoadBusy'.tr();
+    return 'serversLoadHigh'.tr();
   }
 
   static String? _uptimeDetail(Duration? uptime) {
     if (uptime == null || uptime.inSeconds == 0) return null;
-    if (uptime.inDays >= 30) return 'Stable';
-    if (uptime.inHours < 1) return 'Recent';
+    if (uptime.inDays >= 30) return 'serversUptimeStable'.tr();
+    if (uptime.inHours < 1) return 'serversUptimeRecent'.tr();
     return null;
   }
 
@@ -711,16 +712,16 @@ class _EmptyServers extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No servers yet',
+            'serversEmpty'.tr(),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
-          const Text('Add an SSH host to start managing it from MaidKit.'),
+          Text('serversEmptyHint'.tr()),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: onAdd,
             icon: const Icon(Symbols.add),
-            label: const Text('Add server'),
+            label: Text('serversAddServer'.tr()),
           ),
         ],
       ),
@@ -740,7 +741,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _host = TextEditingController();
-  final _port = TextEditingController(text: '22');
+  late final _port = TextEditingController(text: 'serverDefaultPort'.tr());
   final _user = TextEditingController();
   final _secret = TextEditingController();
   final _passphrase = TextEditingController();
@@ -789,10 +790,10 @@ class _AddServerDialogState extends State<_AddServerDialog> {
   }
 
   String? _required(String? value) =>
-      value == null || value.trim().isEmpty ? 'Required' : null;
+      value == null || value.trim().isEmpty ? 'serverPortRequired'.tr() : null;
   String? _validPort(String? value) {
     final port = int.tryParse(value ?? '');
-    return port != null && port > 0 && port < 65536 ? null : 'Invalid port';
+    return port != null && port > 0 && port < 65536 ? null : 'serverPortInvalid'.tr();
   }
 
   void _save() {
@@ -821,7 +822,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
   Widget build(BuildContext context) => SizedBox(
     width: 560,
     child: SheetScaffold(
-      titleText: 'Add SSH server',
+      titleText: 'serversAddSheetTitle'.tr(),
       heightFactor: 0.78,
       child: Form(
         key: _form,
@@ -830,7 +831,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
           children: [
             TextFormField(
               controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(labelText: 'serverNameLabel'.tr()),
               validator: _required,
             ),
             const SizedBox(height: 12),
@@ -839,8 +840,8 @@ class _AddServerDialogState extends State<_AddServerDialog> {
                 Expanded(
                   child: TextFormField(
                     controller: _host,
-                    decoration: const InputDecoration(
-                      labelText: 'Host or IP address',
+                    decoration: InputDecoration(
+                      labelText: 'serverHostLabel'.tr(),
                     ),
                     validator: _required,
                   ),
@@ -851,7 +852,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
                   child: TextFormField(
                     controller: _port,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Port'),
+                    decoration: InputDecoration(labelText: 'serverPortLabel'.tr()),
                     validator: _validPort,
                   ),
                 ),
@@ -860,19 +861,19 @@ class _AddServerDialogState extends State<_AddServerDialog> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _user,
-              decoration: const InputDecoration(labelText: 'Username'),
+              decoration: InputDecoration(labelText: 'serverUsernameLabel'.tr()),
               validator: _required,
             ),
             const SizedBox(height: 12),
             SegmentedButton<CredentialType>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: CredentialType.password,
-                  label: Text('Password'),
+                  label: Text('serverAuthPassword'.tr()),
                 ),
                 ButtonSegment(
                   value: CredentialType.privateKey,
-                  label: Text('Private key'),
+                  label: Text('serverAuthPrivateKey'.tr()),
                 ),
               ],
               selected: {_type},
@@ -884,7 +885,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
               TextFormField(
                 controller: _secret,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password'),
+                decoration: InputDecoration(labelText: 'serverPasswordLabel'.tr()),
                 validator: _required,
               )
             else ...[
@@ -894,7 +895,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
                 maxLines: 8,
                 validator: _required,
                 decoration: InputDecoration(
-                  labelText: 'Private key',
+                  labelText: 'serverPrivateKeyLabel'.tr(),
                   suffixIcon: IconButton(
                     onPressed: _pickKey,
                     icon: const Icon(Symbols.upload_file),
@@ -905,24 +906,24 @@ class _AddServerDialogState extends State<_AddServerDialog> {
               TextFormField(
                 controller: _passphrase,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Key passphrase (optional)',
+                decoration: InputDecoration(
+                  labelText: 'serverKeyPassphraseLabel'.tr(),
                 ),
               ),
             ],
             const SizedBox(height: 12),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Collect performance statistics'),
-              subtitle: const Text('Load average, memory use, and uptime.'),
+              title: Text('serverCollectStats'.tr()),
+              subtitle: Text('serverCollectStatsHint'.tr()),
               value: _collectStats,
               onChanged: (value) => setState(() => _collectStats = value),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Discover system information'),
-              subtitle: const Text(
-                'Distribution, operating system, and kernel.',
+              title: Text('serverDiscoverSystemInfo'.tr()),
+              subtitle: Text(
+                'serverDiscoverSystemInfoHint'.tr(),
               ),
               value: _collectSystemInfo,
               onChanged: (value) => setState(() => _collectSystemInfo = value),
@@ -931,14 +932,14 @@ class _AddServerDialogState extends State<_AddServerDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
+                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text('commonCancel'.tr()),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _save,
-                  child: const Text('Save and connect'),
+                  child: Text('serverSaveAndConnect'.tr()),
                 ),
               ],
             ),

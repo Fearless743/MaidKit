@@ -1,4 +1,5 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/gestures.dart' show kMiddleMouseButton;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -348,7 +349,9 @@ class _PaneTabBar extends ConsumerWidget {
                             child: Padding(
                               padding: const EdgeInsets.only(left: 12),
                               child: Text(
-                                hovering ? 'Drop tab here' : 'New pane',
+                                hovering
+                                    ? 'sessionsDropTabHere'.tr()
+                                    : 'sessionsNewPane'.tr(),
                                 style: Theme.of(context).textTheme.labelMedium
                                     ?.copyWith(color: scheme.onSurfaceVariant),
                               ),
@@ -399,7 +402,7 @@ class _PaneTabBar extends ConsumerWidget {
               ),
             ),
             IconButton(
-              tooltip: 'Split right',
+              tooltip: 'sessionsSplitRight'.tr(),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
@@ -415,7 +418,7 @@ class _PaneTabBar extends ConsumerWidget {
               icon: const Icon(Symbols.vertical_split, size: 20),
             ),
             IconButton(
-              tooltip: 'Split down',
+              tooltip: 'sessionsSplitDown'.tr(),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
@@ -431,7 +434,7 @@ class _PaneTabBar extends ConsumerWidget {
               icon: const Icon(Symbols.horizontal_split, size: 20),
             ),
             IconButton(
-              tooltip: 'Session actions (Shift+Tab)',
+              tooltip: 'sessionsSessionActions'.tr(),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
@@ -446,7 +449,7 @@ class _PaneTabBar extends ConsumerWidget {
             ),
             if (showClosePane)
               IconButton(
-                tooltip: 'Close pane',
+                tooltip: 'sessionsClosePane'.tr(),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(
@@ -639,7 +642,7 @@ class _PaneTabChip extends StatelessWidget {
                   ),
                   const SizedBox(width: 2),
                   IconButton(
-                    tooltip: 'Close tab',
+                    tooltip: 'sessionsCloseTab'.tr(),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
@@ -732,8 +735,8 @@ class _TerminalStatusBar extends StatelessWidget {
         stats?.memoryTotalKb == null || stats?.memoryAvailableKb == null
         ? null
         : stats!.memoryTotalKb! - stats.memoryAvailableKb!;
-    final items = <String>[
-      if (session != null) 'Connected' else 'No session',
+      final items = <String>[
+        if (session != null) 'commonConnected'.tr() else 'No session',
       if (stats?.loadAverage != null)
         'Load ${stats!.loadAverage!.toStringAsFixed(2)}',
       if (usedMemory != null && stats?.memoryTotalKb != null)
@@ -792,13 +795,13 @@ class _SessionIntro extends StatelessWidget {
   Widget build(BuildContext context) => servers.when(
     loading: () => const Center(child: CircularProgressIndicator()),
     error: (error, _) =>
-        Center(child: Text('Could not load saved servers: $error')),
+        Center(child: Text('serversLoadError'.tr(args: [error.toString()]))),
     data: (servers) => servers.isEmpty
         ? Center(
             child: FilledButton.icon(
               onPressed: () => AutoTabsRouter.of(context).setActiveIndex(0),
               icon: const Icon(Symbols.add),
-              label: const Text('Add server'),
+              label: Text('serversAddServer'.tr()),
             ),
           )
         : _TerminalServerGrid(
@@ -900,42 +903,42 @@ class _ServerCardActions extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '$openCount open',
+                  'sessionsOpenCount'.tr(args: ['$openCount']),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
               ),
-              IconButton.filledTonal(
-                tooltip: 'New terminal',
-                visualDensity: VisualDensity.compact,
-                onPressed: onOpenTerminal,
-                icon: const Icon(Symbols.add, size: 20),
-              ),
-              IconButton(
-                tooltip: 'Open file management',
-                visualDensity: VisualDensity.compact,
-                onPressed: onOpenFiles,
-                icon: const Icon(Symbols.folder, size: 20),
-              ),
+               IconButton.filledTonal(
+                 tooltip: 'sessionsNewTerminal'.tr(),
+                 visualDensity: VisualDensity.compact,
+                 onPressed: onOpenTerminal,
+                 icon: const Icon(Symbols.add, size: 20),
+               ),
+               IconButton(
+                 tooltip: 'sessionsOpenFileManagement'.tr(),
+                 visualDensity: VisualDensity.compact,
+                 onPressed: onOpenFiles,
+                 icon: const Icon(Symbols.folder, size: 20),
+               ),
             ],
           );
         }
         return Row(
           children: [
             Text(
-              '$openCount open',
+              'sessionsOpenCount'.tr(args: ['$openCount']),
               style: Theme.of(context).textTheme.labelMedium,
             ),
             const Spacer(),
             FilledButton.tonalIcon(
               onPressed: onOpenTerminal,
               icon: const Icon(Symbols.add),
-              label: const Text('New terminal'),
+              label: Text('sessionsNewTerminal'.tr()),
             ),
             const SizedBox(width: 8),
             IconButton(
-              tooltip: 'Open file management',
+              tooltip: 'sessionsOpenFileManagement'.tr(),
               onPressed: onOpenFiles,
               icon: const Icon(Symbols.folder),
             ),

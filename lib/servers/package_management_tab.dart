@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -140,15 +141,15 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
       );
       if (!mounted) return;
       showStyledSnackBar(
-        message: '${action.label} completed.',
-        title: 'Packages',
+        message: 'packageActionCompleted'.tr(args: [action.label]),
+        title: 'packagePackages'.tr(),
       );
       await _load();
     } catch (error) {
       if (mounted) {
         showStyledSnackBar(
           message: error.toString(),
-          title: 'Package action failed',
+          title: 'packageActionFailed'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -167,7 +168,7 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
           useRootNavigator: true,
           useSafeArea: true,
           builder: (sheetContext) => SheetScaffold(
-            titleText: '${action.label}?',
+            titleText: 'packageActionConfirm'.tr(args: [action.label]),
             heightFactor: 0.34,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -176,8 +177,8 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
                 children: [
                   Text(
                     action.isDestructive
-                        ? 'Remove $object from this host? Dependent packages may also be removed.'
-                        : '${action.label} $object on this host?',
+                        ? 'packageRemoveConfirm'.tr(args: [object])
+                        : 'packageActionGenericConfirm'.tr(args: [action.label, object]),
                   ),
                   const Spacer(),
                   Row(
@@ -185,7 +186,7 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(sheetContext, false),
-                        child: const Text('Cancel'),
+                        child: Text('commonCancel'.tr()),
                       ),
                       const SizedBox(width: 8),
                       FilledButton(
@@ -210,8 +211,8 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
     if (!widget.connected) {
       return _PackageEmpty(
         icon: Symbols.link_off,
-        message: widget.connectionError ?? 'Connect to manage packages.',
-        actionLabel: 'Connect',
+        message: widget.connectionError ?? 'packageConnectToManage'.tr(),
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
       );
     }
@@ -219,15 +220,15 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _PackageEmpty(
         icon: Symbols.error_outline,
-        message: 'Could not inspect package tools: $error',
-        actionLabel: 'Try again',
+        message: 'packageInspectError'.tr(args: ['$error']),
+        actionLabel: 'systemdTryAgain'.tr(),
         onAction: _load,
       ),
       data: (status) => status.available.isEmpty
           ? _PackageEmpty(
               icon: Symbols.inventory_2,
-              message: 'No supported package manager was found on this host.',
-              actionLabel: 'Refresh',
+              message: 'packageNoManagerFound'.tr(),
+              actionLabel: 'commonRefresh'.tr(),
               onAction: _load,
             )
           : _content(context, status),
@@ -265,7 +266,7 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
               ),
               const Spacer(),
               IconButton(
-                tooltip: 'Refresh package status',
+                tooltip: 'packageRefreshTooltip'.tr(),
                 padding: const EdgeInsets.all(4),
                 visualDensity: VisualDensity.compact,
                 onPressed: _busy ? null : _load,
@@ -273,7 +274,7 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
               ),
               if (status.outdatedPackages.isNotEmpty)
                 IconButton(
-                  tooltip: 'Upgrade packages',
+                  tooltip: 'packageUpgradeTooltip'.tr(),
                   padding: const EdgeInsets.all(4),
                   visualDensity: VisualDensity.compact,
                   onPressed: _busy ? null : () => _run(PackageAction.upgrade),
@@ -289,12 +290,12 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
             children: [
               _PackageMetric(
                 value: status.installedPackageCount?.toString() ?? '—',
-                label: 'Installed packages',
+                label: 'packageInstalled'.tr(),
               ),
               const SizedBox(width: 24),
               _PackageMetric(
                 value: status.outdatedPackages.length.toString(),
-                label: 'Upgrades available',
+                label: 'packageUpgradesAvailable'.tr(),
               ),
             ],
           ),
@@ -307,16 +308,16 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
                 child: TextField(
                   controller: _searchController,
                   onSubmitted: (_) => _search(),
-                  decoration: const InputDecoration(
-                    labelText: 'Find package',
-                    hintText: 'Package name or prefix',
+                  decoration: InputDecoration(
+                    labelText: 'packageFindPackage'.tr(),
+                    hintText: 'packageFindPackageHint'.tr(),
                     isDense: true,
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               IconButton.filled(
-                tooltip: 'Search packages',
+                tooltip: 'packageSearchTooltip'.tr(),
                 padding: const EdgeInsets.all(4),
                 visualDensity: VisualDensity.compact,
                 onPressed: _busy ? null : _search,
@@ -338,25 +339,25 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
     if (_results.hasError) {
       return _PackageEmpty(
         icon: Symbols.error_outline,
-        message: 'Could not search packages: ${_results.error}',
-        actionLabel: 'Try again',
+        message: 'packageSearchError'.tr(args: ['${_results.error}']),
+        actionLabel: 'systemdTryAgain'.tr(),
         onAction: _search,
       );
     }
     final results = _results.value ?? const <PackageSearchResult>[];
     if (results.isNotEmpty) return _packageList(results);
     if (_searchController.text.trim().isNotEmpty) {
-      return const _PackageEmpty(
+      return _PackageEmpty(
         icon: Symbols.search_off,
-        message: 'No matching packages found.',
+        message: 'packageNoMatch'.tr(),
       );
     }
     if (status.outdatedPackages.isNotEmpty) {
       return _updatesList(status.outdatedPackages);
     }
-    return const _PackageEmpty(
+    return _PackageEmpty(
       icon: Symbols.check_circle,
-      message: 'No pending package updates were reported.',
+      message: 'packageNoUpdates'.tr(),
     );
   }
 
@@ -367,7 +368,7 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
       dense: true,
       leading: const Icon(Symbols.system_update),
       title: Text(packages[index]),
-      subtitle: const Text('Update available'),
+      subtitle: Text('packageUpdateAvailable'.tr()),
     ),
   );
 

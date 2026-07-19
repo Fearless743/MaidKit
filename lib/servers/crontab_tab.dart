@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -76,13 +77,13 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
         _document = AsyncValue.data(document);
         _busy = false;
       });
-      showStyledSnackBar(message: success, title: 'Crontab');
+      showStyledSnackBar(message: success, title: 'crontabTitle'.tr());
     } catch (error) {
       if (!mounted) return;
       setState(() => _busy = false);
       showStyledSnackBar(
         message: error.toString(),
-        title: 'Crontab update failed',
+        title: 'crontabUpdateFailed'.tr(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
       );
@@ -112,7 +113,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
       dayOfWeek: draft.dayOfWeek.trim(),
       command: draft.command.trim(),
     );
-    await _persist(current.addingJob(job), success: 'Job added.');
+    await _persist(current.addingJob(job), success: 'crontabJobAdded'.tr());
   }
 
   Future<void> _editJob(int jobIndex, CronEntry entry) async {
@@ -150,7 +151,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
     );
     await _persist(
       current.replacingJob(jobIndex, job),
-      success: 'Job updated.',
+      success: 'crontabJobUpdated'.tr(),
     );
   }
 
@@ -165,7 +166,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
       builder: (sheetContext) {
         final theme = Theme.of(sheetContext);
         return SheetScaffold(
-          titleText: 'Remove cron job?',
+          titleText: 'crontabRemoveTitle'.tr(),
           heightFactor: 0.36,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -190,12 +191,12 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
                   const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.pop(sheetContext, false),
-                    child: const Text('Cancel'),
+                    child: const Text('commonCancel').tr(),
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: () => Navigator.pop(sheetContext, true),
-                    child: const Text('Remove'),
+                    child: const Text('commonRemove').tr(),
                   ),
                 ],
               ),
@@ -205,7 +206,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
       },
     );
     if (approved != true || !mounted) return;
-    await _persist(current.removingJob(jobIndex), success: 'Job removed.');
+    await _persist(current.removingJob(jobIndex), success: 'crontabJobRemoved'.tr());
   }
 
   @override
@@ -213,8 +214,8 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
     if (!widget.connected) {
       return _CrontabEmpty(
         icon: Symbols.link_off,
-        message: widget.connectionError ?? 'Connect to manage crontab.',
-        actionLabel: 'Connect',
+        message: widget.connectionError ?? 'crontabConnectToManage'.tr(),
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filled: true,
       );
@@ -224,8 +225,8 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _CrontabEmpty(
         icon: Symbols.error_outline,
-        message: 'Could not load crontab: $error',
-        actionLabel: 'Try again',
+        message: 'crontabLoadError'.tr(args: [error.toString()]),
+        actionLabel: 'commonRetry'.tr(),
         onAction: _load,
       ),
       data: (document) {
@@ -242,8 +243,9 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
                   Expanded(
                     child: Text(
                       jobs.isEmpty
-                          ? 'No jobs for ${widget.server.username}'
-                          : '${jobs.length} job${jobs.length == 1 ? '' : 's'} · ${widget.server.username}',
+                          ? 'crontabNoJobsForUser'
+                              .tr(args: [widget.server.username])
+                          : '${'detailProcessCount'.tr(args: ['${jobs.length}'])} · ${widget.server.username}',
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -259,13 +261,13 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
                       ),
                     ),
                   IconButton(
-                    tooltip: 'Refresh',
+                    tooltip: 'crontabRefresh'.tr(),
                     visualDensity: VisualDensity.compact,
                     onPressed: _busy ? null : _load,
                     icon: const Icon(Symbols.refresh),
                   ),
                   IconButton(
-                    tooltip: 'Add job',
+                    tooltip: 'crontabAddJob'.tr(),
                     visualDensity: VisualDensity.compact,
                     onPressed: _busy ? null : _addJob,
                     icon: const Icon(Symbols.add),
@@ -279,9 +281,9 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
                   ? _CrontabEmpty(
                       icon: Symbols.schedule,
                       message: document.exists
-                          ? 'This user has a crontab with no scheduled jobs.'
-                          : 'No crontab is installed for this user yet.',
-                      actionLabel: 'Add job',
+                          ? 'crontabEmptyNoJobs'.tr()
+                          : 'crontabEmptyNotInstalled'.tr(),
+                      actionLabel: 'crontabAddJob'.tr(),
                       onAction: _addJob,
                     )
                   : ListView.separated(
@@ -319,14 +321,14 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                tooltip: 'Edit',
+                                tooltip: 'crontabEdit'.tr(),
                                 onPressed: _busy
                                     ? null
                                     : () => _editJob(index, job),
                                 icon: const Icon(Symbols.edit, size: 20),
                               ),
                               IconButton(
-                                tooltip: 'Remove',
+                                tooltip: 'commonRemove'.tr(),
                                 onPressed: _busy
                                     ? null
                                     : () => _deleteJob(index, job),
@@ -435,7 +437,7 @@ class _CronJobSheetState extends State<_CronJobSheet> {
     final scheme = theme.colorScheme;
     final isEdit = widget.initial != null;
     return SheetScaffold(
-      titleText: isEdit ? 'Edit cron job' : 'Add cron job',
+      titleText: isEdit ? 'crontabEditTitle'.tr() : 'crontabAddTitle'.tr(),
       heightFactor: 0.72,
       child: Form(
         key: _formKey,
@@ -443,7 +445,7 @@ class _CronJobSheetState extends State<_CronJobSheet> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
             Text(
-              'Schedule (standard five-field cron)',
+              'crontabScheduleLabel'.tr(),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -452,18 +454,18 @@ class _CronJobSheetState extends State<_CronJobSheet> {
             Row(
               children: [
                 Expanded(
-                  child: _CronField(
+                    child: _CronField(
                     controller: _minute,
-                    label: 'Minute',
-                    hint: '0-59',
+                    label: 'crontabMinute'.tr(),
+                    hint: 'crontabMinuteHint'.tr(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _CronField(
                     controller: _hour,
-                    label: 'Hour',
-                    hint: '0-23',
+                    label: 'crontabHour'.tr(),
+                    hint: 'crontabHourHint'.tr(),
                   ),
                 ),
               ],
@@ -474,24 +476,24 @@ class _CronJobSheetState extends State<_CronJobSheet> {
                 Expanded(
                   child: _CronField(
                     controller: _dayOfMonth,
-                    label: 'Day',
-                    hint: '1-31',
+                    label: 'crontabDay'.tr(),
+                    hint: 'crontabDayHint'.tr(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _CronField(
                     controller: _month,
-                    label: 'Month',
-                    hint: '1-12',
+                    label: 'crontabMonth'.tr(),
+                    hint: 'crontabMonthHint'.tr(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _CronField(
                     controller: _dayOfWeek,
-                    label: 'Weekday',
-                    hint: '0-7',
+                    label: 'crontabWeekday'.tr(),
+                    hint: 'crontabWeekdayHint'.tr(),
                   ),
                 ),
               ],
@@ -499,23 +501,23 @@ class _CronJobSheetState extends State<_CronJobSheet> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _command,
-              decoration: const InputDecoration(
-                labelText: 'Command',
-                hintText: '/usr/bin/example --flag',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'crontabCommandLabel'.tr(),
+                hintText: 'crontabCommandHint'.tr(),
+                border: const OutlineInputBorder(),
               ),
               minLines: 2,
               maxLines: 4,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Command is required';
+                   return 'crontabCommandRequired'.tr();
                 }
                 return null;
               },
             ),
             const SizedBox(height: 8),
-            Text(
-              'Examples: 0 2 * * * nightly · */15 * * * * every 15 minutes',
+              Text(
+              'crontabExamples'.tr(),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -526,12 +528,12 @@ class _CronJobSheetState extends State<_CronJobSheet> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: const Text('commonCancel').tr(),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _submit,
-                  child: Text(isEdit ? 'Save' : 'Add'),
+                  child: Text(isEdit ? 'commonSave'.tr() : 'crontabAddJob'.tr()),
                 ),
               ],
             ),
@@ -565,7 +567,7 @@ class _CronField extends StatelessWidget {
       ),
       style: const TextStyle(fontFamily: 'IBM Plex Mono'),
       validator: (value) {
-        if (value == null || value.trim().isEmpty) return 'Required';
+        if (value == null || value.trim().isEmpty) return 'commonRequired'.tr();
         return null;
       },
     );

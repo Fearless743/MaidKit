@@ -10,6 +10,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 import 'package:yaml/yaml.dart';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
@@ -289,7 +290,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
     if (!mounted) return;
     showStyledSnackBar(
       title: title,
-      message: 'Copied to the clipboard.',
+      message: 'commonCopiedToClipboard'.tr(),
       icon: Symbols.content_copy,
       accentColor: Theme.of(context).colorScheme.primary,
     );
@@ -472,7 +473,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
       showStyledSnackBar(
         message:
             '${widget.link.name} · ${action.label.toLowerCase()} finished.',
-        title: 'Project updated',
+        title: 'projectsProjectUpdated'.tr(),
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
@@ -528,7 +529,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
       if (!mounted) return;
       showStyledSnackBar(
         message: '${widget.link.name} was deployed to ${server.name}.',
-        title: 'Project deployed',
+        title: 'projectsProjectDeployed'.tr(),
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
@@ -537,7 +538,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
       if (!mounted) return;
       showStyledSnackBar(
         message: error.toString(),
-        title: 'Could not deploy project',
+        title: 'projectsCouldNotDeploy'.tr(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
       );
@@ -607,8 +608,8 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
         .where((item) => item.id == widget.link.serverId)
         .firstOrNull;
     if (server == null) {
-      return const Scaffold(
-        body: Center(child: Text('The linked server no longer exists.')),
+      return Scaffold(
+        body: Center(child: Text('projectsServerGone'.tr())),
       );
     }
 
@@ -626,7 +627,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
         title: Text(widget.link.name),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'commonRefresh'.tr(),
             onPressed: connected
                 ? () async {
                     await Future.wait([
@@ -639,7 +640,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
             icon: const Icon(Symbols.refresh),
           ),
           IconButton(
-            tooltip: 'Deploy configuration',
+            tooltip: 'projectsDeployConfig'.tr(),
             onPressed: connected ? () => unawaited(_deploy(server)) : null,
             icon: const Icon(Symbols.rocket_launch),
           ),
@@ -828,7 +829,7 @@ class _OverviewPanel extends StatelessWidget {
     final scheme = theme.colorScheme;
     final runtimeLabel =
         '${runtime.name[0].toUpperCase()}${runtime.name.substring(1)}';
-    final scopeLabel = scope == ContainerScope.root ? 'Root' : 'User';
+    final scopeLabel = scope == ContainerScope.root ? 'commonRoot'.tr() : 'commonUser'.tr();
     final totalCpu = samples.fold<double>(
       0,
       (sum, sample) => sum + (sample.cpuPercent ?? 0),
@@ -873,7 +874,7 @@ class _OverviewPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SectionLabel('Overview'),
+        _SectionLabel('detailOverview'.tr()),
         const SizedBox(height: 12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -941,12 +942,12 @@ class _OverviewPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 24),
-        const _SectionLabel('Resource cost'),
+        _SectionLabel('projectsResourceCost'.tr()),
         const SizedBox(height: 12),
         if (!connected)
           _InlinePrompt(
-            message: 'Connect to sample live CPU, memory, and I/O cost.',
-            actionLabel: 'Connect',
+            message: 'projectsConnectForMetrics'.tr(),
+            actionLabel: 'commonConnect'.tr(),
             onAction: onConnect,
           )
         else if (statsError != null)
@@ -957,8 +958,8 @@ class _OverviewPanel extends StatelessWidget {
         else if (!hasSamples)
           Text(
             runningCount == 0
-                ? 'No running containers to sample.'
-                : 'Waiting for the first stats sample…',
+                ? 'projectsNoRunningContainers'.tr()
+                : 'projectsWaitingForFirstSample'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -968,7 +969,7 @@ class _OverviewPanel extends StatelessWidget {
             cpuLabel: '${totalCpu.toStringAsFixed(1)}%',
             memoryLabel: _formatBytes(totalMemUsed),
             memoryDetail: memCeilingBytes != null && memCeilingBytes > 0
-                ? 'of ${_formatBytes(memCeilingBytes)} host'
+                ? 'detailOf'.tr(args: [_formatBytes(memCeilingBytes)])
                 : '${samples.length} containers sampled',
             memoryProgress: memCeilingBytes != null && memCeilingBytes > 0
                 ? (totalMemUsed / memCeilingBytes).clamp(0.0, 1.0)
@@ -983,7 +984,7 @@ class _OverviewPanel extends StatelessWidget {
           if (statsUpdatedAt != null) ...[
             const SizedBox(height: 10),
             Text(
-              'Updated ${_formatTimestamp(statsUpdatedAt!)}',
+              'detailUpdated'.tr(args: [_formatTimestamp(statsUpdatedAt!)]),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),

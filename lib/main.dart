@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -11,6 +12,9 @@ import 'servers/startup_connection_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
+  EasyLocalization.logger.enableBuildModes = [];
+
   final preferences = await Future.wait([
     TerminalAdapterPreferences.load(),
     StartupConnectionPreferences.load(),
@@ -50,7 +54,16 @@ Future<void> main() async {
           metricsRefreshPreferences,
         ),
       ],
-      child: const MaidKitApp(),
+      child: EasyLocalization(
+        supportedLocales: const [
+          Locale('en', 'US'),
+          Locale('zh', 'CN'),
+        ],
+        path: 'assets/translations',
+        fallbackLocale: const Locale('en', 'US'),
+        useFallbackTranslations: true,
+        child: const MaidKitApp(),
+      ),
     ),
   );
 }

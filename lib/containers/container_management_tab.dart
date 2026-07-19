@@ -7,6 +7,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'container_list_tile.dart';
 import 'container_models.dart';
 import 'container_runtime_install.dart';
@@ -129,27 +130,23 @@ class _ContainerManagementTabState
     required bool forceRemove,
   }) async {
     final title = switch (action) {
-      ContainerAction.stop => 'Stop ${container.name}?',
-      ContainerAction.restart => 'Restart ${container.name}?',
-      ContainerAction.kill => 'Kill ${container.name}?',
+      ContainerAction.stop => 'containerStopConfirm'.tr(args: [container.name]),
+      ContainerAction.restart => 'containerRestartConfirm'.tr(args: [container.name]),
+      ContainerAction.kill => 'containerKillConfirm'.tr(args: [container.name]),
       ContainerAction.remove =>
         forceRemove
-            ? 'Force delete ${container.name}?'
-            : 'Delete ${container.name}?',
-      _ => '${action.label} ${container.name}?',
+            ? 'containerForceDeleteConfirm'.tr(args: [container.name])
+            : 'containerDeleteConfirm'.tr(args: [container.name]),
+      _ => 'containerGenericConfirm'.tr(),
     };
     final message = switch (action) {
-      ContainerAction.stop =>
-        'The container will remain available to start again.',
-      ContainerAction.restart =>
-        'The container will be stopped and started again.',
-      ContainerAction.kill =>
-        'Sends SIGKILL immediately. Prefer Stop when the process can exit cleanly.',
+      ContainerAction.stop => 'containerStopMessage'.tr(),
+      ContainerAction.restart => 'containerRestartMessage'.tr(),
+      ContainerAction.kill => 'containerKillMessage'.tr(),
       ContainerAction.remove when forceRemove =>
-        'The container is still running. It will be force-stopped and permanently removed from this environment.',
-      ContainerAction.remove =>
-        'The container will be permanently removed from this environment. Images and volumes are left in place.',
-      _ => 'Continue with this action?',
+        'containerForceDeleteMessage'.tr(),
+      ContainerAction.remove => 'containerDeleteMessage'.tr(),
+      _ => 'containerGenericConfirm'.tr(),
     };
     final destructive =
         action == ContainerAction.kill || action == ContainerAction.remove;
@@ -186,7 +183,7 @@ class _ContainerManagementTabState
           );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Container ${action.pastLabel}',
+        title: 'containerActionSuccess'.tr(args: [action.pastLabel]),
         message: container.name,
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
@@ -195,7 +192,7 @@ class _ContainerManagementTabState
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not ${action.label.toLowerCase()} container',
+        title: 'containerActionError'.tr(args: [action.label.toLowerCase()]),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -215,8 +212,8 @@ class _ContainerManagementTabState
       );
       if (!mounted) return;
       showStyledSnackBar(
-        title: '${runtime.name} installed',
-        message: 'Refreshing available container environments.',
+        title: 'runtimeInstallSuccess'.tr(args: [runtime.name]),
+        message: 'runtimeInstallRefreshing'.tr(),
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
@@ -224,7 +221,7 @@ class _ContainerManagementTabState
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not install ${runtime.name}',
+        title: 'runtimeInstallError'.tr(args: [runtime.name]),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -237,8 +234,8 @@ class _ContainerManagementTabState
     if (!widget.connected) {
       return _ContainerEmptyPanel(
         icon: Symbols.link_off,
-        message: widget.connectionError ?? 'Connect to manage containers.',
-        actionLabel: 'Connect',
+        message: widget.connectionError ?? 'containersConnectToManage'.tr(),
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filledAction: true,
         actionIcon: Symbols.link,
@@ -248,8 +245,8 @@ class _ContainerManagementTabState
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _ContainerEmptyPanel(
         icon: Symbols.error_outline,
-        message: 'Could not retrieve containers: $error',
-        actionLabel: 'Try again',
+        message: 'containersLoadError'.tr(args: [error.toString()]),
+        actionLabel: 'commonRetry'.tr(),
         onAction: _load,
       ),
       data: (environments) => _ContainerEnvironments(
@@ -383,8 +380,8 @@ class _ContainerEnvironments extends ConsumerWidget {
     if (environments.isEmpty) {
       return _ContainerEmptyPanel(
         icon: Symbols.deployed_code,
-        message: 'Docker and Podman are not installed for this server user.',
-        actionLabel: 'Install runtime',
+        message: 'containersNotInstalled'.tr(),
+        actionLabel: 'containersInstallRuntimeShort'.tr(),
         onAction: onInstallRuntime,
         filledAction: true,
         actionIcon: Symbols.download,
@@ -413,11 +410,17 @@ class _ContainerEnvironments extends ConsumerWidget {
         .fold<int>(0, (sum, env) => sum + env.containers.length);
 
     final summaryParts = <String>[
-      totalContainers == 1 ? '1 container' : '$totalContainers containers',
+      totalContainers == 1
+          ? 'containersSummaryContainer'.tr()
+          : 'containersSummaryContainers'.tr(args: ['$totalContainers']),
       if (projects.isNotEmpty)
-        projects.length == 1 ? '1 project' : '${projects.length} projects',
+        projects.length == 1
+            ? 'containersSummaryProject'.tr()
+            : 'containersSummaryProjects'.tr(args: ['${projects.length}']),
       if (projects.isNotEmpty && standaloneCount > 0)
-        standaloneCount == 1 ? '1 standalone' : '$standaloneCount standalone',
+        standaloneCount == 1
+            ? 'containersSummaryStandalone'.tr()
+            : 'containersSummaryStandalones'.tr(args: ['$standaloneCount']),
     ];
 
     return Column(
@@ -436,7 +439,7 @@ class _ContainerEnvironments extends ConsumerWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Refresh containers',
+                tooltip: 'containersRefreshTooltip'.tr(),
                 visualDensity: VisualDensity.compact,
                 onPressed: onRefresh,
                 icon: const Icon(Symbols.refresh),
@@ -451,7 +454,7 @@ class _ContainerEnvironments extends ConsumerWidget {
             children: [
               if (projects.isNotEmpty) ...[
                 Text(
-                  'Projects',
+                  'containersProjects'.tr(),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -509,7 +512,7 @@ class _ContainerEnvironments extends ConsumerWidget {
       if (projects.isNotEmpty) ...[
         const SizedBox(height: 16),
         Text(
-          'Standalone containers',
+          'containersStandalone'.tr(),
           style: theme.textTheme.labelLarge?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -556,7 +559,9 @@ class _ProjectCollapsibleTile extends StatelessWidget {
   }
 
   String get _scopeLabel =>
-      project.scope == ContainerScope.root ? 'Root' : 'User';
+      project.scope == ContainerScope.root
+          ? 'commonRoot'.tr()
+          : 'commonUser'.tr();
 
   @override
   Widget build(BuildContext context) {
@@ -565,10 +570,10 @@ class _ProjectCollapsibleTile extends StatelessWidget {
     final count = project.containers.length;
     final running = project.runningCount;
     final statusLabel = count == 0
-        ? 'No containers'
+        ? 'containerNoContainers'.tr()
         : running == count
-        ? '$running running'
-        : '$running/$count running';
+            ? 'containerRunningCount'.tr(args: ['$running'])
+            : 'containerRunningFraction'.tr(args: ['$running', '$count']);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -621,7 +626,7 @@ class _ProjectCollapsibleTile extends StatelessWidget {
             ),
           ),
           trailing: IconButton(
-            tooltip: 'Open project',
+            tooltip: 'containersOpenProject'.tr(),
             visualDensity: VisualDensity.compact,
             onPressed: () => context.router.push(
               ProjectDetailRoute(linkId: project.link.id),
@@ -634,7 +639,7 @@ class _ProjectCollapsibleTile extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                 child: Text(
-                  'No containers for this project right now.',
+                  'containerNoContainersInProject'.tr(),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -686,7 +691,9 @@ class _ContainerEnvironmentSection extends StatelessWidget {
   }
 
   String get _scopeLabel =>
-      environment.scope == ContainerScope.root ? 'Root' : 'User';
+      environment.scope == ContainerScope.root
+          ? 'commonRoot'.tr()
+          : 'commonUser'.tr();
 
   IconData get _runtimeIcon => switch (environment.runtime) {
     ContainerRuntime.docker => Symbols.deployed_code,
@@ -720,8 +727,10 @@ class _ContainerEnvironmentSection extends StatelessWidget {
                   const SizedBox(width: 8),
                   _MetaChip(
                     label: environment.containers.isEmpty
-                        ? 'Empty'
-                        : '${environment.containers.length}',
+                        ? 'containersEmpty'.tr()
+                        : 'containerEnvCount'.tr(
+                            args: ['${environment.containers.length}'],
+                          ),
                   ),
                 ],
               ],
@@ -737,7 +746,7 @@ class _ContainerEnvironmentSection extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      environment.error ?? 'Unavailable',
+                      environment.error ?? 'commonUnavailable'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),

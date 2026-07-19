@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -86,13 +87,13 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
     try {
       await action();
       if (!mounted) return;
-      showStyledSnackBar(message: success, title: 'Firewall');
+      showStyledSnackBar(message: success, title: 'firewallFirewall'.tr());
       await _load();
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
         message: error.toString(),
-        title: 'Firewall action failed',
+        title: 'firewallActionFailed'.tr(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
       );
@@ -106,9 +107,8 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
     if (status == null) return;
     if (!status.backend.supportsRuleEditing) {
       showStyledSnackBar(
-        message:
-            'Enable/disable is only available for UFW and firewalld on this host.',
-        title: status.backend.label,
+        message: 'firewallEnableDisableUnavailable'.tr(),
+        title: 'firewallFirewall'.tr(),
       );
       return;
     }
@@ -118,15 +118,17 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
       useSafeArea: true,
       useRootNavigator: true,
       builder: (sheetContext) => SheetScaffold(
-        titleText: enabled ? 'Enable firewall?' : 'Disable firewall?',
+        titleText: enabled
+            ? 'firewallEnableTitle'.tr()
+            : 'firewallDisableTitle'.tr(),
         heightFactor: 0.36,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
             Text(
               enabled
-                  ? 'This will turn on ${status.backend.label}. Ensure SSH access is allowed before enabling.'
-                  : 'This will turn off ${status.backend.label}. The host will no longer filter traffic with this firewall.',
+                  ? 'firewallEnableConfirm'.tr(args: [status.backend.label])
+                  : 'firewallDisableConfirm'.tr(args: [status.backend.label]),
               style: Theme.of(sheetContext).textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
@@ -135,12 +137,14 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(sheetContext, false),
-                  child: const Text('Cancel'),
+                  child: Text('commonCancel'.tr()),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () => Navigator.pop(sheetContext, true),
-                  child: Text(enabled ? 'Enable' : 'Disable'),
+                  child: Text(enabled
+                      ? 'firewallEnable'.tr()
+                      : 'firewallDisable'.tr()),
                 ),
               ],
             ),
@@ -158,7 +162,9 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
             sshUserIsRoot: _isRoot,
             sudoPassword: await _sudoPassword(),
           );
-    }, success: enabled ? 'Firewall enabled.' : 'Firewall disabled.');
+    }, success: enabled
+        ? 'firewallEnabled'.tr()
+        : 'firewallDisabled'.tr());
   }
 
   Future<void> _addRule() async {
@@ -175,7 +181,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
             sshUserIsRoot: _isRoot,
             sudoPassword: await _sudoPassword(),
           );
-    }, success: 'Rule added.');
+    }, success: 'firewallRuleAdded'.tr());
   }
 
   Future<void> _deleteRule(FirewallRule rule) async {
@@ -187,7 +193,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
       useSafeArea: true,
       useRootNavigator: true,
       builder: (sheetContext) => SheetScaffold(
-        titleText: 'Delete rule?',
+        titleText: 'firewallDeleteRuleTitle'.tr(),
         heightFactor: 0.36,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -205,12 +211,12 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(sheetContext, false),
-                  child: const Text('Cancel'),
+                  child: Text('commonCancel'.tr()),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () => Navigator.pop(sheetContext, true),
-                  child: const Text('Delete'),
+                  child: Text('commonDelete'.tr()),
                 ),
               ],
             ),
@@ -228,7 +234,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
             sshUserIsRoot: _isRoot,
             sudoPassword: await _sudoPassword(),
           );
-    }, success: 'Rule deleted.');
+    }, success: 'firewallRuleDeleted'.tr());
   }
 
   @override
@@ -236,8 +242,9 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
     if (!widget.connected) {
       return _FirewallEmpty(
         icon: Symbols.link_off,
-        message: widget.connectionError ?? 'Connect to manage the firewall.',
-        actionLabel: 'Connect',
+        message: widget.connectionError ??
+            'firewallConnectToManage'.tr(),
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filled: true,
       );
@@ -247,8 +254,8 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _FirewallEmpty(
         icon: Symbols.error_outline,
-        message: 'Could not load firewall status: $error',
-        actionLabel: 'Try again',
+        message: 'firewallLoadError'.tr(args: [error.toString()]),
+        actionLabel: 'commonRefresh'.tr(),
         onAction: _load,
       ),
       data: (status) {
@@ -297,14 +304,14 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                               : (value) => _toggleEnabled(value),
                         ),
                       IconButton(
-                        tooltip: 'Refresh',
+                        tooltip: 'commonRefresh'.tr(),
                         visualDensity: VisualDensity.compact,
                         onPressed: _busy ? null : _load,
                         icon: const Icon(Symbols.refresh),
                       ),
                       if (editable)
                         IconButton(
-                          tooltip: 'Add rule',
+                          tooltip: 'firewallAddRule'.tr(),
                           visualDensity: VisualDensity.compact,
                           onPressed: _busy || !status.active ? null : _addRule,
                           icon: const Icon(Symbols.add),
@@ -315,13 +322,13 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                       status.defaultOutgoing != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      [
+                      <String>[
                         if (status.defaultIncoming != null)
-                          'Incoming ${status.defaultIncoming}',
+                          'firewallDefaultIncoming'.tr(args: [status.defaultIncoming!]),
                         if (status.defaultOutgoing != null)
-                          'Outgoing ${status.defaultOutgoing}',
+                          'firewallDefaultOutgoing'.tr(args: [status.defaultOutgoing!]),
                         if (status.zones.isNotEmpty)
-                          'Zone ${status.zones.join(', ')}',
+                          'firewallZone'.tr(args: [status.zones.join(', ')]),
                       ].join(' · '),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -331,7 +338,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                   if (!editable && status.backend != FirewallBackend.none) ...[
                     const SizedBox(height: 6),
                     Text(
-                      'Read-only view. Rule edits are supported for UFW and firewalld.',
+                      'firewallReadOnlyView'.tr(),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -354,21 +361,19 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
               child: status.backend == FirewallBackend.none
                   ? _FirewallEmpty(
                       icon: Symbols.shield,
-                      message:
-                          status.error ??
-                          'No supported firewall tool was found on this host.',
-                      actionLabel: 'Refresh',
+                      message: status.error ?? 'firewallNoToolFound'.tr(),
+                      actionLabel: 'commonRefresh'.tr(),
                       onAction: _load,
                     )
                   : status.rules.isEmpty
                   ? _FirewallEmpty(
                       icon: Symbols.shield,
                       message: status.active
-                          ? 'No rules reported by ${status.backend.label}.'
-                          : '${status.backend.label} is inactive.',
+                          ? 'firewallNoRules'.tr(args: [status.backend.label])
+                          : 'firewallInactive'.tr(args: [status.backend.label]),
                       actionLabel: editable && status.active
-                          ? 'Add rule'
-                          : 'Refresh',
+                          ? 'firewallAddRule'.tr()
+                          : 'commonRefresh'.tr(),
                       onAction: editable && status.active ? _addRule : _load,
                     )
                   : ListView.separated(
@@ -402,7 +407,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                               : Text(rule.action!.label),
                           trailing: editable
                               ? IconButton(
-                                  tooltip: 'Delete rule',
+                                  tooltip: 'firewallDeleteRuleTooltip'.tr(),
                                   onPressed: _busy
                                       ? null
                                       : () => _deleteRule(rule),
@@ -458,7 +463,7 @@ class _ActiveChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        active ? 'Active' : 'Inactive',
+        active ? 'firewallActive'.tr() : 'firewallInactiveLabel'.tr(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: active ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
         ),
@@ -514,7 +519,7 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
   @override
   Widget build(BuildContext context) {
     return SheetScaffold(
-      titleText: 'Add firewall rule',
+      titleText: 'firewallAddRuleTitle'.tr(),
       heightFactor: 0.68,
       child: Form(
         key: _formKey,
@@ -524,22 +529,22 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
             DropdownButtonFormField<FirewallAction>(
               // ignore: deprecated_member_use
               value: _action,
-              decoration: const InputDecoration(
-                labelText: 'Action',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'firewallAction'.tr(),
+                border: const OutlineInputBorder(),
               ),
-              items: const [
+              items: [
                 DropdownMenuItem(
                   value: FirewallAction.allow,
-                  child: Text('Allow'),
+                  child: Text('firewallActionAllow'.tr()),
                 ),
                 DropdownMenuItem(
                   value: FirewallAction.deny,
-                  child: Text('Deny'),
+                  child: Text('firewallActionDeny'.tr()),
                 ),
                 DropdownMenuItem(
                   value: FirewallAction.reject,
-                  child: Text('Reject'),
+                  child: Text('firewallActionReject'.tr()),
                 ),
               ],
               onChanged: (value) {
@@ -549,14 +554,14 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _port,
-              decoration: const InputDecoration(
-                labelText: 'Port or service',
-                hintText: '22 or 80:443 or ssh',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'firewallPortLabel'.tr(),
+                hintText: 'firewallPortHint'.tr(),
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Port is required';
+                  return 'firewallPortRequired'.tr();
                 }
                 return null;
               },
@@ -565,14 +570,17 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
             DropdownButtonFormField<String>(
               // ignore: deprecated_member_use
               value: _protocol,
-              decoration: const InputDecoration(
-                labelText: 'Protocol',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'firewallProtocol'.tr(),
+                border: const OutlineInputBorder(),
               ),
-              items: const [
-                DropdownMenuItem(value: 'tcp', child: Text('TCP')),
-                DropdownMenuItem(value: 'udp', child: Text('UDP')),
-                DropdownMenuItem(value: 'any', child: Text('Any')),
+              items: [
+                DropdownMenuItem(
+                    value: 'tcp', child: Text('firewallProtocolTcp'.tr())),
+                DropdownMenuItem(
+                    value: 'udp', child: Text('firewallProtocolUdp'.tr())),
+                DropdownMenuItem(
+                    value: 'any', child: Text('firewallProtocolAny'.tr())),
               ],
               onChanged: (value) {
                 if (value != null) setState(() => _protocol = value);
@@ -581,10 +589,10 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _source,
-              decoration: const InputDecoration(
-                labelText: 'Source (optional)',
-                hintText: '192.168.1.0/24',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'firewallSourceLabel'.tr(),
+                hintText: 'firewallSourceHint'.tr(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 20),
@@ -593,10 +601,12 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text('commonCancel'.tr()),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(onPressed: _submit, child: const Text('Add')),
+                FilledButton(
+                    onPressed: _submit,
+                    child: Text('firewallAddRuleSubmit'.tr())),
               ],
             ),
           ],

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -65,7 +66,7 @@ Future<bool> connectForStatistics(
     if (context.mounted) {
       showStyledSnackBar(
         message: error.toString(),
-        title: 'Could not connect',
+        title: 'serverCannotConnect'.tr(),
         icon: Symbols.link_off,
         accentColor: Theme.of(context).colorScheme.error,
       );
@@ -86,7 +87,7 @@ Future<bool> openTerminalSession(
   HostKeyPrompt? approvedHostKey;
   final loading = showMaidKitLoadingModal(
     context,
-    message: 'Opening terminal on ${server.name}…',
+    message: 'serverOpeningTerminal'.tr(args: [server.name]),
   );
   try {
     final credential = await ref
@@ -119,7 +120,7 @@ Future<bool> openTerminalSession(
     if (context.mounted) {
       showStyledSnackBar(
         message: error.toString(),
-        title: 'Could not open terminal',
+        title: 'serverCannotOpenTerminal'.tr(),
         icon: Symbols.terminal,
         accentColor: Theme.of(context).colorScheme.error,
       );
@@ -151,14 +152,14 @@ Future<bool> _approveHostKey(BuildContext context, HostKeyPrompt prompt) async {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Verify SSH host key',
+                    'serverVerifyHostKey'.tr(),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     prompt.replacesExisting
-                        ? 'This host key changed. Confirm it only if you expected the server to be rebuilt or reconfigured.'
-                        : 'Confirm this fingerprint before sending credentials. MaidKit will remember it for future connections.',
+                        ? 'serverHostKeyChanged'.tr()
+                        : 'serverHostKeyNew'.tr(),
                   ),
                   const SizedBox(height: 16),
                   SelectableText('${prompt.algorithm}\n${prompt.fingerprint}'),
@@ -168,12 +169,12 @@ Future<bool> _approveHostKey(BuildContext context, HostKeyPrompt prompt) async {
                     children: [
                       TextButton(
                         onPressed: () => close(false),
-                        child: const Text('Reject'),
+                        child: const Text('serverReject').tr(),
                       ),
                       const SizedBox(width: 8),
                       FilledButton(
                         onPressed: () => close(true),
-                        child: const Text('Approve'),
+                        child: const Text('serverApprove').tr(),
                       ),
                     ],
                   ),

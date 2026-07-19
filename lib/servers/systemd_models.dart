@@ -1,23 +1,25 @@
 /// Systemd unit lifecycle actions exposed in the Services tab.
 enum SystemdUnitAction { start, stop, restart, reload, enable, disable }
 
+enum SystemdUnitActionLabel { systemdStart, systemdStop, systemdRestart, systemdReload, systemdEnable, systemdDisable }
+
 extension SystemdUnitActionX on SystemdUnitAction {
-  String get label => switch (this) {
-    SystemdUnitAction.start => 'Start',
-    SystemdUnitAction.stop => 'Stop',
-    SystemdUnitAction.restart => 'Restart',
-    SystemdUnitAction.reload => 'Reload',
-    SystemdUnitAction.enable => 'Enable',
-    SystemdUnitAction.disable => 'Disable',
+  String get trLabel => switch (this) {
+    SystemdUnitAction.start => 'systemdStart',
+    SystemdUnitAction.stop => 'systemdStop',
+    SystemdUnitAction.restart => 'systemdRestart',
+    SystemdUnitAction.reload => 'systemdReload',
+    SystemdUnitAction.enable => 'systemdEnable',
+    SystemdUnitAction.disable => 'systemdDisable',
   };
 
-  String get pastLabel => switch (this) {
-    SystemdUnitAction.start => 'Started',
-    SystemdUnitAction.stop => 'Stopped',
-    SystemdUnitAction.restart => 'Restarted',
-    SystemdUnitAction.reload => 'Reloaded',
-    SystemdUnitAction.enable => 'Enabled',
-    SystemdUnitAction.disable => 'Disabled',
+  String get trPastLabel => switch (this) {
+    SystemdUnitAction.start => 'systemdStarted',
+    SystemdUnitAction.stop => 'systemdStopped',
+    SystemdUnitAction.restart => 'systemdRestarted',
+    SystemdUnitAction.reload => 'systemdReloaded',
+    SystemdUnitAction.enable => 'systemdEnabled',
+    SystemdUnitAction.disable => 'systemdDisabled',
   };
 
   String get systemctlVerb => name;

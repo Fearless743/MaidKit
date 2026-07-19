@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -138,10 +139,10 @@ class _TerminalFindHostState extends State<TerminalFindHost> {
                           focusNode: _focus,
                           autofocus: true,
                           style: Theme.of(context).textTheme.bodyMedium,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
-                            hintText: 'Find in terminal',
+                            hintText: 'terminalFindInTerminal'.tr(),
                           ),
                           onChanged: (_) => _rematch(),
                           onSubmitted: (_) => _next(),
@@ -149,7 +150,7 @@ class _TerminalFindHostState extends State<TerminalFindHost> {
                       ),
                       Text(
                         _matchCount == 0
-                            ? 'No results'
+                            ? 'terminalNoResults'.tr()
                             : '${_matchIndex + 1} / $_matchCount',
                         style: Theme.of(context).textTheme.labelMedium
                             ?.copyWith(color: scheme.onSurfaceVariant),
@@ -165,17 +166,17 @@ class _TerminalFindHostState extends State<TerminalFindHost> {
                         },
                       ),
                       IconButton(
-                        tooltip: 'Previous match',
+                        tooltip: 'terminalPreviousMatch'.tr(),
                         onPressed: _matchCount == 0 ? null : _previous,
                         icon: const Icon(Symbols.keyboard_arrow_up, size: 20),
                       ),
                       IconButton(
-                        tooltip: 'Next match',
+                        tooltip: 'terminalNextMatch'.tr(),
                         onPressed: _matchCount == 0 ? null : _next,
                         icon: const Icon(Symbols.keyboard_arrow_down, size: 20),
                       ),
                       IconButton(
-                        tooltip: 'Close',
+                        tooltip: 'commonClose'.tr(),
                         onPressed: _closeFind,
                         icon: const Icon(Symbols.close, size: 18),
                       ),

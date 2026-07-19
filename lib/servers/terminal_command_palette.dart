@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -132,44 +133,44 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
     final actions = [
       if (activeServer != null)
         _TerminalAction(
-          label: 'New terminal on ${activeTab!.serverName}',
+          label: 'sessionsNewTerminalOn'.tr(args: [activeTab!.serverName]),
           icon: Symbols.add,
           onSelect: () => widget.onOpen(activeServer),
         ),
       if (widget.onOpenFiles != null)
         _TerminalAction(
-          label: 'Open file transfer on ${activeTab!.serverName}',
+          label: 'sessionsOpenFileTransfer'.tr(args: [activeTab!.serverName]),
           icon: Symbols.folder,
           onSelect: widget.onOpenFiles!,
         ),
       if (widget.onSplitRight != null)
         _TerminalAction(
-          label: 'Split right',
+          label: 'sessionsSplitRight'.tr(),
           icon: Symbols.vertical_split,
           onSelect: () async => widget.onSplitRight!(),
         ),
       if (widget.onSplitDown != null)
         _TerminalAction(
-          label: 'Split down',
+          label: 'sessionsSplitDown'.tr(),
           icon: Symbols.horizontal_split,
           onSelect: () async => widget.onSplitDown!(),
         ),
       if (widget.onClose != null)
         _TerminalAction(
-          label: 'Close this tab',
+          label: 'sessionsCloseThisTab'.tr(),
           icon: Symbols.close,
           onSelect: widget.onClose!,
         ),
       if (widget.onDisconnect != null)
         _TerminalAction(
-          label: 'Close all tabs on ${activeTab!.serverName}',
+          label: 'sessionsCloseAllTabs'.tr(args: [activeTab!.serverName]),
           icon: Symbols.link_off,
           onSelect: widget.onDisconnect!,
         ),
       for (final server in widget.servers)
         if (server.id != activeTab?.serverId)
           _TerminalAction(
-            label: 'New terminal on ${server.name}',
+            label: 'sessionsNewTerminalOn'.tr(args: [server.name]),
             icon: Symbols.terminal,
             onSelect: () => widget.onOpen(server),
           ),
@@ -194,7 +195,7 @@ class _TerminalCommandPaletteState extends State<_TerminalCommandPalette> {
             SearchBar(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              hintText: 'Search session actions',
+              hintText: 'sessionsSearchActions'.tr(),
               leading: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: CircleAvatar(

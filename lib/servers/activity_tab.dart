@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'activity_models.dart';
 import 'server_providers.dart';
@@ -110,8 +111,8 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
     if (!widget.connected) {
       return _ActivityEmpty(
         icon: Symbols.link_off,
-        message: widget.connectionError ?? 'Connect to stream live activity.',
-        actionLabel: 'Connect for metrics',
+        message: widget.connectionError ?? 'activityConnectToStream'.tr(),
+        actionLabel: 'detailConnectForMetrics'.tr(),
         onAction: widget.onConnect,
         filled: true,
       );
@@ -119,8 +120,8 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
     if (_error != null && _history.isEmpty) {
       return _ActivityEmpty(
         icon: Symbols.error_outline,
-        message: 'Could not collect activity: $_error',
-        actionLabel: 'Try again',
+        message: 'activityError'.tr(args: [_error!]),
+        actionLabel: 'commonRetry'.tr(),
         onAction: _poll,
       );
     }
@@ -140,7 +141,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
           child: Row(
             children: [
               Text(
-                'Live activity',
+                'activityLiveActivity'.tr(),
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -148,14 +149,14 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
               const SizedBox(width: 8),
               if (latest.uptime != null)
                 Text(
-                  'up ${_formatUptime(latest.uptime!)}',
+                  'activityUptime'.tr(args: [_formatUptime(latest.uptime!)]),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
               const Spacer(),
               IconButton(
-                tooltip: 'Refresh now',
+                tooltip: 'activityRefreshNow'.tr(),
                 visualDensity: VisualDensity.compact,
                 onPressed: _poll,
                 icon: const Icon(Symbols.refresh),
@@ -171,7 +172,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
               _SummaryRow(sample: latest),
               const SizedBox(height: 16),
               _ChartCard(
-                title: 'CPU',
+                title: 'detailCpu'.tr(),
                 subtitle: latest.cpuPercent == null
                     ? (latest.cpuCount == null
                           ? '—'
@@ -189,7 +190,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
               ),
               const SizedBox(height: 12),
               _ChartCard(
-                title: 'Memory',
+                title: 'detailMemory'.tr(),
                 subtitle: _memSubtitle(latest),
                 color: scheme.tertiary,
                 child: _PercentLineChart(
@@ -201,7 +202,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
               ),
               const SizedBox(height: 12),
               _ChartCard(
-                title: 'Network',
+                title: 'activityNetwork'.tr(),
                 subtitle: _netSubtitle(latest),
                 color: scheme.secondary,
                 child: _NetworkLineChart(
@@ -212,7 +213,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
               ),
               const SizedBox(height: 12),
               _ChartCard(
-                title: 'Root disk',
+                title: 'detailRootDisk'.tr(),
                 subtitle: _diskSubtitle(latest),
                 color: scheme.outline,
                 child: _DiskBar(sample: latest),
@@ -238,7 +239,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
 
   String _netSubtitle(ActivitySample s) {
     if (s.netRxBps == null && s.netTxBps == null) {
-      return 'Waiting for rate sample…';
+      return 'activityWaitingForRateSample'.tr();
     }
     return '↓ ${_formatBps(s.netRxBps)}  ↑ ${_formatBps(s.netTxBps)}';
   }
@@ -256,7 +257,7 @@ class _SummaryRow extends StatelessWidget {
         final wide = constraints.maxWidth >= 520;
         final tiles = [
           _StatTile(
-            label: 'CPU',
+            label: 'detailCpu'.tr(),
             value: sample.cpuPercent == null
                 ? '—'
                 : '${sample.cpuPercent!.toStringAsFixed(0)}%',
@@ -265,7 +266,7 @@ class _SummaryRow extends StatelessWidget {
                 : 'load ${sample.load1!.toStringAsFixed(2)}',
           ),
           _StatTile(
-            label: 'Memory',
+            label: 'detailMemory'.tr(),
             value: sample.memoryPercent == null
                 ? '—'
                 : '${sample.memoryPercent!.toStringAsFixed(0)}%',
@@ -274,7 +275,7 @@ class _SummaryRow extends StatelessWidget {
                 : _formatKb(sample.memoryUsedKb!),
           ),
           _StatTile(
-            label: 'Disk',
+            label: 'detailRootDisk'.tr(),
             value: sample.diskPercent == null
                 ? '—'
                 : '${sample.diskPercent!.toStringAsFixed(0)}%',
@@ -283,7 +284,7 @@ class _SummaryRow extends StatelessWidget {
                 : _formatKb(sample.diskUsedKb!),
           ),
           _StatTile(
-            label: 'Net ↓',
+            label: 'activityNetworkDown'.tr(),
             value: _formatBps(sample.netRxBps),
             detail: sample.netTxBps == null
                 ? null
@@ -446,7 +447,7 @@ class _PercentLineChart extends StatelessWidget {
     if (spots.isEmpty) {
       return Center(
         child: Text(
-          'Collecting samples…',
+          'activityCollectingSamples'.tr(),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -564,7 +565,7 @@ class _NetworkLineChart extends StatelessWidget {
     if (rxSpots.isEmpty && txSpots.isEmpty) {
       return Center(
         child: Text(
-          'Collecting network rates…',
+          'activityCollectingNetworkRates'.tr(),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -678,8 +679,10 @@ class _DiskBar extends StatelessWidget {
         const SizedBox(height: 12),
         if (sample.swapTotalKb != null && sample.swapTotalKb! > 0) ...[
           Text(
-            'Swap ${sample.swapPercent?.toStringAsFixed(0) ?? '—'}%'
-            '${sample.swapUsedKb == null ? '' : ' · ${_formatKb(sample.swapUsedKb!)} / ${_formatKb(sample.swapTotalKb!)}'}',
+            'detailSwap'.tr(args: [
+              sample.swapPercent?.toStringAsFixed(0) ?? '—',
+              sample.swapUsedKb == null ? '' : '${_formatKb(sample.swapUsedKb!)} / ${_formatKb(sample.swapTotalKb!)}',
+            ]),
             style: Theme.of(
               context,
             ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),

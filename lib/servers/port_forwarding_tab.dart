@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -54,13 +55,13 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Port forwarding started.')),
+          SnackBar(content: Text('portForwardingStarted').tr()),
         );
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start forwarding: $error')),
+          SnackBar(content: Text('portForwardingStartError').tr(args: ['$error'])),
         );
       }
     } finally {
@@ -77,15 +78,15 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
     final scheme = Theme.of(context).colorScheme;
     final directionDescription = switch (_direction) {
       PortForwardDirection.local =>
-        'Listen on this computer and send connections through SSH to the server network.',
+        'portForwardingLocalDesc',
       PortForwardDirection.remote =>
-        'Listen on the server and send connections through SSH to this computer network.',
-    };
+        'portForwardingRemoteDesc',
+    }.tr();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Port forwarding', style: Theme.of(context).textTheme.titleMedium),
+        Text('portForwarding', style: Theme.of(context).textTheme.titleMedium).tr(),
         const SizedBox(height: 8),
         Text(
           directionDescription,
@@ -103,16 +104,16 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SegmentedButton<PortForwardDirection>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(
                       value: PortForwardDirection.local,
-                      icon: Icon(Symbols.laptop_mac),
-                      label: Text('Local listener'),
+                      icon: const Icon(Symbols.laptop_mac),
+                      label: Text('portForwardingLocal').tr(),
                     ),
                     ButtonSegment(
                       value: PortForwardDirection.remote,
-                      icon: Icon(Symbols.dns),
-                      label: Text('Server listener'),
+                      icon: const Icon(Symbols.dns),
+                      label: Text('portForwardingRemote').tr(),
                     ),
                   ],
                   selected: {_direction},
@@ -137,21 +138,21 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Symbols.play_arrow),
-                  label: const Text('Start forwarding'),
+                  label: Text('portForwardingStart').tr(),
                 ),
               ],
             ),
           ),
         const SizedBox(height: 24),
-        Text('Active forwards', style: Theme.of(context).textTheme.titleSmall),
+        Text('portForwardingActive', style: Theme.of(context).textTheme.titleSmall).tr(),
         const SizedBox(height: 8),
         if (forwards.isEmpty)
           Text(
-            'No ports are currently being forwarded.',
+            'portForwardingEmpty',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-          )
+          ).tr()
         else
           for (final forward in forwards) _ForwardTile(forward: forward),
       ],
@@ -161,11 +162,11 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
 
 class _ConnectionNotice extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => const ListTile(
+  Widget build(BuildContext context) => ListTile(
     contentPadding: EdgeInsets.zero,
-    leading: Icon(Symbols.link_off),
-    title: Text('Connect to configure forwarding'),
-    subtitle: Text('Port forwards run inside the server SSH connection.'),
+    leading: const Icon(Symbols.link_off),
+    title: Text('portForwardingConnectToConfigure').tr(),
+    subtitle: Text('portForwardingHint').tr(),
   );
 }
 
@@ -187,11 +188,11 @@ class _ForwardFields extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final listener = direction == PortForwardDirection.local
-        ? 'This computer listens'
-        : 'Server listens';
+        ? 'portForwardingThisComputerListens'
+        : 'portForwardingServerListens';
     final target = direction == PortForwardDirection.local
-        ? 'Server network target'
-        : 'This computer target';
+        ? 'portForwardingServerTarget'
+        : 'portForwardingThisComputerTarget';
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -224,13 +225,13 @@ class _HostPortFields extends StatelessWidget {
         const SizedBox(height: 8),
         TextFormField(
           controller: host,
-          decoration: const InputDecoration(labelText: 'Host'),
+          decoration: InputDecoration(labelText: 'portForwardingHostLabel'.tr()),
           validator: _hostValidator,
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: port,
-          decoration: const InputDecoration(labelText: 'Port'),
+          decoration: InputDecoration(labelText: 'portForwardingPortLabel'.tr()),
           keyboardType: TextInputType.number,
           validator: _portValidator,
         ),
@@ -254,10 +255,10 @@ class _ForwardTile extends ConsumerWidget {
     ),
     title: Text('${forward.directionLabel} · ${forward.summary}'),
     subtitle: Text(
-      'Running on ${forward.direction == PortForwardDirection.local ? 'this computer' : forward.serverName}',
-    ),
+      'portForwardingRunningOn',
+    ).tr(args: [forward.direction == PortForwardDirection.local ? 'this computer' : forward.serverName]),
     trailing: IconButton(
-      tooltip: 'Stop forwarding',
+      tooltip: 'portForwardingStop'.tr(),
       onPressed: () =>
           ref.read(connectionManagerProvider).stopPortForward(forward.id),
       icon: const Icon(Symbols.stop_circle),
@@ -266,11 +267,11 @@ class _ForwardTile extends ConsumerWidget {
 }
 
 String? _hostValidator(String? value) =>
-    value == null || value.trim().isEmpty ? 'Enter a host' : null;
+    value == null || value.trim().isEmpty ? 'portForwardingHostRequired'.tr() : null;
 
 String? _portValidator(String? value) {
   final port = int.tryParse(value ?? '');
   return port == null || port < 1 || port > 65535
-      ? 'Enter a port from 1 to 65535'
+      ? 'portForwardingPortRequired'.tr()
       : null;
 }

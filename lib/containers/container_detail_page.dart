@@ -9,6 +9,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
@@ -293,25 +294,23 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     required bool forceRemove,
   }) async {
     final title = switch (action) {
-      ContainerAction.stop => 'Stop $name?',
-      ContainerAction.restart => 'Restart $name?',
-      ContainerAction.kill => 'Kill $name?',
+      ContainerAction.stop => 'containerStopConfirm'.tr(args: [name]),
+      ContainerAction.restart => 'containerRestartConfirm'.tr(args: [name]),
+      ContainerAction.kill => 'containerKillConfirm'.tr(args: [name]),
       ContainerAction.remove =>
-        forceRemove ? 'Force delete $name?' : 'Delete $name?',
-      _ => '${action.label} $name?',
+        forceRemove
+            ? 'containerForceDeleteConfirm'.tr(args: [name])
+            : 'containerDeleteConfirm'.tr(args: [name]),
+      _ => 'containerGenericConfirm'.tr(),
     };
     final message = switch (action) {
-      ContainerAction.stop =>
-        'The container will remain available to start again.',
-      ContainerAction.restart =>
-        'The container will be stopped and started again.',
-      ContainerAction.kill =>
-        'Sends SIGKILL immediately. Prefer Stop when the process can exit cleanly.',
+      ContainerAction.stop => 'containerStopMessage'.tr(),
+      ContainerAction.restart => 'containerRestartMessage'.tr(),
+      ContainerAction.kill => 'containerKillMessage'.tr(),
       ContainerAction.remove when forceRemove =>
-        'The container is still running. It will be force-stopped and permanently removed.',
-      ContainerAction.remove =>
-        'The container will be permanently removed. Images and volumes are left in place.',
-      _ => 'Continue with this action?',
+        'containerForceDeleteMessage'.tr(),
+      ContainerAction.remove => 'containerDeleteMessage'.tr(),
+      _ => 'containerGenericConfirm'.tr(),
     };
     final destructive =
         action == ContainerAction.kill || action == ContainerAction.remove;
@@ -349,7 +348,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
           );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Container ${action.pastLabel}',
+        title: 'containerActionSuccess'.tr(args: [action.pastLabel]),
         message: name,
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
@@ -362,7 +361,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not ${action.label.toLowerCase()} container',
+        title: 'containerActionError'.tr(args: [action.label.toLowerCase()]),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -377,7 +376,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     if (!mounted) return;
     showStyledSnackBar(
       title: title,
-      message: 'Copied to the clipboard.',
+      message: 'commonCopiedToClipboard'.tr(),
       icon: Symbols.content_copy,
       accentColor: Theme.of(context).colorScheme.primary,
     );
@@ -388,8 +387,8 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     if (inspect == null || _actionBusy) return;
     final command = inspect.rerunCommand(widget.runtime);
     final approved = await showMaidKitConfirmAlert(
-      'This stops and removes ${inspect.name}, then runs:\n\n$command',
-      'Re-create container?',
+      'containerRecreateMessage'.tr(args: [inspect.name, command]),
+      'containerRecreateTitle'.tr(),
       isDanger: true,
     );
     if (!approved || !mounted) return;
@@ -403,7 +402,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     try {
       await runWithDeployTerminal(
         ref: ref,
-        title: 'Re-create ${inspect.name}',
+        title: 'containerRecreateTask'.tr(args: [inspect.name]),
         subtitle: widget.server.name,
         command: command,
         run: (onOutput) async {
@@ -442,7 +441,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
       );
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Container re-created',
+        title: 'containerRecreateSuccess'.tr(),
         message: cleanName,
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
@@ -452,7 +451,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
-        title: 'Could not re-create container',
+        title: 'containerRecreateError'.tr(),
         message: error.toString(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
@@ -526,7 +525,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
         title: Text(title),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'containerRefresh'.tr(),
             onPressed: connected && !_actionBusy
                 ? () => unawaited(_bootstrap())
                 : null,
@@ -557,42 +556,51 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
             itemBuilder: (context) {
               final scheme = Theme.of(context).colorScheme;
               final paused = inspect?.isPaused ?? false;
-              return [
+               return [
                 PopupMenuItem(
                   value: 'start',
                   enabled: !running,
-                  child: const Text('Start'),
+                  child: const Text('containerStart').tr(),
                 ),
                 PopupMenuItem(
                   value: 'stop',
                   enabled: running,
-                  child: const Text('Stop'),
+                  child: const Text('containerStop').tr(),
                 ),
-                const PopupMenuItem(value: 'restart', child: Text('Restart')),
+                PopupMenuItem(
+                  value: 'restart',
+                  child: Text('containerRestart'.tr()),
+                ),
                 PopupMenuItem(
                   value: 'pause',
                   enabled: running && !paused,
-                  child: const Text('Pause'),
+                  child: const Text('containerPause').tr(),
                 ),
                 PopupMenuItem(
                   value: 'unpause',
                   enabled: paused,
-                  child: const Text('Unpause'),
+                  child: const Text('containerUnpause').tr(),
                 ),
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'kill',
                   enabled: running,
-                  child: Text('Kill', style: TextStyle(color: scheme.error)),
+                  child: Text(
+                    'containerKill'.tr(),
+                    style: TextStyle(color: scheme.error),
+                  ),
                 ),
                 PopupMenuItem(
                   value: 'remove',
-                  child: Text('Delete', style: TextStyle(color: scheme.error)),
+                  child: Text(
+                    'containerDelete'.tr(),
+                    style: TextStyle(color: scheme.error),
+                  ),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'recreate',
-                  child: Text('Re-create from inspect'),
+                  child: Text('containerReCreateInspect'.tr()),
                 ),
               ];
             },
@@ -603,8 +611,8 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
       body: !connected && inspect == null
           ? _EmptyBody(
               icon: Symbols.link_off,
-              message: session?.error ?? 'Connect to inspect this container.',
-              actionLabel: 'Connect',
+              message: session?.error ?? 'containerConnectToInspect'.tr(),
+              actionLabel: 'commonConnect'.tr(),
               onAction: _connect,
             )
           : _DetailWorkspace(
@@ -787,7 +795,7 @@ class _OverviewPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SectionLabel('Container'),
+        _SectionLabel('containerDetails'.tr()),
         const SizedBox(height: 12),
         if (loading)
           const Padding(
@@ -796,14 +804,14 @@ class _OverviewPanel extends StatelessWidget {
           )
         else if (inspect == null && error != null)
           Text(
-            'Could not inspect: $error',
+            'containerCouldNotInspect'.tr(args: [error.toString()]),
             style: theme.textTheme.bodyMedium?.copyWith(color: scheme.error),
           )
         else if (inspect == null)
           Text(
-            connected
-                ? 'No inspect data yet.'
-                : (session?.error ?? 'Not connected.'),
+             connected
+                 ? 'containerNoInspectData'.tr()
+                 : (session?.error ?? 'commonNotConnected'.tr()),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -818,54 +826,54 @@ class _OverviewPanel extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _KeyValue(
-            label: 'ID',
+            label: 'containerFieldId'.tr(),
             value: inspect!.id.isEmpty ? containerId : inspect!.id,
             mono: true,
           ),
-          _KeyValue(label: 'Server', value: server.name),
-          _KeyValue(label: 'Runtime', value: runtime.name),
+          _KeyValue(label: 'containerFieldServer'.tr(), value: server.name),
+          _KeyValue(label: 'containerFieldRuntime'.tr(), value: runtime.name),
           _KeyValue(
-            label: 'Scope',
-            value: scope == ContainerScope.root ? 'System (root)' : 'User',
+            label: 'containerFieldScope'.tr(),
+            value: scope == ContainerScope.root ? 'commonSystem'.tr() : 'commonUser'.tr(),
           ),
-          if (inspect!.restartPolicy.isNotEmpty)
-            _KeyValue(label: 'Restart', value: inspect!.restartPolicy),
-          if (inspect!.networkMode.isNotEmpty)
-            _KeyValue(label: 'Network', value: inspect!.networkMode),
-          if (inspect!.created != null)
-            _KeyValue(
-              label: 'Created',
-              value: _formatTimestamp(inspect!.created!),
-            ),
-          if (inspect!.startedAt != null)
-            _KeyValue(
-              label: 'Started',
-              value: _formatTimestamp(inspect!.startedAt!),
-            ),
-          if (inspect!.exitCode != null && !inspect!.isRunning)
-            _KeyValue(label: 'Exit code', value: '${inspect!.exitCode}'),
+           if (inspect!.restartPolicy.isNotEmpty)
+             _KeyValue(label: 'containerFieldRestart'.tr(), value: inspect!.restartPolicy),
+           if (inspect!.networkMode.isNotEmpty)
+             _KeyValue(label: 'containerFieldNetwork'.tr(), value: inspect!.networkMode),
+           if (inspect!.created != null)
+             _KeyValue(
+               label: 'containerFieldCreated'.tr(),
+               value: _formatTimestamp(inspect!.created!),
+             ),
+           if (inspect!.startedAt != null)
+             _KeyValue(
+               label: 'containerFieldStarted'.tr(),
+               value: _formatTimestamp(inspect!.startedAt!),
+             ),
+           if (inspect!.exitCode != null && !inspect!.isRunning)
+             _KeyValue(label: 'containerFieldExitCode'.tr(), value: '${inspect!.exitCode}'),
         ],
         if (!connected) ...[
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: onConnect,
             icon: const Icon(Symbols.link, size: 18),
-            label: const Text('Connect'),
+            label: const Text('commonConnect').tr(),
           ),
         ] else ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: onRefresh,
             icon: const Icon(Symbols.refresh, size: 18),
-            label: const Text('Refresh'),
+            label: Text('commonRefresh'.tr()),
           ),
         ],
         const SizedBox(height: 24),
-        const _SectionLabel('Resources'),
+        _SectionLabel('containerResources'.tr()),
         const SizedBox(height: 12),
         if (statsError != null)
           Text(
-            'Stats unavailable: $statsError',
+            'containerStatsUnavailable'.tr(args: [statsError.toString()]),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -873,8 +881,8 @@ class _OverviewPanel extends StatelessWidget {
         else if (stats == null)
           Text(
             inspect?.isRunning == true
-                ? 'Waiting for a stats sample…'
-                : 'Stats are only available while the container is running.',
+                ? 'containerStatsWaiting'.tr()
+                : 'containerStatsOnlyRunning'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -1008,25 +1016,25 @@ class _StatsGrid extends StatelessWidget {
       runSpacing: 8,
       children: [
         _StatChip(
-          label: 'CPU',
+          label: 'detailCpu'.tr(),
           value: stats.cpuPercent == null
               ? '—'
               : '${stats.cpuPercent!.toStringAsFixed(1)}%',
         ),
         _StatChip(
-          label: 'Memory',
+          label: 'detailMemory'.tr(),
           value: stats.memUsage.isEmpty ? '—' : stats.memUsage,
         ),
         _StatChip(
-          label: 'Network',
+          label: 'activityNetwork'.tr(),
           value: stats.netIO.isEmpty ? '—' : stats.netIO,
         ),
         _StatChip(
-          label: 'Block I/O',
+          label: 'detailRootDisk'.tr(),
           value: stats.blockIO.isEmpty ? '—' : stats.blockIO,
         ),
         if (stats.pids != null)
-          _StatChip(label: 'PIDs', value: '${stats.pids}'),
+          _StatChip(label: 'detailPid'.tr(), value: '${stats.pids}'),
       ],
     );
   }
@@ -1123,10 +1131,10 @@ class _InspectorTabs extends StatelessWidget {
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             dividerColor: scheme.outlineVariant,
-            tabs: const [
-              Tab(icon: Icon(Symbols.terminal, size: 18), text: 'Logs'),
-              Tab(icon: Icon(Symbols.replay, size: 18), text: 'Re-run'),
-              Tab(icon: Icon(Symbols.info, size: 18), text: 'Details'),
+            tabs: [
+              Tab(icon: const Icon(Symbols.terminal, size: 18), text: 'containerLogs'.tr()),
+              Tab(icon: const Icon(Symbols.replay, size: 18), text: 'containerReRunCommand'.tr()),
+              Tab(icon: const Icon(Symbols.info, size: 18), text: 'containerDetails'.tr()),
             ],
           ),
           Expanded(
@@ -1207,15 +1215,15 @@ class _LogsPane extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
             children: [
-              Text('Last', style: theme.textTheme.labelLarge),
+               Text('containerLast'.tr(), style: theme.textTheme.labelLarge),
               const SizedBox(width: 8),
               DropdownButton<int>(
                 value: tail,
                 underline: const SizedBox.shrink(),
                 items: const [
-                  DropdownMenuItem(value: 100, child: Text('100 lines')),
-                  DropdownMenuItem(value: 300, child: Text('300 lines')),
-                  DropdownMenuItem(value: 1000, child: Text('1000 lines')),
+                  DropdownMenuItem(value: 100, child: Text('100')),
+                  DropdownMenuItem(value: 300, child: Text('300')),
+                  DropdownMenuItem(value: 1000, child: Text('1000')),
                 ],
                 onChanged: (value) {
                   if (value != null) onTailChanged(value);
@@ -1223,7 +1231,7 @@ class _LogsPane extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               FilterChip(
-                label: const Text('Timestamps'),
+                label: const Text('containerTimestamps').tr(),
                 selected: timestamps,
                 onSelected: onTimestampsChanged,
                 visualDensity: VisualDensity.compact,
@@ -1236,7 +1244,7 @@ class _LogsPane extends StatelessWidget {
                     size: 16,
                     color: scheme.primary,
                   ),
-                  label: const Text('Live'),
+                  label: const Text('containerLive').tr(),
                   visualDensity: VisualDensity.compact,
                   side: BorderSide(color: scheme.outlineVariant),
                   padding: EdgeInsets.zero,
@@ -1245,14 +1253,14 @@ class _LogsPane extends StatelessWidget {
               ],
               const Spacer(),
               IconButton(
-                tooltip: 'Copy logs',
+                tooltip: 'containerCopyLogs'.tr(),
                 onPressed: logs == null || logs!.isEmpty
                     ? null
-                    : () => onCopy(logs!, title: 'Logs copied'),
+                    : () => onCopy(logs!, title: 'containerLogsCopied'.tr()),
                 icon: const Icon(Symbols.content_copy),
               ),
               IconButton(
-                tooltip: following ? 'Restart live stream' : 'Follow logs',
+                tooltip: following ? 'containerRestartLiveStream'.tr() : 'containerFollowLogs'.tr(),
                 onPressed: onRefresh,
                 icon: loading
                     ? const SizedBox(
@@ -1272,16 +1280,16 @@ class _LogsPane extends StatelessWidget {
               : error != null && logs == null
               ? _EmptyBody(
                   icon: Symbols.error_outline,
-                  message: 'Could not follow logs: $error',
-                  actionLabel: 'Try again',
+                  message: 'containerLogsError'.tr(args: [error.toString()]),
+                  actionLabel: 'commonRetry'.tr(),
                   onAction: () async => onRefresh(),
                 )
               : showTerminal
               ? AnsiLogView(text: logs ?? '', streaming: true)
               : _EmptyBody(
                   icon: Symbols.terminal,
-                  message: 'No log output for this container yet.',
-                  actionLabel: 'Follow',
+                  message: 'containerNoLogsYet'.tr(),
+                  actionLabel: 'containerFollowLogs'.tr(),
                   onAction: () async => onRefresh(),
                 ),
         ),
@@ -1308,19 +1316,17 @@ class _RerunPane extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     if (inspect == null) {
-      return const _EmptyBody(
-        icon: Symbols.replay,
-        message: 'Inspect the container to generate a re-run command.',
-      );
+    return _EmptyBody(
+      icon: Symbols.replay,
+      message: 'containerInspectToGenerate'.tr(),
+    );
     }
     final command = inspect!.rerunCommand(runtime);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Reconstructed from inspect. Ports, env, volumes, restart policy, '
-          'network, and labels are included when available. Some advanced '
-          'HostConfig flags are omitted.',
+          'containerRecreateInfo'.tr(),
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -1347,38 +1353,38 @@ class _RerunPane extends StatelessWidget {
         Row(
           children: [
             FilledButton.icon(
-              onPressed: () => onCopy(command, title: 'Command copied'),
+              onPressed: () => onCopy(command, title: 'containerCommandCopied'.tr()),
               icon: const Icon(Symbols.content_copy, size: 18),
-              label: const Text('Copy command'),
+              label: const Text('containerCopyCommand').tr(),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: onRecreate,
               icon: const Icon(Symbols.replay, size: 18),
-              label: const Text('Re-create'),
+              label: const Text('containerReCreateInspect').tr(),
             ),
           ],
         ),
         const SizedBox(height: 20),
-        const _SectionLabel('Included configuration'),
+        _SectionLabel('containerIncludedConfig'.tr()),
         const SizedBox(height: 8),
-        _SummaryLine(label: 'Image', value: inspect!.image),
+        _SummaryLine(label: 'containerFieldImage'.tr(), value: inspect!.image),
         _SummaryLine(
-          label: 'Ports',
+          label: 'containerPorts'.tr(),
           value: inspect!.ports.isEmpty ? '—' : inspect!.ports.join(', '),
         ),
         _SummaryLine(
-          label: 'Volumes',
+          label: 'containerVolumes'.tr(),
           value: inspect!.binds.isEmpty ? '—' : inspect!.binds.join(', '),
         ),
         _SummaryLine(
-          label: 'Env vars',
+          label: 'containerEnvVarsCount'.tr(),
           value: '${inspect!.env.where((e) => !e.startsWith('PATH=')).length}',
         ),
-        _SummaryLine(label: 'Restart', value: inspect!.restartPolicy),
-        _SummaryLine(label: 'Network', value: inspect!.networkMode),
+        _SummaryLine(label: 'containerFieldRestart'.tr(), value: inspect!.restartPolicy),
+        _SummaryLine(label: 'containerFieldNetwork'.tr(), value: inspect!.networkMode),
         if (inspect!.command.isNotEmpty)
-          _SummaryLine(label: 'Command', value: inspect!.command.join(' ')),
+          _SummaryLine(label: 'detailCommand'.tr(), value: inspect!.command.join(' ')),
       ],
     );
   }
@@ -1447,10 +1453,10 @@ class _DetailsPane extends StatelessWidget {
     if (inspect == null) {
       return _EmptyBody(
         icon: Symbols.error_outline,
-        message: error == null
-            ? 'No inspect details available.'
-            : 'Could not inspect: $error',
-        actionLabel: 'Try again',
+             message: error == null
+             ? 'containerNoDetailsAvailable'.tr()
+             : 'containerCouldNotInspect'.tr(args: [error.toString()]),
+        actionLabel: 'commonRetry'.tr(),
         onAction: () async => onRefresh(),
       );
     }
@@ -1467,17 +1473,17 @@ class _DetailsPane extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          children: [
-            Text('Environment', style: theme.textTheme.titleSmall),
-            const Spacer(),
-            IconButton(
-              tooltip: 'Copy JSON',
-              onPressed: () => onCopy(prettyJson, title: 'Inspect JSON copied'),
+             Row(
+           children: [
+              Text('containerEnvironment'.tr(), style: theme.textTheme.titleSmall),
+             const Spacer(),
+             IconButton(
+               tooltip: 'containerCopyJson'.tr(),
+              onPressed: () => onCopy(prettyJson, title: 'containerInspectJsonCopied'.tr()),
               icon: const Icon(Symbols.content_copy, size: 18),
             ),
             IconButton(
-              tooltip: 'Refresh',
+              tooltip: 'commonRefresh'.tr(),
               onPressed: onRefresh,
               icon: const Icon(Symbols.refresh, size: 18),
             ),
@@ -1486,7 +1492,7 @@ class _DetailsPane extends StatelessWidget {
         const SizedBox(height: 8),
         if (inspect!.env.isEmpty)
           Text(
-            'No environment variables.',
+            'containerNoEnvVars'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -1503,11 +1509,11 @@ class _DetailsPane extends StatelessWidget {
               ),
             ),
         const SizedBox(height: 20),
-        Text('Ports', style: theme.textTheme.titleSmall),
+        Text('containerPorts'.tr(), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         if (inspect!.ports.isEmpty)
           Text(
-            'No published ports.',
+            'containerNoPorts'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -1524,11 +1530,11 @@ class _DetailsPane extends StatelessWidget {
               ),
             ),
         const SizedBox(height: 20),
-        Text('Mounts', style: theme.textTheme.titleSmall),
+        Text('containerMounts'.tr(), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         if (inspect!.mounts.isEmpty && inspect!.binds.isEmpty)
           Text(
-            'No mounts.',
+            'containerNoMounts'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -1549,7 +1555,7 @@ class _DetailsPane extends StatelessWidget {
             ),
         if (inspect!.networks.isNotEmpty) ...[
           const SizedBox(height: 20),
-          Text('Networks', style: theme.textTheme.titleSmall),
+           Text('containerNetworks'.tr(), style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           Text(
             inspect!.networks.join(', '),
@@ -1560,7 +1566,7 @@ class _DetailsPane extends StatelessWidget {
         ],
         if (inspect!.labels.isNotEmpty) ...[
           const SizedBox(height: 20),
-          Text('Labels', style: theme.textTheme.titleSmall),
+          Text('containerLabels'.tr(), style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           for (final entry in inspect!.labels.entries)
             Padding(
@@ -1574,7 +1580,7 @@ class _DetailsPane extends StatelessWidget {
             ),
         ],
         const SizedBox(height: 20),
-        Text('Raw inspect JSON', style: theme.textTheme.titleSmall),
+        Text('containerRawJson'.tr(), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         DecoratedBox(
           decoration: BoxDecoration(

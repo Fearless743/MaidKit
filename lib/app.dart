@@ -1,4 +1,6 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 
@@ -22,17 +24,26 @@ class MaidKitApp extends ConsumerWidget {
     IslandUIFoundation.configureOverlay(maidKitOverlayKey);
     IslandUIFoundation.configureNavigator(maidKitNavigatorKey);
     return MaterialApp.router(
-      title: 'MaidKit',
+      title: 'title'.tr(),
       debugShowCheckedModeBanner: false,
       theme: createMaidKitTheme(Brightness.light),
       darkTheme: createMaidKitTheme(Brightness.dark),
       themeMode: themeMode,
+      locale: context.locale,
+      supportedLocales: context.supportedLocales,
+      localizationsDelegates: [
+        ...context.localizationDelegates,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       routerConfig: appRouter.config(),
       builder: (context, child) => Overlay(
         key: maidKitOverlayKey,
         initialEntries: [
           OverlayEntry(
             builder: (context) => MaidKitWindowScaffold(
+              title: 'title'.tr(),
               child: VaultGate(
                 child: StartupConnectionBootstrap(
                   child: child ?? const SizedBox.shrink(),

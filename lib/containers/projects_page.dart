@@ -7,6 +7,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
@@ -115,7 +116,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
   }) async {
     final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
     if (servers.isEmpty) {
-      _snackError('Add a server first.', title: 'No servers');
+      _snackError('projectsNoServersMessage'.tr(), title: 'projectsNoServers'.tr());
       return;
     }
     final project = await showModalBottomSheet<_ComposeDraft>(
@@ -177,14 +178,14 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
           message: project.deploy
               ? '${project.name} is starting on ${project.server.name}.'
               : '${project.name} is linked on ${project.server.name}.',
-          title: project.deploy ? 'Project deployed' : 'Project linked',
+          title: project.deploy ? 'projectsProjectDeployed'.tr() : 'projectsProjectLinked'.tr(),
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
         );
       }
       await _refresh();
     } catch (error) {
-      _snackError(error.toString(), title: 'Could not deploy project');
+      _snackError(error.toString(), title: 'projectsCouldNotDeploy'.tr());
     }
   }
 
@@ -213,7 +214,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       if (mounted) {
         showStyledSnackBar(
           message: '${group.name} · ${action.label.toLowerCase()} finished.',
-          title: 'Project updated',
+          title: 'projectsProjectUpdated'.tr(),
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
         );
@@ -242,7 +243,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       if (source == null) {
         _snackError(
           'No compose file was found in ${group.directory}.',
-          title: 'Could not edit project',
+          title: 'projectsCouldNotEdit'.tr(),
         );
         return;
       }
@@ -266,8 +267,8 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
   Future<void> _deleteProjectLink(_ProjectGroup group) async {
     if (group.linkId == null) return;
     final confirmed = await showMaidKitConfirmAlert(
-      'This removes the project from MaidKit only. Its remote compose file and containers are unchanged.',
-      'Unlink ${group.name}?',
+      'projectsUnlinkConfirm'.tr(),
+      'projectsUnlinkTitle'.tr(args: [group.name]),
     );
     if (confirmed) {
       await ref.read(projectRepositoryProvider).deleteLink(group.linkId!);
@@ -278,7 +279,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
   Future<void> _import() async {
     final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
     if (servers.isEmpty) {
-      _snackError('Add a server first.', title: 'No servers');
+      _snackError('projectsNoServersMessage'.tr(), title: 'projectsNoServers'.tr());
       return;
     }
 
@@ -299,7 +300,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     await _importFromFolder(
       server: server,
       scope: scope,
-      title: 'Choose compose folder',
+      title: 'projectsChooseComposeFolder'.tr(),
     );
   }
 
@@ -312,7 +313,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       scope: group.environment.scope,
       runtime: group.environment.runtime,
       projectName: group.name,
-      title: 'Choose compose folder for ${group.name}',
+      title: 'projectsChooseComposeFolderFor'.tr(args: [group.name]),
     );
   }
 
@@ -336,13 +337,13 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     String? source;
     final loading = showMaidKitLoadingModal(
       context,
-      message: 'Reading compose file from ${server.name}…',
+      message: 'projectsReadingComposeFile'.tr(args: [server.name]),
     );
     try {
       final found = await _readRemoteCompose(server, directory, scope);
       source = found?.$1;
     } catch (error) {
-      _snackError(error.toString(), title: 'Could not read compose file');
+      _snackError(error.toString(), title: 'projectsCouldNotReadCompose'.tr());
       return;
     } finally {
       loading.dismiss();
@@ -350,7 +351,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     if (source == null || !mounted) {
       _snackError(
         'Expected one of: ${_composeFileNames.join(', ')}',
-        title: 'No compose file in folder',
+        title: 'projectsNoComposeFileInFolder'.tr(),
       );
       return;
     }
@@ -394,7 +395,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
   Future<void> _rawContainer() async {
     final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
     if (servers.isEmpty) {
-      _snackError('Add a server first.', title: 'No servers');
+      _snackError('projectsNoServersMessage'.tr(), title: 'projectsNoServers'.tr());
       return;
     }
     final draft = await showModalBottomSheet<_RawDraft>(
@@ -436,14 +437,14 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       if (mounted) {
         showStyledSnackBar(
           message: '${draft.name} was started on ${draft.server.name}.',
-          title: 'Container started',
+          title: 'projectsContainerStarted'.tr(),
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
         );
       }
       await _refresh();
     } catch (error) {
-      _snackError(error.toString(), title: 'Could not start container');
+      _snackError(error.toString(), title: 'projectsCouldNotStart'.tr());
     }
   }
 
@@ -493,11 +494,11 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Projects', style: theme.textTheme.headlineSmall),
+                      Text('projectsProjects'.tr(), style: theme.textTheme.headlineSmall),
                       const SizedBox(height: 2),
                       Text(
                         connected.isEmpty
-                            ? 'Connect a server to discover compose projects'
+                            ? 'projectsConnectToDiscover'.tr()
                             : '$projectCount project${projectCount == 1 ? '' : 's'} · ${connected.length} server${connected.length == 1 ? '' : 's'} connected',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -507,7 +508,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Refresh',
+                  tooltip: 'projectsRefreshTooltip'.tr(),
                   onPressed: _loading ? null : _refresh,
                   icon: _loading && _hasLoaded
                       ? SizedBox(
@@ -524,19 +525,19 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                 OutlinedButton.icon(
                   onPressed: _rawContainer,
                   icon: const Icon(Symbols.add_box, size: 18),
-                  label: const Text('Run container'),
+                  label: const Text('projectsRunContainer').tr(),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _import,
                   icon: const Icon(Symbols.folder_open, size: 18),
-                  label: const Text('Import'),
+                  label: const Text('projectsImport').tr(),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: () => _newProject(),
                   icon: const Icon(Symbols.add, size: 18),
-                  label: const Text('New project'),
+                  label: const Text('projectsNewProject').tr(),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -802,9 +803,9 @@ class _ProjectWorkspace extends StatelessWidget {
     if (error != null && groups.isEmpty && !hasKnownProjects) {
       return _EmptyState(
         icon: Symbols.error_outline,
-        title: 'Could not load projects',
+        title: 'projectsLoadError'.tr(),
         message: error.toString(),
-        actionLabel: 'Try again',
+        actionLabel: 'commonRetry'.tr(),
         onAction: onRefresh,
       );
     }
@@ -813,14 +814,14 @@ class _ProjectWorkspace extends StatelessWidget {
       return _EmptyState(
         icon: Symbols.deployed_code,
         title: connectedServerCount == 0
-            ? 'No connected servers'
-            : 'No projects yet',
+            ? 'projectsNoServers'.tr()
+            : 'projectsNotLinked'.tr(),
         message: connectedServerCount == 0
-            ? 'Connect a server from the Servers tab, then import an existing compose folder or create a new project.'
-            : 'Import a remote folder that contains docker-compose.yml, or create a new compose project.',
-        actionLabel: connectedServerCount == 0 ? 'Refresh' : 'Import',
+            ? 'projectsEmptyHintConnected'.tr()
+            : 'projectsEmptyHintImport'.tr(),
+        actionLabel: connectedServerCount == 0 ? 'commonRefresh'.tr() : 'projectsImport'.tr(),
         onAction: connectedServerCount == 0 ? onRefresh : onImport,
-        secondaryLabel: connectedServerCount == 0 ? null : 'New project',
+        secondaryLabel: connectedServerCount == 0 ? null : 'projectsNewProject'.tr(),
         onSecondary: connectedServerCount == 0 ? null : onNewProject,
       );
     }
@@ -830,7 +831,7 @@ class _ProjectWorkspace extends StatelessWidget {
         _FilterBar(filters: filters, onChanged: onFiltersChanged),
         Expanded(
           child: groups.isEmpty
-              ? const Center(child: Text('No projects match these filters.'))
+              ? Center(child: Text('projectsFilterNoMatch'.tr()))
               : GridView.builder(
                   padding: const EdgeInsets.all(24),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -864,9 +865,9 @@ class _ProjectWorkspace extends StatelessWidget {
     return Menu(
       children: [
         if (canLink)
-          MenuAction(title: 'Link project…', callback: () => onLink(group)),
+          MenuAction(title: 'projectsLinkProject'.tr(), callback: () => onLink(group)),
         MenuAction(
-          title: 'Edit project',
+          title: 'projectsEditProject'.tr(),
           attributes: MenuActionAttributes(disabled: !hasComposeFolder),
           callback: () => onEdit(group),
         ),
@@ -879,7 +880,7 @@ class _ProjectWorkspace extends StatelessWidget {
           ),
         MenuSeparator(),
         MenuAction(
-          title: 'Delete project link',
+          title: 'projectsDeleteProjectLink'.tr(),
           attributes: MenuActionAttributes(
             destructive: true,
             disabled: group.linkId == null,
@@ -908,9 +909,9 @@ class _FilterBar extends StatelessWidget {
           children: [
             DropdownButton<int?>(
               value: filters.serverId,
-              hint: const Text('All servers'),
+               hint: Text('projectsAllServers'.tr()),
               items: [
-                const DropdownMenuItem(value: null, child: Text('All servers')),
+                DropdownMenuItem(value: null, child: Text('projectsAllServers'.tr())),
                 ...filters.servers.map(
                   (server) => DropdownMenuItem(
                     value: server.id,
@@ -938,7 +939,7 @@ class _FilterBar extends StatelessWidget {
             const SizedBox(width: 16),
             DropdownButton<ContainerRuntime?>(
               value: filters.runtime,
-              hint: const Text('All runtimes'),
+               hint: const Text('projectsAllRuntimes').tr(),
               items: [
                 const DropdownMenuItem(
                   value: null,
@@ -954,9 +955,9 @@ class _FilterBar extends StatelessWidget {
             const SizedBox(width: 16),
             DropdownButton<ContainerScope?>(
               value: filters.scope,
-              hint: const Text('All scopes'),
+               hint: Text('projectsAllScopes'.tr()),
               items: [
-                const DropdownMenuItem(value: null, child: Text('All scopes')),
+                 DropdownMenuItem(value: null, child: Text('projectsAllScopes'.tr())),
                 ...ContainerScope.values.map(
                   (value) =>
                       DropdownMenuItem(value: value, child: Text(value.name)),
@@ -1040,19 +1041,19 @@ class _ProjectCard extends StatelessWidget {
         '${group.environment.runtime.name[0].toUpperCase()}'
         '${group.environment.runtime.name.substring(1)}';
     final scopeLabel = group.environment.scope == ContainerScope.root
-        ? 'Root'
-        : 'User';
+        ? 'commonRoot'.tr()
+        : 'commonUser'.tr();
     final hasContainers = group.containers.isNotEmpty;
     final allRunning =
         hasContainers && group.runningCount == group.containers.length;
     final anyRunning = group.runningCount > 0;
     final statusLabel = !hasContainers
-        ? (group.directory == null ? 'No containers' : 'Linked')
+        ? (group.directory == null ? 'projectsNoContainers' : 'projectsLinked')
         : allRunning
-        ? 'Running'
+        ? 'deploySucceeded'
         : anyRunning
-        ? 'Partial'
-        : 'Stopped';
+        ? 'projectsPartial'
+        : 'deployFailed';
     final statusColor = !hasContainers
         ? scheme.onSurfaceVariant
         : allRunning
@@ -1132,7 +1133,7 @@ class _ProjectCard extends StatelessWidget {
                               _MetaChip(label: runtimeLabel),
                               _MetaChip(label: scopeLabel),
                               _MetaChip(
-                                label: group.raw ? 'Standalone' : 'Compose',
+                                label: group.raw ? 'projectsStandalone' : 'projectsCompose',
                               ),
                               if (!group.raw && group.linkId == null)
                                 const _MetaChip(label: 'Scanned'),
@@ -1202,8 +1203,8 @@ class _ProjectCard extends StatelessWidget {
                                   )
                                 : Text(
                                     group.directory == null
-                                        ? 'No running containers discovered yet.'
-                                        : 'Compose folder linked. Connect and refresh to load containers.',
+                                        ? 'projectsNoRunningContainers'.tr()
+                                        : 'projectsComposeFolderLinked'.tr(),
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
                                     style: textTheme.bodySmall?.copyWith(
@@ -1364,7 +1365,7 @@ class _PickServerDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Import from server'),
+      title: const Text('projectsImportTitle').tr(),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -1372,7 +1373,7 @@ class _PickServerDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Choose which server to browse for a compose folder.',
+              'projectsImportInfo'.tr(),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -1392,7 +1393,7 @@ class _PickServerDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: const Text('commonCancel').tr(),
         ),
       ],
     );
@@ -1404,22 +1405,22 @@ class _PickScopeDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Project scope'),
-    content: const Text(
-      'Choose the account that owns the compose folder. Root can access folders such as /srv and uses sudo for the import.',
+    title: Text('projectsScopeTitle'.tr()),
+    content: Text(
+      'projectsScopeInfo'.tr(),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text('commonCancel'.tr()),
       ),
       OutlinedButton(
         onPressed: () => Navigator.pop(context, ContainerScope.user),
-        child: const Text('User'),
+        child: Text('commonUser'.tr()),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(context, ContainerScope.root),
-        child: const Text('Root'),
+        child: const Text('commonRoot').tr(),
       ),
     ],
   );
@@ -1628,8 +1629,8 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
     final theme = Theme.of(context);
     return SheetScaffold(
       titleText: widget.importMode
-          ? 'Import compose project'
-          : 'New compose project',
+          ? 'projectsImportComposeTitle'.tr()
+          : 'projectsNewComposeProjectTitle'.tr(),
       heightFactor: 0.88,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -1638,7 +1639,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(
-                'Compose file loaded from the remote folder. It will be linked without starting or changing containers.',
+                'projectsComposeFileLoaded'.tr(),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -1646,7 +1647,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
             ),
           DropdownButtonFormField<Server>(
             initialValue: server,
-            decoration: const InputDecoration(labelText: 'Server'),
+            decoration: InputDecoration(labelText: 'ServerName'.tr()),
             items: widget.servers
                 .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
                 .toList(),
@@ -1657,14 +1658,14 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
           const SizedBox(height: 12),
           TextField(
             controller: name,
-            decoration: const InputDecoration(labelText: 'Project name'),
+            decoration: InputDecoration(labelText: 'projectsProjectName'.tr()),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: directory,
             readOnly: widget.importMode,
             decoration: InputDecoration(
-              labelText: 'Remote directory',
+              labelText: 'projectsRemoteDirectory'.tr(),
               suffixIcon: widget.importMode
                   ? const Icon(Symbols.lock, size: 18)
                   : IconButton(
@@ -1736,16 +1737,16 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
             )
           else ...[
             SegmentedButton<_ComposeProjectMode>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: _ComposeProjectMode.guided,
                   icon: Icon(Symbols.tune, size: 18),
-                  label: Text('Guided'),
+                  label: Text('editorGuided'.tr()),
                 ),
                 ButtonSegment(
                   value: _ComposeProjectMode.advanced,
                   icon: Icon(Symbols.code, size: 18),
-                  label: Text('Advanced'),
+                  label: Text('editorAdvanced'.tr()),
                 ),
               ],
               selected: {_composeMode},
@@ -1755,7 +1756,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
             const SizedBox(height: 16),
             if (_composeMode == _ComposeProjectMode.guided) ...[
               Text(
-                'Add one or more services. Put each port, variable, or folder on its own line.',
+                'editorServicesHint'.tr(),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -1767,7 +1768,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
                 onPressed: () =>
                     setState(() => _services.add(_ComposeProjectService())),
                 icon: const Icon(Symbols.add, size: 18),
-                label: const Text('Add service'),
+                label: const Text('editorAddService').tr(),
               ),
             ] else
               TextField(
@@ -1779,11 +1780,10 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
                   fontFamily: MaidKitFonts.mono,
                   fontSize: 13,
                 ),
-                decoration: const InputDecoration(
-                  labelText: 'compose.yaml',
-                  alignLabelWithHint: true,
-                  helperText:
-                      'Write the complete Compose file. It will be saved as compose.yaml.',
+                decoration: InputDecoration(
+                labelText: 'editorComposeFileName'.tr(),
+                alignLabelWithHint: true,
+                helperText: 'editorComposeFileHint'.tr(),
                 ),
               ),
           ],
@@ -1793,7 +1793,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
               const Spacer(),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: const Text('commonCancel').tr(),
               ),
               const SizedBox(width: 8),
               FilledButton(
@@ -1801,7 +1801,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
                     server == null || name.text.trim().isEmpty || !_canSubmit
                     ? null
                     : _submit,
-                child: Text(widget.importMode ? 'Link project' : 'Deploy'),
+                child: Text(widget.importMode ? 'projectsLinkProject'.tr() : 'commonDeploy'.tr()),
               ),
             ],
           ),
@@ -1812,14 +1812,14 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
 
   Widget _sharedNewProjectForm(BuildContext context) {
     return SheetScaffold(
-      titleText: 'New compose project',
+      titleText: 'projectsNewComposeProjectTitle'.tr(),
       heightFactor: 0.9,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           DropdownButtonFormField<Server>(
             initialValue: server,
-            decoration: const InputDecoration(labelText: 'Server'),
+            decoration: InputDecoration(labelText: 'ServerName'.tr()),
             items: widget.servers
                 .map(
                   (item) =>
@@ -1832,13 +1832,13 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
           TextField(
             controller: name,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(labelText: 'Project name'),
+            decoration: InputDecoration(labelText: 'projectsProjectName'.tr()),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: directory,
             decoration: InputDecoration(
-              labelText: 'Remote directory',
+              labelText: 'projectsRemoteDirectory'.tr(),
               suffixIcon: IconButton(
                 tooltip: 'Browse remote folder',
                 onPressed: server == null || _browsingDirectory
@@ -1901,14 +1901,14 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
               const Spacer(),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: const Text('commonCancel').tr(),
               ),
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: server == null || name.text.trim().isEmpty
                     ? null
                     : _submit,
-                child: const Text('Deploy'),
+                child: Text('projectsDeploy'.tr()),
               ),
             ],
           ),
@@ -2645,7 +2645,7 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
               const Spacer(),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: const Text('commonCancel').tr(),
               ),
               const SizedBox(width: 8),
               FilledButton(

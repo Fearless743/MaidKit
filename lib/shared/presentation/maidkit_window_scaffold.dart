@@ -11,9 +11,10 @@ final desktopWindowProvider = Provider<bool>(
 );
 
 class MaidKitWindowScaffold extends ConsumerWidget {
-  const MaidKitWindowScaffold({super.key, required this.child});
+  const MaidKitWindowScaffold({super.key, required this.child, this.title});
 
   final Widget child;
+  final String? title;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +30,10 @@ class MaidKitWindowScaffold extends ConsumerWidget {
       },
       child: DesktopWindowFrame(
         isDesktopPlatform: ref.watch(desktopWindowProvider),
-        title: Text('MaidKit', style: Theme.of(context).textTheme.labelLarge),
+        title: Text(
+          title ?? 'MaidKit',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
         child: Column(
           children: [
             Expanded(child: child),

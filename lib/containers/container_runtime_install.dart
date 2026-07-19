@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -71,7 +72,7 @@ class _ContainerRuntimeInstallSheetState
 
   @override
   Widget build(BuildContext context) => SheetScaffold(
-    titleText: 'Install container runtime',
+    titleText: 'runtimeInstallTitle'.tr(),
     heightFactor: 0.42,
     child: Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -79,21 +80,21 @@ class _ContainerRuntimeInstallSheetState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'MaidKit will use the host package manager to install the selected runtime. Output is shown while the command runs.',
+            'runtimeInstallInfo'.tr(),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 20),
           DropdownButtonFormField<ContainerRuntime>(
             initialValue: _runtime,
-            decoration: const InputDecoration(labelText: 'Runtime'),
-            items: const [
+            decoration: InputDecoration(labelText: 'runtimeInstallLabel'.tr()),
+            items: [
               DropdownMenuItem(
                 value: ContainerRuntime.docker,
-                child: Text('Docker'),
+                child: Text('runtimeDocker'.tr()),
               ),
               DropdownMenuItem(
                 value: ContainerRuntime.podman,
-                child: Text('Podman'),
+                child: Text('runtimePodman'.tr()),
               ),
             ],
             onChanged: (value) => setState(() => _runtime = value!),
@@ -104,7 +105,7 @@ class _ContainerRuntimeInstallSheetState
             child: FilledButton.icon(
               onPressed: () => Navigator.pop(context, _runtime),
               icon: const Icon(Symbols.download),
-              label: const Text('Install'),
+              label: const Text('runtimeInstallSubmit').tr(),
             ),
           ),
         ],

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:yaml/yaml.dart';
@@ -171,16 +172,16 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SegmentedButton<_ComposeEditorMode>(
-          segments: const [
+          segments: [
             ButtonSegment(
               value: _ComposeEditorMode.guided,
               icon: Icon(Symbols.tune, size: 18),
-              label: Text('Guided'),
+              label: Text('editorGuided'.tr()),
             ),
             ButtonSegment(
               value: _ComposeEditorMode.advanced,
               icon: Icon(Symbols.code, size: 18),
-              label: Text('Advanced'),
+              label: Text('editorAdvanced'.tr()),
             ),
           ],
           selected: {_mode},
@@ -193,8 +194,8 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
         if (_mode == _ComposeEditorMode.guided) ...[
           Text(
             widget.initialSource?.trim().isNotEmpty == true
-                ? 'Services were loaded from the existing Compose file. Put each port, variable, or folder on its own line.'
-                : 'Add one or more services. Put each port, variable, or folder on its own line.',
+                ? 'editorServicesLoaded'.tr()
+                : 'editorServicesHint'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -208,7 +209,7 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
               _notifyChanged();
             }),
             icon: const Icon(Symbols.add, size: 18),
-            label: const Text('Add service'),
+            label: const Text('editorAddService').tr(),
           ),
         ] else
           TextField(
@@ -217,11 +218,10 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
             minLines: 18,
             maxLines: 28,
             style: const TextStyle(fontFamily: MaidKitFonts.mono, fontSize: 13),
-            decoration: const InputDecoration(
-              labelText: 'compose.yaml',
+            decoration: InputDecoration(
+              labelText: 'editorComposeFileName'.tr(),
               alignLabelWithHint: true,
-              helperText:
-                  'Write the complete Compose file. It will be saved as compose.yaml.',
+              helperText: 'editorComposeFileHint'.tr(),
             ),
           ),
       ],
@@ -249,7 +249,7 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
                 const Spacer(),
                 if (_services.length > 1)
                   IconButton(
-                    tooltip: 'Remove service',
+                    tooltip: 'editorRemoveService'.tr(),
                     onPressed: () => setState(() {
                       _services.removeAt(index).dispose();
                       _notifyChanged();
@@ -259,31 +259,31 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
               ],
             ),
             const SizedBox(height: 8),
-            _field(service.name, 'Service name'),
+            _field(service.name, 'editorServiceName'.tr()),
             const SizedBox(height: 12),
-            _field(service.image, 'Image', hint: 'nginx:alpine'),
+            _field(service.image, 'editorImage'.tr(), hint: 'editorImageHint'.tr()),
             const SizedBox(height: 12),
             _field(
               service.ports,
-              'Ports (optional)',
-              hint: '8080:80',
-              helper: 'One mapping per line',
+              'editorPortsLabel'.tr(),
+              hint: 'editorPortsHint'.tr(),
+              helper: 'editorPortsHelper'.tr(),
               maxLines: 3,
             ),
             const SizedBox(height: 12),
             _field(
               service.environment,
-              'Environment variables (optional)',
-              hint: 'DATABASE_URL=postgres://database/app',
-              helper: 'One NAME=value entry per line',
+              'editorEnvLabel'.tr(),
+              hint: 'editorEnvHint'.tr(),
+              helper: 'editorEnvHelper'.tr(),
               maxLines: 4,
             ),
             const SizedBox(height: 12),
             _field(
               service.volumes,
-              'Folders (optional)',
-              hint: '/opt/app-data:/var/lib/app',
-              helper: 'One host-path:container-path mapping per line',
+              'editorFoldersLabel'.tr(),
+              hint: 'editorFoldersHint'.tr(),
+              helper: 'editorFoldersHelper'.tr(),
               maxLines: 3,
             ),
           ],

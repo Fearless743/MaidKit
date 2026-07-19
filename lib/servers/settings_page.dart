@@ -1,4 +1,5 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -25,14 +26,14 @@ class SettingsPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
+        Text('settingsTitle', style: Theme.of(context).textTheme.headlineSmall).tr(),
         const SizedBox(height: 8),
         Text(
-          'Customize MaidKit and how it protects your saved credentials.',
+          'settingsDescription',
           style: Theme.of(context).textTheme.bodyLarge,
-        ),
+        ).tr(),
         const SizedBox(height: 32),
-        Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+        Text('settingsAppearance', style: Theme.of(context).textTheme.titleMedium).tr(),
         const SizedBox(height: 8),
         Card(
           clipBehavior: Clip.antiAlias,
@@ -41,29 +42,29 @@ class SettingsPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Theme'),
+                const Text('settingsTheme').tr(),
                 const SizedBox(height: 4),
                 Text(
-                  'Choose how MaidKit follows your system appearance.',
+                  'settingsThemeDescription',
                   style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                ).tr(),
                 const SizedBox(height: 12),
                 SegmentedButton<ThemeMode>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(
                       value: ThemeMode.system,
-                      label: Text('System'),
-                      icon: Icon(Symbols.brightness_auto),
+                      label: Text('settingsThemeSystem'.tr()),
+                      icon: const Icon(Symbols.brightness_auto),
                     ),
                     ButtonSegment(
                       value: ThemeMode.light,
-                      label: Text('Light'),
-                      icon: Icon(Symbols.light_mode),
+                      label: Text('settingsThemeLight'.tr()),
+                      icon: const Icon(Symbols.light_mode),
                     ),
                     ButtonSegment(
                       value: ThemeMode.dark,
-                      label: Text('Dark'),
-                      icon: Icon(Symbols.dark_mode),
+                      label: Text('settingsThemeDark'.tr()),
+                      icon: const Icon(Symbols.dark_mode),
                     ),
                   ],
                   selected: {themeMode},
@@ -78,7 +79,7 @@ class SettingsPage extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 24),
-        Text('Terminal', style: Theme.of(context).textTheme.titleMedium),
+        Text('settingsTerminal', style: Theme.of(context).textTheme.titleMedium).tr(),
         const SizedBox(height: 8),
         Card(
           clipBehavior: Clip.antiAlias,
@@ -94,8 +95,8 @@ class SettingsPage extends ConsumerWidget {
                       )
                       ? selectedAdapter
                       : adapterOptions.first.id,
-                  decoration: const InputDecoration(
-                    labelText: 'Terminal renderer',
+                  decoration: InputDecoration(
+                    labelText: 'settingsTerminalRenderer'.tr(),
                   ),
                   items: [
                     for (final option in adapterOptions)
@@ -129,16 +130,16 @@ class SettingsPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'New terminals use the selected renderer. Reopen existing terminals to switch them.',
+                  'settingsTerminalRendererHint',
                   style: Theme.of(context).textTheme.bodySmall,
-                ),
+                ).tr(),
                 const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Animate cursor movement'),
+                  title: const Text('settingsAnimateCursor').tr(),
                   subtitle: const Text(
-                    'Smoothly move the Ghostty cursor between terminal cells.',
-                  ),
+                    'settingsAnimateCursorHint',
+                  ).tr(),
                   value: cursorAnimationEnabled,
                   onChanged: selectedAdapter == 'ghostty'
                       ? (enabled) async {
@@ -153,7 +154,7 @@ class SettingsPage extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 24),
-        Text('Connections', style: Theme.of(context).textTheme.titleMedium),
+        Text('settingsConnections', style: Theme.of(context).textTheme.titleMedium).tr(),
         const SizedBox(height: 8),
         Card(
           child: Padding(
@@ -162,10 +163,10 @@ class SettingsPage extends ConsumerWidget {
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Connect saved servers on startup'),
+                  title: const Text('settingsConnectOnStartup').tr(),
                   subtitle: const Text(
-                    'Keep SSH connections ready to collect server statistics after the vault unlocks.',
-                  ),
+                    'settingsConnectOnStartupHint',
+                  ).tr(),
                   value: connectOnStartup,
                   onChanged: (value) => ref
                       .read(connectOnStartupProvider.notifier)
@@ -176,10 +177,10 @@ class SettingsPage extends ConsumerWidget {
                   initialValue: _refreshIntervals.contains(refreshInterval)
                       ? refreshInterval
                       : _refreshIntervals[1],
-                  decoration: const InputDecoration(
-                    labelText: 'Background metrics refresh interval',
+                  decoration: InputDecoration(
+                    labelText: 'settingsBackgroundRefreshInterval'.tr(),
                     helperText:
-                        'Connected servers not currently in detail view refresh metrics only.',
+                        'settingsBackgroundRefreshIntervalHint'.tr(),
                   ),
                   items: [
                     for (final interval in _refreshIntervals)
@@ -202,10 +203,10 @@ class SettingsPage extends ConsumerWidget {
                       _focusedRefreshIntervals.contains(focusedRefreshInterval)
                       ? focusedRefreshInterval
                       : _focusedRefreshIntervals.first,
-                  decoration: const InputDecoration(
-                    labelText: 'Focused server detail refresh interval',
+                  decoration: InputDecoration(
+                    labelText: 'settingsFocusedRefreshInterval'.tr(),
                     helperText:
-                        'Refreshes metrics, processes, and container environments for the open server.',
+                        'settingsFocusedRefreshIntervalHint'.tr(),
                   ),
                   items: [
                     for (final interval in _focusedRefreshIntervals)
@@ -227,7 +228,7 @@ class SettingsPage extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 24),
-        Text('Security', style: Theme.of(context).textTheme.titleMedium),
+        Text('settingsSecurity', style: Theme.of(context).textTheme.titleMedium).tr(),
         const SizedBox(height: 8),
         Card(
           clipBehavior: Clip.antiAlias,
@@ -238,14 +239,14 @@ class SettingsPage extends ConsumerWidget {
             ),
             error: (error, _) => Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Could not load biometric settings: $error'),
+              child: Text('settingsBiometricError'.tr(args: [error.toString()])),
             ),
             data: (enabled) => SwitchListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: const Text('Biometric unlock'),
+              title: const Text('settingsBiometricUnlock').tr(),
               subtitle: const Text(
-                'Use Touch ID or your device biometric prompt to unlock the vault.',
-              ),
+                'settingsBiometricUnlockHint',
+              ).tr(),
               value: enabled,
               onChanged: (value) => _setBiometricUnlock(ref, value),
             ),

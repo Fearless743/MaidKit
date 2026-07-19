@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -42,11 +43,11 @@ class _VaultGateState extends ConsumerState<VaultGate> {
       if (exists) {
         final ok = await vault.unlockWithPassword(_password.text);
         if (!ok) {
-          throw StateError('The vault password is incorrect.');
+          throw StateError('vaultInvalidPassword'.tr());
         }
       } else {
         if (_password.text != _confirmation.text) {
-          throw StateError('The passwords do not match.');
+          throw StateError('vaultPasswordsDontMatch'.tr());
         }
         await vault.create(_password.text);
       }
@@ -88,8 +89,11 @@ class _VaultGateState extends ConsumerState<VaultGate> {
     return exists.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) =>
-          Scaffold(body: Center(child: Text('Could not open vault: $error'))),
+      error: (error, _) => Scaffold(
+        body: Center(
+          child: Text('vaultOpenError'.tr(args: [error.toString()])),
+        ),
+      ),
       data: (hasVault) => Scaffold(
         body: Center(
           child: ConstrainedBox(
@@ -107,14 +111,16 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    hasVault ? 'Unlock MaidKit' : 'Create your vault',
+                    hasVault
+                        ? 'vaultUnlockTitle'.tr()
+                        : 'vaultCreateTitle'.tr(),
                     style: theme.textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     hasVault
-                        ? 'Enter your vault password to access saved SSH credentials.'
-                        : 'Your vault password encrypts SSH credentials stored on this device.',
+                        ? 'vaultUnlockSubtitle'.tr()
+                        : 'vaultCreateSubtitle'.tr(),
                   ),
                   const SizedBox(height: 20),
                   TextField(
@@ -123,8 +129,8 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                     autofocus: true,
                     enabled: !_busy,
                     onSubmitted: (_) => _submit(hasVault),
-                    decoration: const InputDecoration(
-                      labelText: 'Vault password',
+                    decoration: InputDecoration(
+                      labelText: 'vaultPasswordLabel'.tr(),
                     ),
                   ),
                   if (!hasVault) ...[
@@ -134,8 +140,8 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                       obscureText: true,
                       enabled: !_busy,
                       onSubmitted: (_) => _submit(false),
-                      decoration: const InputDecoration(
-                        labelText: 'Confirm vault password',
+                      decoration: InputDecoration(
+                        labelText: 'vaultConfirmPasswordLabel'.tr(),
                       ),
                     ),
                   ],
@@ -156,12 +162,16 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(hasVault ? 'Unlock' : 'Create vault'),
+                        : Text(
+                            hasVault
+                                ? 'vaultUnlockAction'.tr()
+                                : 'vaultCreateAction'.tr(),
+                          ),
                   ),
                   if (hasVault && showBiometricUnlock)
                     TextButton(
                       onPressed: _busy ? null : _unlockWithBiometrics,
-                      child: const Text('Unlock with biometrics'),
+                      child: Text('vaultBiometricAction'.tr()),
                     ),
                 ],
               ),

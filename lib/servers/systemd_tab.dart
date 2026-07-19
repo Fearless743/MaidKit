@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -106,13 +107,13 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
     try {
       await action();
       if (!mounted) return;
-      showStyledSnackBar(message: success, title: 'Services');
+      showStyledSnackBar(message: success, title: 'systemdServices'.tr());
       await _load();
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
         message: error.toString(),
-        title: 'Service action failed',
+        title: 'systemdServiceActionFailed'.tr(),
         icon: Symbols.error,
         accentColor: Theme.of(context).colorScheme.error,
       );
@@ -137,7 +138,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
       useSafeArea: true,
       useRootNavigator: true,
       builder: (sheetContext) => SheetScaffold(
-        titleText: '${action.label} ${unit.name}?',
+        titleText: 'systemdActionConfirm'.tr(args: ['${action.trLabel} ${unit.name}']),
         heightFactor: critical ? 0.42 : 0.36,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -152,12 +153,12 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(sheetContext, false),
-                  child: const Text('Cancel'),
+                  child: const Text('commonCancel').tr(),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () => Navigator.pop(sheetContext, true),
-                  child: Text(action.label),
+                  child: Text(action.trLabel),
                 ),
               ],
             ),
@@ -175,22 +176,20 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
   }) {
     final base = switch (action) {
       SystemdUnitAction.stop =>
-        'Stop ${unit.name}? Running processes for this service will be terminated.',
+        'systemdStopConfirm'.tr(args: [unit.name]),
       SystemdUnitAction.restart =>
-        'Restart ${unit.name}? The service will briefly be unavailable.',
+        'systemdRestartConfirm'.tr(args: [unit.name]),
       SystemdUnitAction.reload =>
-        'Reload ${unit.name}? Configuration is re-read without a full restart '
-            'when the unit supports it.',
+        'systemdReloadConfirm'.tr(args: [unit.name]),
       SystemdUnitAction.disable =>
-        'Disable ${unit.name}? It will not start automatically on boot.',
+        'systemdDisableConfirm'.tr(args: [unit.name]),
       SystemdUnitAction.enable =>
-        'Enable ${unit.name}? It will start automatically on boot.',
-      SystemdUnitAction.start => 'Start ${unit.name}?',
+        'systemdEnableConfirm'.tr(args: [unit.name]),
+      SystemdUnitAction.start =>
+        'systemdStartConfirm'.tr(args: [unit.name]),
     };
     if (!critical) return base;
-    return '$base\n\n'
-        'This unit looks critical for remote access or networking. '
-        'Stopping or disabling it may lock you out of this host.';
+    return '$base\n\n${'systemdCriticalWarning'.tr()}';
   }
 
   Future<void> _onAction(SystemdUnit unit, SystemdUnitAction action) async {
@@ -213,7 +212,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
               sudoPassword: await _sudoPassword(),
             );
       },
-      success: '${action.pastLabel} ${unit.name}.',
+      success: 'systemdSuccess'.tr(args: ['${action.trPastLabel} ${unit.name}']),
       unit: unit.name,
     );
   }
@@ -236,7 +235,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
 
   Future<void> _showLogs(SystemdUnit unit) async {
     await _showTextSheet(
-      title: 'Logs · ${unit.name}',
+      title: 'systemdLogsTitle'.tr(args: [unit.name]),
       load: () async {
         return ref
             .read(connectionManagerProvider)
@@ -286,8 +285,8 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
       return _ServicesEmpty(
         icon: Symbols.link_off,
         message:
-            widget.connectionError ?? 'Connect to manage systemd services.',
-        actionLabel: 'Connect',
+            widget.connectionError ?? 'systemdConnectToManage'.tr(),
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filled: true,
       );
@@ -297,8 +296,8 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => _ServicesEmpty(
         icon: Symbols.error_outline,
-        message: 'Could not load services: $error',
-        actionLabel: 'Try again',
+        message: 'systemdLoadError'.tr(args: ['$error']),
+        actionLabel: 'systemdTryAgain'.tr(),
         onAction: _load,
       ),
       data: (snapshot) {
@@ -307,8 +306,8 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
             icon: Symbols.settings_applications,
             message:
                 snapshot.error ??
-                'systemctl was not found on this host (systemd may be absent).',
-            actionLabel: 'Refresh',
+                'systemdNotAvailable'.tr(),
+            actionLabel: 'commonRefresh'.tr(),
             onAction: _load,
           );
         }
@@ -333,7 +332,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                         color: scheme.primary,
                       ),
                       const SizedBox(width: 8),
-                      Text('systemd', style: theme.textTheme.titleSmall),
+                      Text('systemdServices'.tr(), style: theme.textTheme.titleSmall),
                       const SizedBox(width: 8),
                       Text(
                         '${snapshot.activeCount} active · '
@@ -354,7 +353,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                           ),
                         ),
                       IconButton(
-                        tooltip: 'Refresh',
+                        tooltip: 'commonRefresh'.tr(),
                         visualDensity: VisualDensity.compact,
                         onPressed: _busy ? null : _load,
                         icon: const Icon(Symbols.refresh),
@@ -367,12 +366,12 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                     enabled: !_busy,
                     decoration: InputDecoration(
                       isDense: true,
-                      hintText: 'Filter by name or description',
+                      hintText: 'systemdFilterHint'.tr(),
                       prefixIcon: const Icon(Symbols.search, size: 20),
                       suffixIcon: _searchController.text.isEmpty
                           ? null
                           : IconButton(
-                              tooltip: 'Clear',
+                              tooltip: 'systemdClearFilter'.tr(),
                               onPressed: () => _searchController.clear(),
                               icon: const Icon(Symbols.close, size: 18),
                             ),
@@ -411,9 +410,9 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                   ? _ServicesEmpty(
                       icon: Symbols.settings_applications,
                       message: snapshot.units.isEmpty
-                          ? 'No service units were reported by systemctl.'
-                          : 'No services match the current filter.',
-                      actionLabel: 'Refresh',
+                          ? 'systemdNoServices'.tr()
+                          : 'systemdNoFilterMatch'.tr(),
+                      actionLabel: 'commonRefresh'.tr(),
                       onAction: _load,
                     )
                   : ListView.separated(
@@ -471,47 +470,47 @@ class _ServiceTile extends StatelessWidget {
     children: [
       if (!unit.isActive)
         MenuAction(
-          title: 'Start',
+          title: 'systemdStart'.tr(),
           image: MenuImage.icon(Symbols.play_arrow),
           callback: () => onAction(SystemdUnitAction.start),
         ),
       if (unit.isActive) ...[
         MenuAction(
-          title: 'Stop',
+          title: 'systemdStop'.tr(),
           image: MenuImage.icon(Symbols.stop),
           callback: () => onAction(SystemdUnitAction.stop),
         ),
         MenuAction(
-          title: 'Restart',
+          title: 'systemdRestart'.tr(),
           image: MenuImage.icon(Symbols.restart_alt),
           callback: () => onAction(SystemdUnitAction.restart),
         ),
         MenuAction(
-          title: 'Reload',
+          title: 'systemdReload'.tr(),
           image: MenuImage.icon(Symbols.sync),
           callback: () => onAction(SystemdUnitAction.reload),
         ),
       ],
       if (unit.canEnable)
         MenuAction(
-          title: 'Enable on boot',
+          title: 'systemdEnableBoot'.tr(),
           image: MenuImage.icon(Symbols.toggle_on),
           callback: () => onAction(SystemdUnitAction.enable),
         ),
       if (unit.canDisable)
         MenuAction(
-          title: 'Disable on boot',
+          title: 'systemdDisableBoot'.tr(),
           image: MenuImage.icon(Symbols.toggle_off),
           callback: () => onAction(SystemdUnitAction.disable),
         ),
       MenuSeparator(),
       MenuAction(
-        title: 'Status',
+        title: 'systemdStatus'.tr(),
         image: MenuImage.icon(Symbols.info),
         callback: onStatus,
       ),
       MenuAction(
-        title: 'Logs',
+        title: 'systemdLogs'.tr(),
         image: MenuImage.icon(Symbols.terminal),
         callback: onLogs,
       ),
@@ -590,46 +589,46 @@ class _ServiceTile extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : PopupMenuButton<_ServiceMenuAction>(
-                tooltip: 'Actions',
+                tooltip: 'systemdActions'.tr(),
                 onSelected: _onPopupSelected,
                 itemBuilder: (context) => [
                   if (!unit.isActive)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _ServiceMenuAction.start,
-                      child: Text('Start'),
+                      child: Text('systemdStart'.tr()),
                     ),
                   if (unit.isActive) ...[
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _ServiceMenuAction.stop,
-                      child: Text('Stop'),
+                      child: Text('systemdStop'.tr()),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _ServiceMenuAction.restart,
-                      child: Text('Restart'),
+                      child: Text('systemdRestart'.tr()),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _ServiceMenuAction.reload,
-                      child: Text('Reload'),
+                      child: Text('systemdReload'.tr()),
                     ),
                   ],
                   if (unit.canEnable)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _ServiceMenuAction.enable,
-                      child: Text('Enable on boot'),
+                      child: Text('systemdEnableBoot'.tr()),
                     ),
                   if (unit.canDisable)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _ServiceMenuAction.disable,
-                      child: Text('Disable on boot'),
+                      child: Text('systemdDisableBoot'.tr()),
                     ),
                   const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: _ServiceMenuAction.status,
-                    child: Text('Status'),
+                    child: Text('systemdStatus'.tr()),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: _ServiceMenuAction.logs,
-                    child: Text('Logs'),
+                    child: Text('systemdLogs'.tr()),
                   ),
                 ],
               ),
@@ -683,7 +682,7 @@ class _UnitTextSheetState extends State<_UnitTextSheet> {
     if (text == null || text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    showStyledSnackBar(message: 'Copied to clipboard.', title: 'Services');
+    showStyledSnackBar(message: 'commonCopiedToClipboard'.tr(), title: 'systemdServices'.tr());
   }
 
   @override
@@ -695,7 +694,7 @@ class _UnitTextSheetState extends State<_UnitTextSheet> {
       heightFactor: 0.78,
       actions: [
         IconButton(
-          tooltip: 'Copy',
+          tooltip: 'commonCopy'.tr(),
           onPressed: canCopy ? _copy : null,
           icon: const Icon(Symbols.content_copy),
           style: IconButton.styleFrom(minimumSize: const Size(36, 36)),
@@ -714,7 +713,7 @@ class _UnitTextSheetState extends State<_UnitTextSheet> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Could not load: ${snapshot.error}',
+                    'systemdCouldNotLoad'.tr(args: ['${snapshot.error}']),
                     style: TextStyle(color: scheme.error),
                   ),
                   const SizedBox(height: 12),
@@ -722,7 +721,7 @@ class _UnitTextSheetState extends State<_UnitTextSheet> {
                     alignment: Alignment.centerLeft,
                     child: FilledButton.tonal(
                       onPressed: () => setState(_reload),
-                      child: const Text('Retry'),
+                      child: const Text('commonRetry').tr(),
                     ),
                   ),
                 ],
