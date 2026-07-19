@@ -1814,6 +1814,153 @@ fi
     });
   }
 
+  /// Merged logs for every service in a Compose project.
+  ///
+  /// Uses `compose logs` so multi-service stacks keep the service-name prefix
+  /// on each line. Tail applies per service (Compose CLI behavior).
+  Future<String> readComposeProjectLogs(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String projectName,
+    required String directory,
+    int tail = 300,
+    bool timestamps = false,
+    String? sudoPassword,
+  }) async {
+    if (!_safeProjectName(projectName) || !_safeRemoteDirectory(directory)) {
+      throw ArgumentError('Project name or remote directory is invalid.');
+    }
+    final safeTail = tail.clamp(1, 5000);
+    return withClient(serverId, (client) async {
+      final flags = StringBuffer('--tail $safeTail');
+      if (timestamps) flags.write(' --timestamps');
+      final composeCmd = '${runtime.name} compose -p $projectName logs $flags';
+      final result = await _execute(
+        client,
+        _scopedShell(scope, sudoPassword, 'cd $directory && $composeCmd'),
+        stdin: scope == ContainerScope.root ? sudoPassword : null,
+      );
+      final merged = _mergeContainerLogStreams(result.stdout, result.stderr);
+      if (result.exitCode != 0 && merged.trim().isEmpty) {
+        throw StateError(_commandError(result));
+      }
+      return merged;
+    });
+  }
+
+  /// Live-follow one container's logs (`docker|podman logs -f`).
+  ///
+  /// Call [LogFollowHandle.cancel] when leaving the page or restarting the
+  /// stream so the remote process is stopped.
+  Future<LogFollowHandle> followContainerLogs(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String containerId,
+    required void Function(String chunk) onChunk,
+    int tail = 300,
+    bool timestamps = false,
+    String? sudoPassword,
+  }) async {
+    if (!_safeContainerRef(containerId)) {
+      throw ArgumentError.value(containerId, 'containerId', 'Invalid id.');
+    }
+    final safeTail = tail.clamp(1, 5000);
+    final flags = StringBuffer('--follow --tail $safeTail');
+    if (timestamps) flags.write(' --timestamps');
+    return _startLogFollow(
+      serverId,
+      command:
+          '${_scopePrefix(scope, sudoPassword)}'
+          '${runtime.name} logs $flags $containerId',
+      stdin: scope == ContainerScope.root ? sudoPassword : null,
+      onChunk: onChunk,
+    );
+  }
+
+  /// Live-follow every service in a Compose project (`compose logs -f`).
+  Future<LogFollowHandle> followComposeProjectLogs(
+    int serverId, {
+    required ContainerRuntime runtime,
+    required ContainerScope scope,
+    required String projectName,
+    required String directory,
+    required void Function(String chunk) onChunk,
+    int tail = 300,
+    bool timestamps = false,
+    String? sudoPassword,
+  }) async {
+    if (!_safeProjectName(projectName) || !_safeRemoteDirectory(directory)) {
+      throw ArgumentError('Project name or remote directory is invalid.');
+    }
+    final safeTail = tail.clamp(1, 5000);
+    final flags = StringBuffer('--follow --tail $safeTail');
+    if (timestamps) flags.write(' --timestamps');
+    final composeCmd = '${runtime.name} compose -p $projectName logs $flags';
+    return _startLogFollow(
+      serverId,
+      command: _scopedShell(
+        scope,
+        sudoPassword,
+        'cd $directory && $composeCmd',
+      ),
+      stdin: scope == ContainerScope.root ? sudoPassword : null,
+      onChunk: onChunk,
+    );
+  }
+
+  /// Opens a long-running log session and streams stdout/stderr as text chunks.
+  Future<LogFollowHandle> _startLogFollow(
+    int serverId, {
+    required String command,
+    String? stdin,
+    required void Function(String chunk) onChunk,
+  }) async {
+    final client = clientFor(serverId);
+    if (client == null) {
+      throw StateError('Connect to this server before running an operation.');
+    }
+    // No PTY: keep log bytes line-oriented without terminal reflow.
+    final session = await client.execute(command);
+    var cancelled = false;
+    final stdoutSub = utf8.decoder.bind(session.stdout).listen((chunk) {
+      if (chunk.isNotEmpty) onChunk(chunk);
+    });
+    final stderrSub = utf8.decoder.bind(session.stderr).listen((chunk) {
+      if (chunk.isNotEmpty) onChunk(chunk);
+    });
+    if (stdin != null) {
+      session.stdin.add(Uint8List.fromList(utf8.encode('$stdin\n')));
+      await session.stdin.close();
+    }
+
+    final done = () async {
+      try {
+        await session.done;
+      } finally {
+        await Future.wait([stdoutSub.cancel(), stderrSub.cancel()]);
+      }
+    }();
+
+    return LogFollowHandle._(
+      done: done,
+      cancel: () async {
+        if (cancelled) return;
+        cancelled = true;
+        try {
+          session.kill(SSHSignal.TERM);
+        } catch (_) {}
+        try {
+          session.close();
+        } catch (_) {}
+        try {
+          await done;
+        } catch (_) {}
+      },
+    );
+  }
+
   /// Joins CLI stdout and stderr without dropping either stream.
   String _mergeContainerLogStreams(String stdout, String stderr) {
     final out = stdout;
@@ -2554,6 +2701,27 @@ class _TerminalConnection {
   final SSHClient client;
   final SSHSession shell;
   final TerminalSessionBinding binding;
+}
+
+/// Handle for a live `logs -f` stream. Call [cancel] to stop the remote process.
+class LogFollowHandle {
+  LogFollowHandle._({
+    required this.done,
+    required this._cancel,
+  });
+
+  /// Completes when the remote log process exits or is cancelled.
+  final Future<void> done;
+  final Future<void> Function() _cancel;
+  var _cancelled = false;
+
+  bool get isCancelled => _cancelled;
+
+  Future<void> cancel() async {
+    if (_cancelled) return;
+    _cancelled = true;
+    await _cancel();
+  }
 }
 
 class _PortForwardingConnection {

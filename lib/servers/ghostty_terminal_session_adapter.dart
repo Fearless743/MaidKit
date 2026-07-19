@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -479,27 +480,48 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
     }
   }
 
+  void _selectAll() {
+    final selection = widget.adapter._terminal.selectAll();
+    if (selection != null) {
+      widget.adapter._terminal.selection = selection;
+    }
+  }
+
   Future<void> _paste() async {
     if (widget.readOnly) return;
     final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
     if (text != null && text.isNotEmpty) widget.adapter.sendInput(text);
   }
 
+  bool get _isCommandModifierPressed {
+    final apple =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    return apple
+        ? HardwareKeyboard.instance.isMetaPressed
+        : HardwareKeyboard.instance.isControlPressed;
+  }
+
   KeyEventResult _onKeyEvent(FocusNode _, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    final command =
-        HardwareKeyboard.instance.isMetaPressed ||
-        HardwareKeyboard.instance.isControlPressed;
+    final command = _isCommandModifierPressed;
+    // Cmd/Ctrl+C copies when there is a selection. Without a selection, macOS
+    // Cmd+C is a no-op; Linux/Windows Ctrl+C falls through so the shell can
+    // still receive interrupt (0x03).
     if (command &&
         event.logicalKey == LogicalKeyboardKey.keyC &&
         widget.adapter._terminal.selection != null) {
       unawaited(_copySelection());
       return KeyEventResult.handled;
     }
+    if (command && event.logicalKey == LogicalKeyboardKey.keyA) {
+      _selectAll();
+      return KeyEventResult.handled;
+    }
     // Log playback and other read-only surfaces ignore typing/paste.
-    if (widget.readOnly) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
     if (command && event.logicalKey == LogicalKeyboardKey.keyV) {
       unawaited(_paste());
       return KeyEventResult.handled;
@@ -558,6 +580,7 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
         child: _GhosttyTextInput(
           focusNode: _focusNode,
           autofocus: widget.autofocus,
+          readOnly: widget.readOnly,
           onKeyEvent: _onKeyEvent,
           onInsert: widget.adapter.sendInput,
           onDelete: () => widget.adapter.sendKey(ghostty.Key.backspace),
@@ -572,6 +595,11 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
             onTap: _focusNode.requestFocus,
             child: Listener(
               onPointerDown: (event) {
+                // Focus on press so drag-select + Cmd/Ctrl+C works without a
+                // separate click. onTap alone is skipped when the pointer moves.
+                if (!_focusNode.hasFocus) {
+                  _focusNode.requestFocus();
+                }
                 if (event.buttons == kPrimaryButton) {
                   _selectionStart = _positionFor(event.localPosition);
                   _draggingSelection = false;
@@ -626,11 +654,15 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
 
 /// Invisible native text-input bridge so desktop IMEs can compose text before
 /// committing it to the terminal stream.
+///
+/// When [readOnly] is true (log playback), no platform text-input connection
+/// is opened — focus still receives shortcuts like Cmd/Ctrl+C for copy.
 class _GhosttyTextInput extends StatefulWidget {
   const _GhosttyTextInput({
     required this.child,
     required this.focusNode,
     required this.autofocus,
+    required this.readOnly,
     required this.onInsert,
     required this.onDelete,
     required this.onAction,
@@ -641,6 +673,7 @@ class _GhosttyTextInput extends StatefulWidget {
   final Widget child;
   final FocusNode focusNode;
   final bool autofocus;
+  final bool readOnly;
   final ValueChanged<String> onInsert;
   final VoidCallback onDelete;
   final VoidCallback onAction;
@@ -673,6 +706,13 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
       oldWidget.focusNode.removeListener(_onFocusChanged);
       widget.focusNode.addListener(_onFocusChanged);
     }
+    if (oldWidget.readOnly != widget.readOnly) {
+      if (widget.readOnly) {
+        _closeConnection();
+      } else if (widget.focusNode.hasFocus) {
+        _openConnection();
+      }
+    }
   }
 
   @override
@@ -685,6 +725,10 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
   bool get _hasConnection => _connection?.attached ?? false;
 
   void _onFocusChanged() {
+    if (widget.readOnly) {
+      if (!widget.focusNode.hasFocus) _closeConnection();
+      return;
+    }
     if (widget.focusNode.hasFocus && widget.focusNode.consumeKeyboardToken()) {
       _openConnection();
     } else if (!widget.focusNode.hasFocus) {
@@ -693,6 +737,7 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
   }
 
   void _openConnection() {
+    if (widget.readOnly) return;
     if (_hasConnection) {
       _connection!.show();
       return;
@@ -716,6 +761,11 @@ class _GhosttyTextInputState extends State<_GhosttyTextInput>
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (widget.readOnly) {
+      // No IME connection; route every key (including copy/select-all) to the
+      // terminal handler so log surfaces stay keyboard-accessible.
+      return widget.onKeyEvent(node, event);
+    }
     if (!_editingValue.composing.isCollapsed) {
       return KeyEventResult.skipRemainingHandlers;
     }

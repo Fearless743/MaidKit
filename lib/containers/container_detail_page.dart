@@ -13,6 +13,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/servers/ssh_connection_manager.dart';
 import 'package:maid_kit/shared/presentation/ansi_log_view.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
@@ -49,8 +50,13 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
   String? _logs;
   Object? _logsError;
   var _loadingLogs = false;
+  var _followingLogs = false;
   var _logTail = 300;
   var _logTimestamps = false;
+  LogFollowHandle? _logFollow;
+  var _logFollowGeneration = 0;
+  final _pendingLogChunks = StringBuffer();
+  Timer? _logFlushTimer;
 
   ContainerStats? _stats;
   Object? _statsError;
@@ -85,6 +91,11 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _logFlushTimer?.cancel();
+    _logFollowGeneration++;
+    final follow = _logFollow;
+    _logFollow = null;
+    unawaited(follow?.cancel() ?? Future<void>.value());
     // Riverpod forbids mutating providers during dispose / tree finalization.
     final serverId = widget.server.id;
     final focused = _focusedServerNotifier;
@@ -122,7 +133,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([_loadInspect(), _loadLogs(), _loadStats()]);
+    await Future.wait([_loadInspect(), _startLogFollow(), _loadStats()]);
   }
 
   Future<void> _loadInspect({bool silent = false}) async {
@@ -157,15 +168,48 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     }
   }
 
-  Future<void> _loadLogs() async {
+  Future<void> _stopLogFollow() async {
+    _logFollowGeneration++;
+    _logFlushTimer?.cancel();
+    _logFlushTimer = null;
+    _pendingLogChunks.clear();
+    final follow = _logFollow;
+    _logFollow = null;
+    if (mounted) setState(() => _followingLogs = false);
+    await follow?.cancel();
+  }
+
+  void _appendLogChunk(String chunk, int generation) {
+    if (!mounted || generation != _logFollowGeneration) return;
+    _pendingLogChunks.write(chunk);
+    _logFlushTimer ??= Timer(const Duration(milliseconds: 50), () {
+      _logFlushTimer = null;
+      if (!mounted || generation != _logFollowGeneration) return;
+      final delta = _pendingLogChunks.toString();
+      _pendingLogChunks.clear();
+      if (delta.isEmpty) return;
+      setState(() {
+        _logs = (_logs ?? '') + delta;
+        _loadingLogs = false;
+        _logsError = null;
+      });
+    });
+  }
+
+  Future<void> _startLogFollow() async {
+    await _stopLogFollow();
+    if (!mounted) return;
+    final generation = ++_logFollowGeneration;
     setState(() {
-      _loadingLogs = true;
+      _logs = '';
       _logsError = null;
+      _loadingLogs = true;
+      _followingLogs = false;
     });
     try {
-      final logs = await ref
+      final handle = await ref
           .read(connectionManagerProvider)
-          .readContainerLogs(
+          .followContainerLogs(
             widget.server.id,
             runtime: widget.runtime,
             scope: widget.scope,
@@ -173,18 +217,40 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
             tail: _logTail,
             timestamps: _logTimestamps,
             sudoPassword: await _sudoPassword(),
+            onChunk: (chunk) => _appendLogChunk(chunk, generation),
           );
-      if (!mounted) return;
+      if (!mounted || generation != _logFollowGeneration) {
+        await handle.cancel();
+        return;
+      }
+      _logFollow = handle;
       setState(() {
-        _logs = logs;
-        _logsError = null;
+        _followingLogs = true;
         _loadingLogs = false;
       });
+      unawaited(
+        handle.done.then((_) {
+          if (!mounted || generation != _logFollowGeneration) return;
+          _logFlushTimer?.cancel();
+          _logFlushTimer = null;
+          if (_pendingLogChunks.isNotEmpty) {
+            final delta = _pendingLogChunks.toString();
+            _pendingLogChunks.clear();
+            setState(() {
+              _logs = (_logs ?? '') + delta;
+              _followingLogs = false;
+            });
+          } else {
+            setState(() => _followingLogs = false);
+          }
+        }),
+      );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _logFollowGeneration) return;
       setState(() {
         _logsError = error;
         _loadingLogs = false;
+        _followingLogs = false;
       });
     }
   }
@@ -250,11 +316,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
     final destructive =
         action == ContainerAction.kill || action == ContainerAction.remove;
 
-    return showMaidKitConfirmAlert(
-      message,
-      title,
-      isDanger: destructive,
-    );
+    return showMaidKitConfirmAlert(message, title, isDanger: destructive);
   }
 
   Future<void> _runAction(ContainerAction action) async {
@@ -568,18 +630,19 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
                 logs: _logs,
                 logsError: _logsError,
                 loadingLogs: _loadingLogs,
+                followingLogs: _followingLogs,
                 logTail: _logTail,
                 logTimestamps: _logTimestamps,
                 runtime: widget.runtime,
                 onRefreshInspect: () => unawaited(_loadInspect()),
-                onRefreshLogs: () => unawaited(_loadLogs()),
+                onRefreshLogs: () => unawaited(_startLogFollow()),
                 onLogTailChanged: (value) {
                   setState(() => _logTail = value);
-                  unawaited(_loadLogs());
+                  unawaited(_startLogFollow());
                 },
                 onLogTimestampsChanged: (value) {
                   setState(() => _logTimestamps = value);
-                  unawaited(_loadLogs());
+                  unawaited(_startLogFollow());
                 },
                 onCopy: _copy,
                 onRecreate: inspect == null
@@ -1019,6 +1082,7 @@ class _InspectorTabs extends StatelessWidget {
     required this.logs,
     required this.logsError,
     required this.loadingLogs,
+    required this.followingLogs,
     required this.logTail,
     required this.logTimestamps,
     required this.runtime,
@@ -1036,6 +1100,7 @@ class _InspectorTabs extends StatelessWidget {
   final String? logs;
   final Object? logsError;
   final bool loadingLogs;
+  final bool followingLogs;
   final int logTail;
   final bool logTimestamps;
   final ContainerRuntime runtime;
@@ -1071,6 +1136,7 @@ class _InspectorTabs extends StatelessWidget {
                   logs: logs,
                   error: logsError,
                   loading: loadingLogs,
+                  following: followingLogs,
                   tail: logTail,
                   timestamps: logTimestamps,
                   onRefresh: onRefreshLogs,
@@ -1105,6 +1171,7 @@ class _LogsPane extends StatelessWidget {
     required this.logs,
     required this.error,
     required this.loading,
+    required this.following,
     required this.tail,
     required this.timestamps,
     required this.onRefresh,
@@ -1116,6 +1183,7 @@ class _LogsPane extends StatelessWidget {
   final String? logs;
   final Object? error;
   final bool loading;
+  final bool following;
   final int tail;
   final bool timestamps;
   final VoidCallback onRefresh;
@@ -1127,6 +1195,11 @@ class _LogsPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final hasSession = logs != null || loading || following || error != null;
+    final showTerminal =
+        following ||
+        (logs != null && logs!.isNotEmpty) ||
+        (logs != null && error == null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1155,6 +1228,21 @@ class _LogsPane extends StatelessWidget {
                 onSelected: onTimestampsChanged,
                 visualDensity: VisualDensity.compact,
               ),
+              if (following) ...[
+                const SizedBox(width: 8),
+                Chip(
+                  avatar: Icon(
+                    Symbols.sensors,
+                    size: 16,
+                    color: scheme.primary,
+                  ),
+                  label: const Text('Live'),
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(color: scheme.outlineVariant),
+                  padding: EdgeInsets.zero,
+                  labelPadding: const EdgeInsets.only(right: 8),
+                ),
+              ],
               const Spacer(),
               IconButton(
                 tooltip: 'Copy logs',
@@ -1164,7 +1252,7 @@ class _LogsPane extends StatelessWidget {
                 icon: const Icon(Symbols.content_copy),
               ),
               IconButton(
-                tooltip: 'Refresh logs',
+                tooltip: following ? 'Restart live stream' : 'Follow logs',
                 onPressed: onRefresh,
                 icon: loading
                     ? const SizedBox(
@@ -1179,23 +1267,23 @@ class _LogsPane extends StatelessWidget {
         ),
         Divider(height: 1, color: scheme.outlineVariant),
         Expanded(
-          child: loading && logs == null
+          child: loading && !hasSession
               ? const Center(child: CircularProgressIndicator())
               : error != null && logs == null
               ? _EmptyBody(
                   icon: Symbols.error_outline,
-                  message: 'Could not load logs: $error',
+                  message: 'Could not follow logs: $error',
                   actionLabel: 'Try again',
                   onAction: () async => onRefresh(),
                 )
-              : logs == null || logs!.trim().isEmpty
-              ? _EmptyBody(
+              : showTerminal
+              ? AnsiLogView(text: logs ?? '', streaming: true)
+              : _EmptyBody(
                   icon: Symbols.terminal,
                   message: 'No log output for this container yet.',
-                  actionLabel: 'Refresh',
+                  actionLabel: 'Follow',
                   onAction: () async => onRefresh(),
-                )
-              : AnsiLogView(text: logs!),
+                ),
         ),
       ],
     );

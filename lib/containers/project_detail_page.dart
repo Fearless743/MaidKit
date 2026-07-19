@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -14,6 +15,8 @@ import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/servers/ssh_connection_manager.dart';
+import 'package:maid_kit/shared/presentation/ansi_log_view.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/theme.dart';
 import 'compose_project_actions.dart';
@@ -56,6 +59,16 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   String? _compose;
   Object? _composeError;
   var _loadingCompose = false;
+  String? _logs;
+  Object? _logsError;
+  var _loadingLogs = false;
+  var _followingLogs = false;
+  var _logTail = 300;
+  var _logTimestamps = false;
+  LogFollowHandle? _logFollow;
+  var _logFollowGeneration = 0;
+  final _pendingLogChunks = StringBuffer();
+  Timer? _logFlushTimer;
   var _refreshing = false;
   var _hasLoadedLive = false;
   var _wasConnected = false;
@@ -119,6 +132,11 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   void dispose() {
     _refreshTimer?.cancel();
     _retryTimer?.cancel();
+    _logFlushTimer?.cancel();
+    _logFollowGeneration++;
+    final follow = _logFollow;
+    _logFollow = null;
+    unawaited(follow?.cancel() ?? Future<void>.value());
     super.dispose();
   }
 
@@ -139,10 +157,10 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
     });
   }
 
-  /// Initial / reconnect load of compose file, containers, and stats.
+  /// Initial / reconnect load of compose file, containers, stats, and logs.
   Future<void> _bootstrap() async {
     if (!mounted) return;
-    await Future.wait([_loadCompose(), _refresh()]);
+    await Future.wait([_loadCompose(), _refresh(), _startLogFollow()]);
   }
 
   void _scheduleRetry() {
@@ -169,6 +187,112 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
     return credential.type == CredentialType.password
         ? credential.password
         : null;
+  }
+
+  Future<void> _stopLogFollow() async {
+    _logFollowGeneration++;
+    _logFlushTimer?.cancel();
+    _logFlushTimer = null;
+    _pendingLogChunks.clear();
+    final follow = _logFollow;
+    _logFollow = null;
+    if (mounted) setState(() => _followingLogs = false);
+    await follow?.cancel();
+  }
+
+  void _appendLogChunk(String chunk, int generation) {
+    if (!mounted || generation != _logFollowGeneration) return;
+    _pendingLogChunks.write(chunk);
+    _logFlushTimer ??= Timer(const Duration(milliseconds: 50), () {
+      _logFlushTimer = null;
+      if (!mounted || generation != _logFollowGeneration) return;
+      final delta = _pendingLogChunks.toString();
+      _pendingLogChunks.clear();
+      if (delta.isEmpty) return;
+      setState(() {
+        _logs = (_logs ?? '') + delta;
+        _loadingLogs = false;
+        _logsError = null;
+      });
+    });
+  }
+
+  Future<void> _startLogFollow() async {
+    if (!mounted) return;
+    final server = _serverOrNull();
+    if (server == null) return;
+    final manager = ref.read(connectionManagerProvider);
+    if (manager.clientFor(server.id) == null) {
+      _scheduleRetry();
+      return;
+    }
+
+    await _stopLogFollow();
+    if (!mounted) return;
+    final generation = ++_logFollowGeneration;
+    setState(() {
+      _logs = '';
+      _logsError = null;
+      _loadingLogs = true;
+      _followingLogs = false;
+    });
+    try {
+      final handle = await manager.followComposeProjectLogs(
+        server.id,
+        runtime: _runtime,
+        scope: _scope,
+        projectName: widget.link.name,
+        directory: widget.link.directory,
+        tail: _logTail,
+        timestamps: _logTimestamps,
+        sudoPassword: await _sudoPassword(server),
+        onChunk: (chunk) => _appendLogChunk(chunk, generation),
+      );
+      if (!mounted || generation != _logFollowGeneration) {
+        await handle.cancel();
+        return;
+      }
+      _logFollow = handle;
+      setState(() {
+        _followingLogs = true;
+        _loadingLogs = false;
+      });
+      unawaited(
+        handle.done.then((_) {
+          if (!mounted || generation != _logFollowGeneration) return;
+          _logFlushTimer?.cancel();
+          _logFlushTimer = null;
+          if (_pendingLogChunks.isNotEmpty) {
+            final delta = _pendingLogChunks.toString();
+            _pendingLogChunks.clear();
+            setState(() {
+              _logs = (_logs ?? '') + delta;
+              _followingLogs = false;
+            });
+          } else {
+            setState(() => _followingLogs = false);
+          }
+        }),
+      );
+    } catch (error) {
+      if (!mounted || generation != _logFollowGeneration) return;
+      setState(() {
+        _logsError = error;
+        _loadingLogs = false;
+        _followingLogs = false;
+      });
+    }
+  }
+
+  Future<void> _copy(String value, {required String title}) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    showStyledSnackBar(
+      title: title,
+      message: 'Copied to the clipboard.',
+      icon: Symbols.content_copy,
+      accentColor: Theme.of(context).colorScheme.primary,
+    );
   }
 
   Future<void> _loadCompose() async {
@@ -323,7 +447,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
   Future<void> _connect(Server server) async {
     final connected = await connectForStatistics(context, ref, server);
     if (connected && mounted) {
-      await Future.wait([_refresh(), _loadCompose()]);
+      await Future.wait([_refresh(), _loadCompose(), _startLogFollow()]);
     }
   }
 
@@ -352,7 +476,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
-      await _refresh();
+      await Future.wait([_refresh(), _startLogFollow()]);
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
@@ -408,7 +532,7 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
-      await Future.wait([_loadCompose(), _refresh()]);
+      await Future.wait([_loadCompose(), _refresh(), _startLogFollow()]);
     } catch (error) {
       if (!mounted) return;
       showStyledSnackBar(
@@ -505,7 +629,11 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
             tooltip: 'Refresh',
             onPressed: connected
                 ? () async {
-                    await Future.wait([_refresh(), _loadCompose()]);
+                    await Future.wait([
+                      _refresh(),
+                      _loadCompose(),
+                      _startLogFollow(),
+                    ]);
                   }
                 : null,
             icon: const Icon(Symbols.refresh),
@@ -552,9 +680,25 @@ class _ProjectDetailBodyState extends ConsumerState<_ProjectDetailBody> {
           compose: _compose,
           composeError: _composeError,
           loadingCompose: _loadingCompose,
+          logs: _logs,
+          logsError: _logsError,
+          loadingLogs: _loadingLogs,
+          followingLogs: _followingLogs,
+          logTail: _logTail,
+          logTimestamps: _logTimestamps,
           onConnect: () => _connect(server),
           onRefreshContainers: _refresh,
           onRefreshCompose: _loadCompose,
+          onRefreshLogs: () => unawaited(_startLogFollow()),
+          onLogTailChanged: (value) {
+            setState(() => _logTail = value);
+            unawaited(_startLogFollow());
+          },
+          onLogTimestampsChanged: (value) {
+            setState(() => _logTimestamps = value);
+            unawaited(_startLogFollow());
+          },
+          onCopy: _copy,
         ),
       ),
     );
@@ -1094,9 +1238,19 @@ class _InspectorTabs extends StatelessWidget {
     required this.compose,
     required this.composeError,
     required this.loadingCompose,
+    required this.logs,
+    required this.logsError,
+    required this.loadingLogs,
+    required this.followingLogs,
+    required this.logTail,
+    required this.logTimestamps,
     required this.onConnect,
     required this.onRefreshContainers,
     required this.onRefreshCompose,
+    required this.onRefreshLogs,
+    required this.onLogTailChanged,
+    required this.onLogTimestampsChanged,
+    required this.onCopy,
   });
 
   final Server server;
@@ -1110,15 +1264,25 @@ class _InspectorTabs extends StatelessWidget {
   final String? compose;
   final Object? composeError;
   final bool loadingCompose;
+  final String? logs;
+  final Object? logsError;
+  final bool loadingLogs;
+  final bool followingLogs;
+  final int logTail;
+  final bool logTimestamps;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshContainers;
   final Future<void> Function() onRefreshCompose;
+  final VoidCallback onRefreshLogs;
+  final ValueChanged<int> onLogTailChanged;
+  final ValueChanged<bool> onLogTimestampsChanged;
+  final Future<void> Function(String value, {required String title}) onCopy;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1131,6 +1295,7 @@ class _InspectorTabs extends StatelessWidget {
                 icon: const Icon(Symbols.deployed_code, size: 18),
                 text: 'Containers (${containers.length})',
               ),
+              const Tab(icon: Icon(Symbols.terminal, size: 18), text: 'Logs'),
               const Tab(icon: Icon(Symbols.code, size: 18), text: 'Compose'),
             ],
           ),
@@ -1148,6 +1313,21 @@ class _InspectorTabs extends StatelessWidget {
                   statsFor: statsFor,
                   onConnect: onConnect,
                   onRefresh: onRefreshContainers,
+                ),
+                _StackLogsPane(
+                  logs: logs,
+                  error: logsError,
+                  loading: loadingLogs,
+                  following: followingLogs,
+                  tail: logTail,
+                  timestamps: logTimestamps,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                  onRefresh: onRefreshLogs,
+                  onTailChanged: onLogTailChanged,
+                  onTimestampsChanged: onLogTimestampsChanged,
+                  onCopy: onCopy,
                 ),
                 _ComposePane(
                   compose: compose,
@@ -1505,6 +1685,145 @@ class _SortHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _StackLogsPane extends StatelessWidget {
+  const _StackLogsPane({
+    required this.logs,
+    required this.error,
+    required this.loading,
+    required this.following,
+    required this.tail,
+    required this.timestamps,
+    required this.connected,
+    required this.connectionError,
+    required this.onConnect,
+    required this.onRefresh,
+    required this.onTailChanged,
+    required this.onTimestampsChanged,
+    required this.onCopy,
+  });
+
+  final String? logs;
+  final Object? error;
+  final bool loading;
+  final bool following;
+  final int tail;
+  final bool timestamps;
+  final bool connected;
+  final String? connectionError;
+  final Future<void> Function() onConnect;
+  final VoidCallback onRefresh;
+  final ValueChanged<int> onTailChanged;
+  final ValueChanged<bool> onTimestampsChanged;
+  final Future<void> Function(String value, {required String title}) onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!connected && logs == null && error == null && !loading && !following) {
+      return _EmptyPanel(
+        icon: Symbols.link_off,
+        message: connectionError ?? 'Connect to follow stack logs.',
+        actionLabel: 'Connect',
+        onAction: onConnect,
+        filledAction: true,
+      );
+    }
+
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final showTerminal =
+        following ||
+        (logs != null && logs!.isNotEmpty) ||
+        (logs != null && error == null);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Text('Last', style: theme.textTheme.labelLarge),
+              const SizedBox(width: 8),
+              DropdownButton<int>(
+                value: tail,
+                underline: const SizedBox.shrink(),
+                items: const [
+                  DropdownMenuItem(value: 100, child: Text('100 lines')),
+                  DropdownMenuItem(value: 300, child: Text('300 lines')),
+                  DropdownMenuItem(value: 1000, child: Text('1000 lines')),
+                ],
+                onChanged: connected
+                    ? (value) {
+                        if (value != null) onTailChanged(value);
+                      }
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                label: const Text('Timestamps'),
+                selected: timestamps,
+                onSelected: connected ? onTimestampsChanged : null,
+                visualDensity: VisualDensity.compact,
+              ),
+              if (following) ...[
+                const SizedBox(width: 8),
+                Chip(
+                  avatar: Icon(
+                    Symbols.sensors,
+                    size: 16,
+                    color: scheme.primary,
+                  ),
+                  label: const Text('Live'),
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(color: scheme.outlineVariant),
+                  padding: EdgeInsets.zero,
+                  labelPadding: const EdgeInsets.only(right: 8),
+                ),
+              ],
+              const Spacer(),
+              IconButton(
+                tooltip: 'Copy logs',
+                onPressed: logs == null || logs!.isEmpty
+                    ? null
+                    : () => onCopy(logs!, title: 'Stack logs copied'),
+                icon: const Icon(Symbols.content_copy),
+              ),
+              IconButton(
+                tooltip: following ? 'Restart live stream' : 'Follow logs',
+                onPressed: connected ? onRefresh : null,
+                icon: loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Symbols.refresh),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: scheme.outlineVariant),
+        Expanded(
+          child: error != null && logs == null && !following
+              ? _EmptyPanel(
+                  icon: Symbols.error_outline,
+                  message: 'Could not follow stack logs: $error',
+                  actionLabel: 'Try again',
+                  onAction: () async => onRefresh(),
+                )
+              : showTerminal
+              ? AnsiLogView(text: logs ?? '', streaming: true)
+              : _EmptyPanel(
+                  icon: Symbols.terminal,
+                  message: 'No log output for this stack yet.',
+                  actionLabel: 'Follow',
+                  onAction: () async => onRefresh(),
+                ),
+        ),
+      ],
     );
   }
 }

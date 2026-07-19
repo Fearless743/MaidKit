@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 
 import 'package:maid_kit/theme.dart';
@@ -217,6 +218,52 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
     );
   }
 
+  /// Handles clipboard shortcuts for log / read-only surfaces and swallows
+  /// other keys so they do not mutate the playback buffer.
+  ///
+  /// xterm attaches no keyboard Focus when both `readOnly` and
+  /// `hardwareKeyboardOnly` are true, so we keep a Focus path via
+  /// CustomTextEdit(readOnly: true) and route shortcuts here instead.
+  KeyEventResult _handleReadOnlyKeyEvent(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final apple =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final command = apple
+        ? HardwareKeyboard.instance.isMetaPressed
+        : HardwareKeyboard.instance.isControlPressed;
+
+    if (command && event.logicalKey == LogicalKeyboardKey.keyC) {
+      final selection = _controller.selection;
+      if (selection != null) {
+        final text = _terminal.buffer.getText(selection);
+        unawaited(Clipboard.setData(ClipboardData(text: text)));
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (command && event.logicalKey == LogicalKeyboardKey.keyA) {
+      _controller.setSelection(
+        _terminal.buffer.createAnchor(
+          0,
+          _terminal.buffer.height - _terminal.viewHeight,
+        ),
+        _terminal.buffer.createAnchor(
+          _terminal.viewWidth,
+          _terminal.buffer.height - 1,
+        ),
+        mode: SelectionMode.line,
+      );
+      return KeyEventResult.handled;
+    }
+
+    // Block typing / paste / navigation from reaching the log terminal.
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget buildView({
     bool autofocus = false,
@@ -259,7 +306,11 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
         scrollController: _scrollController,
         autofocus: autofocus,
         readOnly: readOnly,
-        hardwareKeyboardOnly: readOnly,
+        // Never use hardwareKeyboardOnly together with readOnly: that combo
+        // skips both CustomTextEdit and CustomKeyboardListener, leaving no
+        // Focus node for Cmd/Ctrl+C after selecting log text.
+        hardwareKeyboardOnly: false,
+        onKeyEvent: readOnly ? _handleReadOnlyKeyEvent : null,
         alwaysShowCursor: false,
         backgroundOpacity: 0,
         theme: theme,
