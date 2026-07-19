@@ -941,9 +941,9 @@ class _FilterBar extends StatelessWidget {
               value: filters.runtime,
                hint: const Text('projectsAllRuntimes').tr(),
               items: [
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: null,
-                  child: Text('All runtimes'),
+                  child: Text('projectsAllRuntimes'.tr()),
                 ),
                 ...ContainerRuntime.values.map(
                   (value) =>
@@ -1938,7 +1938,7 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
                 const Spacer(),
                 if (_services.length > 1)
                   IconButton(
-                    tooltip: 'Remove service',
+                    tooltip: 'editorRemoveService'.tr(),
                     onPressed: () =>
                         setState(() => _services.removeAt(index).dispose()),
                     icon: const Icon(Symbols.close, size: 18),
@@ -1949,14 +1949,14 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
             TextField(
               controller: service.name,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(labelText: 'Service name'),
+              decoration: InputDecoration(labelText: 'editorServiceName'.tr()),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: service.image,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Image',
+              decoration: InputDecoration(
+                labelText: 'editorImage'.tr(),
                 hintText: 'nginx:alpine',
               ),
             ),
@@ -1965,10 +1965,10 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
               controller: service.ports,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Ports (optional)',
+              decoration: InputDecoration(
+                labelText: 'editorPortsLabel'.tr(),
                 hintText: '8080:80',
-                helperText: 'One mapping per line',
+                helperText: 'editorPortsHelper'.tr(),
               ),
             ),
             const SizedBox(height: 12),
@@ -1976,10 +1976,10 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
               controller: service.environment,
               minLines: 1,
               maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Environment variables (optional)',
+              decoration: InputDecoration(
+                labelText: 'editorEnvLabel'.tr(),
                 hintText: 'DATABASE_URL=postgres://database/app',
-                helperText: 'One NAME=value entry per line',
+                helperText: 'editorEnvHelper'.tr(),
               ),
             ),
             const SizedBox(height: 12),
@@ -1987,10 +1987,10 @@ class _ComposeProjectSheetState extends ConsumerState<_ComposeProjectSheet> {
               controller: service.volumes,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Folders (optional)',
+              decoration: InputDecoration(
+                labelText: 'editorFoldersLabel'.tr(),
                 hintText: '/opt/app-data:/var/lib/app',
-                helperText: 'One host-path:container-path mapping per line',
+                helperText: 'editorFoldersHelper'.tr(),
               ),
             ),
           ],
@@ -2323,16 +2323,16 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
           ),
           const SizedBox(height: 16),
           SegmentedButton<_RunFormMode>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: _RunFormMode.simple,
-                label: Text('Simple'),
-                icon: Icon(Symbols.tune, size: 18),
+                label: Text('editorGuided'.tr()),
+                icon: const Icon(Symbols.tune, size: 18),
               ),
               ButtonSegment(
                 value: _RunFormMode.advanced,
-                label: Text('Advanced'),
-                icon: Icon(Symbols.terminal, size: 18),
+                label: Text('editorAdvanced'.tr()),
+                icon: const Icon(Symbols.terminal, size: 18),
               ),
             ],
             selected: {mode},
@@ -2471,14 +2471,14 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
                         ? 'Runs as your SSH user'
                         : 'Needs sudo on the server',
                   ),
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: ContainerScope.user,
-                      child: Text('User'),
+                      child: Text('commonUser'.tr()),
                     ),
                     DropdownMenuItem(
                       value: ContainerScope.root,
-                      child: Text('System (root)'),
+                      child: Text('commonSystem'.tr()),
                     ),
                   ],
                   onChanged: (value) => _selectScope(value!),
@@ -2515,7 +2515,7 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
               child: TextButton.icon(
                 onPressed: _addPort,
                 icon: const Icon(Symbols.add, size: 18),
-                label: const Text('Add port'),
+                label: Text('editorAddPort'.tr()),
               ),
             ),
             const SizedBox(height: 12),
@@ -2545,7 +2545,7 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
               child: TextButton.icon(
                 onPressed: _addEnv,
                 icon: const Icon(Symbols.add, size: 18),
-                label: const Text('Add variable'),
+                label: Text('editorAddVariable'.tr()),
               ),
             ),
             const SizedBox(height: 12),
@@ -2575,7 +2575,7 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
               child: TextButton.icon(
                 onPressed: _addVolume,
                 icon: const Icon(Symbols.add, size: 18),
-                label: const Text('Add folder'),
+                label: Text('editorAddFolder'.tr()),
               ),
             ),
             const SizedBox(height: 12),
@@ -2650,7 +2650,7 @@ class _RawContainerSheetState extends ConsumerState<_RawContainerSheet> {
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: _canSubmit ? _submit : null,
-                child: const Text('Start'),
+                child: Text('commonStart'.tr()),
               ),
             ],
           ),

@@ -157,7 +157,7 @@ class _TerminalFindHostState extends State<TerminalFindHost> {
                       ),
                       const SizedBox(width: 4),
                       FilterChip(
-                        label: const Text('Aa'),
+                        label: Text('terminalCaseSensitive'.tr()),
                         selected: _caseSensitive,
                         visualDensity: VisualDensity.compact,
                         onSelected: (value) {

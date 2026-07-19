@@ -74,6 +74,8 @@ class SettingsPage extends ConsumerWidget {
                         .setThemeMode(selection.first);
                   },
                 ),
+                const SizedBox(height: 16),
+                _LanguageSwitcher(),
               ],
             ),
           ),
@@ -286,3 +288,64 @@ const _focusedRefreshIntervals = [
 String _formatInterval(Duration interval) => interval.inMinutes >= 1
     ? '${interval.inMinutes} minute${interval.inMinutes == 1 ? '' : 's'}'
     : '${interval.inSeconds} seconds';
+
+String _languageDisplayName(Locale locale) {
+  switch ('${locale.languageCode}-${locale.countryCode}') {
+    case 'en-US':
+      return 'English (US)';
+    case 'zh-CN':
+      return '简体中文';
+    default:
+      return '${locale.languageCode}-${locale.countryCode}';
+  }
+}
+
+class _LanguageSwitcher extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentLocale = context.locale;
+    final supportedLocales = context.supportedLocales;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('settingsDisplayLanguage').tr(),
+              const SizedBox(height: 2),
+              Text(
+                _languageDisplayName(currentLocale),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        DropdownButton<Locale?>(
+          value: supportedLocales.contains(currentLocale) ? currentLocale : null,
+          underline: const SizedBox.shrink(),
+          items: [
+            for (final locale in supportedLocales)
+              DropdownMenuItem<Locale?>(
+                value: locale,
+                child: Text(_languageDisplayName(locale)),
+              ),
+            DropdownMenuItem<Locale?>(
+              value: null,
+              child: Text('languageFollowSystem'.tr()),
+            ),
+          ],
+          onChanged: (Locale? value) {
+            if (value != null) {
+              context.setLocale(value);
+            } else {
+              context.resetLocale();
+            }
+          },
+        ),
+      ],
+    );
+  }
+}

@@ -1,4 +1,5 @@
 import 'package:dartssh2/dartssh2.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -122,10 +123,10 @@ class _CloudFilePickerSheetState extends State<_CloudFilePickerSheet> {
     if (widget.title != null) return widget.title!;
     return switch (widget.selection) {
       CloudFilePickerSelection.file =>
-        widget.allowMultiple ? 'Choose remote files' : 'Choose remote file',
-      CloudFilePickerSelection.folder => 'Choose remote folder',
+        widget.allowMultiple ? 'filePickerChooseFiles'.tr() : 'filePickerChooseFile'.tr(),
+      CloudFilePickerSelection.folder => 'filePickerChooseFolders'.tr(),
       CloudFilePickerSelection.fileOrFolder =>
-        widget.allowMultiple ? 'Choose remote items' : 'Choose remote item',
+        widget.allowMultiple ? 'filePickerChooseItems'.tr() : 'filePickerChooseItem'.tr(),
     };
   }
 
@@ -380,7 +381,7 @@ class _CloudFilePickerSheetState extends State<_CloudFilePickerSheet> {
                   const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text('filePickerCancel'.tr()),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
@@ -418,7 +419,7 @@ class _CloudFilePickerSheetState extends State<_CloudFilePickerSheet> {
               const SizedBox(height: 16),
               FilledButton.tonal(
                 onPressed: _refresh,
-                child: const Text('Retry'),
+                child: Text('filePickerRetry'.tr()),
               ),
             ],
           ),

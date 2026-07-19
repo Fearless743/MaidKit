@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -121,8 +122,8 @@ class _TaskProgressBarContent extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final label = switch (task.status) {
       TaskProgressStatus.inProgress => task.title,
-      TaskProgressStatus.completed => '${task.title} complete',
-      TaskProgressStatus.failed => '${task.title} failed',
+      TaskProgressStatus.completed => 'taskProgressComplete'.tr(args: [task.title]),
+      TaskProgressStatus.failed => 'taskProgressFailed'.tr(args: [task.title]),
     };
     final color = switch (task.status) {
       TaskProgressStatus.inProgress => colorScheme.primary,

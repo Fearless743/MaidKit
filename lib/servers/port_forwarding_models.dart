@@ -1,3 +1,5 @@
+import 'package:easy_localization/easy_localization.dart';
+
 enum PortForwardDirection { local, remote }
 
 class ActivePortForward {
@@ -22,8 +24,8 @@ class ActivePortForward {
   final int targetPort;
 
   String get directionLabel => switch (direction) {
-    PortForwardDirection.local => 'Local',
-    PortForwardDirection.remote => 'Remote',
+    PortForwardDirection.local => 'portForwardingLocal'.tr(),
+    PortForwardDirection.remote => 'portForwardingRemote'.tr(),
   };
 
   String get summary => '$bindHost:$bindPort → $targetHost:$targetPort';

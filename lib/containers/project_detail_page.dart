@@ -40,8 +40,8 @@ class ProjectDetailPage extends ConsumerWidget {
               ?.where((item) => item.id == linkId)
               .firstOrNull;
           if (link == null) {
-            return const Scaffold(
-              body: Center(child: Text('This project link no longer exists.')),
+            return Scaffold(
+              body: Center(child: Text('projectsServerGone'.tr())),
             );
           }
           return _ProjectDetailBody(link: link);
@@ -1445,7 +1445,7 @@ class _ContainersPaneState extends State<_ContainersPane> {
         icon: Symbols.link_off,
         message:
             widget.connectionError ?? 'Connect to load project containers.',
-        actionLabel: 'Connect',
+        actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filledAction: true,
       );
@@ -1454,7 +1454,7 @@ class _ContainersPaneState extends State<_ContainersPane> {
       return _EmptyPanel(
         icon: Symbols.error_outline,
         message: 'Could not load containers: ${widget.containersError}',
-        actionLabel: 'Try again',
+        actionLabel: 'commonRetry'.tr(),
         onAction: widget.onRefresh,
       );
     }
@@ -1464,7 +1464,7 @@ class _ContainersPaneState extends State<_ContainersPane> {
         message: widget.connected
             ? 'No containers found for this compose project.'
             : 'No cached containers. Connect to refresh.',
-        actionLabel: widget.connected ? 'Refresh' : 'Connect',
+        actionLabel: widget.connected ? 'commonRefresh'.tr() : 'commonConnect'.tr(),
         onAction: widget.connected ? widget.onRefresh : widget.onConnect,
         filledAction: !widget.connected,
       );
@@ -1727,7 +1727,7 @@ class _StackLogsPane extends StatelessWidget {
       return _EmptyPanel(
         icon: Symbols.link_off,
         message: connectionError ?? 'Connect to follow stack logs.',
-        actionLabel: 'Connect',
+        actionLabel: 'commonConnect'.tr(),
         onAction: onConnect,
         filledAction: true,
       );
@@ -1746,7 +1746,7 @@ class _StackLogsPane extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
             children: [
-              Text('Last', style: theme.textTheme.labelLarge),
+              Text('containerLast'.tr(), style: theme.textTheme.labelLarge),
               const SizedBox(width: 8),
               DropdownButton<int>(
                 value: tail,
@@ -1764,7 +1764,7 @@ class _StackLogsPane extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               FilterChip(
-                label: const Text('Timestamps'),
+                label: Text('containerTimestamps'.tr()),
                 selected: timestamps,
                 onSelected: connected ? onTimestampsChanged : null,
                 visualDensity: VisualDensity.compact,
@@ -1777,7 +1777,7 @@ class _StackLogsPane extends StatelessWidget {
                     size: 16,
                     color: scheme.primary,
                   ),
-                  label: const Text('Live'),
+                  label: Text('containerLive'.tr()),
                   visualDensity: VisualDensity.compact,
                   side: BorderSide(color: scheme.outlineVariant),
                   padding: EdgeInsets.zero,
@@ -1812,7 +1812,7 @@ class _StackLogsPane extends StatelessWidget {
               ? _EmptyPanel(
                   icon: Symbols.error_outline,
                   message: 'Could not follow stack logs: $error',
-                  actionLabel: 'Try again',
+                  actionLabel: 'commonRetry'.tr(),
                   onAction: () async => onRefresh(),
                 )
               : showTerminal
@@ -1852,7 +1852,7 @@ class _ComposePane extends StatelessWidget {
       return _EmptyPanel(
         icon: Symbols.link_off,
         message: 'Connect to read the remote compose file.',
-        actionLabel: 'Connect',
+        actionLabel: 'commonConnect'.tr(),
         onAction: onConnect,
         filledAction: true,
       );
@@ -1864,7 +1864,7 @@ class _ComposePane extends StatelessWidget {
       return _EmptyPanel(
         icon: Symbols.error_outline,
         message: 'Could not read compose file: $composeError',
-        actionLabel: 'Try again',
+        actionLabel: 'commonRetry'.tr(),
         onAction: onRefresh,
       );
     }
@@ -1872,7 +1872,7 @@ class _ComposePane extends StatelessWidget {
       return _EmptyPanel(
         icon: Symbols.code,
         message: 'No compose file found in the linked directory.',
-        actionLabel: 'Refresh',
+        actionLabel: 'commonRefresh'.tr(),
         onAction: onRefresh,
       );
     }
@@ -1939,22 +1939,22 @@ class _StatusChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (label, color, bg) = switch (status) {
       SessionStatus.connected => (
-        'Connected',
+        'commonConnected'.tr(),
         scheme.onSecondaryContainer,
         scheme.secondaryContainer,
       ),
       SessionStatus.connecting => (
-        'Connecting',
+        'commonConnecting'.tr(),
         scheme.onTertiaryContainer,
         scheme.tertiaryContainer,
       ),
       SessionStatus.failed => (
-        'Failed',
+        'commonFailed'.tr(),
         scheme.onErrorContainer,
         scheme.errorContainer,
       ),
       _ => (
-        connected ? 'Connected' : 'Offline',
+        connected ? 'commonConnected'.tr() : 'commonNotConnected'.tr(),
         scheme.onSurfaceVariant,
         scheme.surfaceContainerHighest,
       ),
@@ -2328,7 +2328,7 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
               const Spacer(),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: Text('commonCancel'.tr()),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
@@ -2338,7 +2338,7 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
                   }
                 },
                 icon: const Icon(Symbols.rocket_launch, size: 18),
-                label: const Text('Deploy'),
+                label: Text('commonDeploy'.tr()),
               ),
             ],
           ),
@@ -2367,16 +2367,16 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
           ),
           const SizedBox(height: 16),
           SegmentedButton<_ComposeFormMode>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: _ComposeFormMode.guided,
-                icon: Icon(Symbols.tune, size: 18),
-                label: Text('Guided'),
+                icon: const Icon(Symbols.tune, size: 18),
+                label: Text('editorGuided'.tr()),
               ),
               ButtonSegment(
                 value: _ComposeFormMode.advanced,
-                icon: Icon(Symbols.code, size: 18),
-                label: Text('Advanced'),
+                icon: const Icon(Symbols.code, size: 18),
+                label: Text('editorAdvanced'.tr()),
               ),
             ],
             selected: {_mode},
@@ -2400,7 +2400,7 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
               onPressed: () =>
                   setState(() => _services.add(_ComposeServiceDraft())),
               icon: const Icon(Symbols.add, size: 18),
-              label: const Text('Add service'),
+              label: Text('editorAddService'.tr()),
             ),
           ] else ...[
             TextField(
@@ -2426,13 +2426,13 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
               const Spacer(),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: Text('commonCancel'.tr()),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _canDeploy ? _submit : null,
                 icon: const Icon(Symbols.rocket_launch, size: 18),
-                label: const Text('Deploy'),
+                label: Text('commonDeploy'.tr()),
               ),
             ],
           ),
@@ -2473,8 +2473,8 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
             TextField(
               controller: service.name,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Service name',
+              decoration: InputDecoration(
+                labelText: 'editorServiceName'.tr(),
                 helperText: 'For example: app, database, or worker',
               ),
             ),
@@ -2482,8 +2482,8 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
             TextField(
               controller: service.image,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Image',
+              decoration: InputDecoration(
+                labelText: 'editorImage'.tr(),
                 hintText: 'nginx:alpine',
               ),
             ),
@@ -2492,10 +2492,10 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
               controller: service.ports,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Ports (optional)',
+              decoration: InputDecoration(
+                labelText: 'editorPortsLabel'.tr(),
                 hintText: '8080:80',
-                helperText: 'One mapping per line',
+                helperText: 'editorPortsHelper'.tr(),
               ),
             ),
             const SizedBox(height: 12),
@@ -2503,10 +2503,10 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
               controller: service.environment,
               minLines: 1,
               maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Environment variables (optional)',
+              decoration: InputDecoration(
+                labelText: 'editorEnvLabel'.tr(),
                 hintText: 'DATABASE_URL=postgres://database/app',
-                helperText: 'One NAME=value entry per line',
+                helperText: 'editorEnvHelper'.tr(),
               ),
             ),
             const SizedBox(height: 12),
@@ -2514,10 +2514,10 @@ class _ComposeDeploymentSheetState extends State<_ComposeDeploymentSheet> {
               controller: service.volumes,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Folders (optional)',
+              decoration: InputDecoration(
+                labelText: 'editorFoldersLabel'.tr(),
                 hintText: '/opt/app-data:/var/lib/app',
-                helperText: 'One host-path:container-path mapping per line',
+                helperText: 'editorFoldersHelper'.tr(),
               ),
             ),
           ],

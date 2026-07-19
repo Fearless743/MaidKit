@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -241,9 +242,9 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
       DeploySessionStatus.failed => scheme.error,
     };
     final statusLabel = switch (session.status) {
-      DeploySessionStatus.running => 'Running',
-      DeploySessionStatus.succeeded => 'Succeeded',
-      DeploySessionStatus.failed => 'Failed',
+      DeploySessionStatus.running => 'deployRunning'.tr(),
+      DeploySessionStatus.succeeded => 'deploySucceeded'.tr(),
+      DeploySessionStatus.failed => 'deployFailed'.tr(),
     };
 
     return AttentionModalScaffold(
@@ -378,10 +379,10 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
                   OutlinedButton.icon(
                     onPressed: _hide,
                     icon: const Icon(Symbols.keyboard_arrow_down, size: 18),
-                    label: const Text('Hide'),
+                    label: Text('deployHide'.tr()),
                   )
                 else
-                  FilledButton(onPressed: _close, child: const Text('Done')),
+                  FilledButton(onPressed: _close, child: Text('commonDone'.tr())),
               ],
             ),
           ),
@@ -499,8 +500,8 @@ class DeploySessionsRailButton extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    running ? (progressLabel ?? 'Task') : 'Log',
+                    Text(
+                    running ? (progressLabel ?? 'deployTaskLabel'.tr()) : 'deployLogLabel'.tr(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(

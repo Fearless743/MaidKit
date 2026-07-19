@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
@@ -477,7 +478,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
         : '${entries.length} items';
     showStyledSnackBar(
       message: label,
-      title: mode == _ClipboardMode.copy ? 'Copied' : 'Cut',
+      title: mode == _ClipboardMode.copy
+          ? 'fileManagerCopied'.tr()
+          : 'fileManagerCut'.tr(),
       icon: mode == _ClipboardMode.copy
           ? Symbols.content_copy
           : Symbols.content_cut,
@@ -512,7 +515,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           message: data.entries.length == 1
               ? data.entries.first.name
               : '${data.entries.length} items',
-          title: targetSide == _FileSide.remote ? 'Uploaded' : 'Downloaded',
+          title: targetSide == _FileSide.remote
+              ? 'fileManagerUploaded'.tr()
+              : 'fileManagerDownloaded'.tr(),
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
         );
@@ -521,7 +526,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (mounted) {
         showStyledSnackBar(
           message: error.toString(),
-          title: 'Drop failed',
+          title: 'fileManagerDropFailed'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -546,7 +551,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           message: clipboard.mode == _ClipboardMode.cut
               ? 'Items moved'
               : 'Items pasted',
-          title: 'Done',
+          title: 'fileManagerDone'.tr(),
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
         );
@@ -555,7 +560,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (mounted) {
         showStyledSnackBar(
           message: error.toString(),
-          title: 'Paste failed',
+          title: 'fileManagerPasteFailed'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -750,7 +755,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           message: entries.length == 1
               ? entries.first.name
               : '${entries.length} items',
-          title: 'Deleted',
+          title: 'fileManagerDeleted'.tr(),
           icon: Symbols.delete,
           accentColor: Theme.of(context).colorScheme.primary,
         );
@@ -759,7 +764,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (notify && mounted) {
         showStyledSnackBar(
           message: error.toString(),
-          title: 'Delete failed',
+          title: 'fileManagerDeleteFailed'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -1105,7 +1110,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (notify && mounted) {
         showStyledSnackBar(
           message: title,
-          title: 'Transfer complete',
+          title: 'fileManagerTransferComplete'.tr(),
           icon: Symbols.check_circle,
           accentColor: Theme.of(context).colorScheme.primary,
         );
@@ -1115,7 +1120,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (notify && mounted) {
         showStyledSnackBar(
           message: error.toString(),
-          title: 'Transfer failed',
+          title: 'fileManagerTransferFailed'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -1225,9 +1230,15 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     return Menu(
       children: [
         if (onlyThis && isDirectory)
-          MenuAction(title: 'Open', callback: () => _openLocal(entry)),
+          MenuAction(
+            title: 'fileManagerOpen'.tr(),
+            callback: () => _openLocal(entry),
+          ),
         if (onlyThis && entry is File)
-          MenuAction(title: 'Edit', callback: () => _editLocal(entry)),
+          MenuAction(
+            title: 'fileManagerEdit'.tr(),
+            callback: () => _editLocal(entry),
+          ),
         MenuAction(
           title: transferLabel,
           attributes: MenuActionAttributes(disabled: busy),
@@ -1240,7 +1251,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
         ),
         MenuSeparator(),
         MenuAction(
-          title: 'Copy',
+          title: 'commonCopy'.tr(),
           activator: const SingleActivator(LogicalKeyboardKey.keyC, meta: true),
           callback: () {
             _ensureLocalContextSelection(entry, index);
@@ -1248,7 +1259,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           },
         ),
         MenuAction(
-          title: 'Cut',
+          title: 'fileManagerCut'.tr(),
           activator: const SingleActivator(LogicalKeyboardKey.keyX, meta: true),
           callback: () {
             _ensureLocalContextSelection(entry, index);
@@ -1256,14 +1267,16 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           },
         ),
         MenuAction(
-          title: 'Paste',
+          title: 'fileManagerPaste'.tr(),
           attributes: MenuActionAttributes(disabled: !canPaste),
           activator: const SingleActivator(LogicalKeyboardKey.keyV, meta: true),
           callback: () => _pasteInto(_FileSide.local),
         ),
         MenuSeparator(),
         MenuAction(
-          title: entries.length == 1 ? 'Delete' : 'Delete ${entries.length}',
+          title: entries.length == 1
+              ? 'commonDelete'.tr()
+              : 'Delete ${entries.length}',
           attributes: MenuActionAttributes(destructive: true, disabled: busy),
           activator: const SingleActivator(LogicalKeyboardKey.backspace),
           callback: () {
@@ -1291,9 +1304,15 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     return Menu(
       children: [
         if (onlyThis && isDirectory)
-          MenuAction(title: 'Open', callback: () => _openRemote(entry)),
+          MenuAction(
+            title: 'fileManagerOpen'.tr(),
+            callback: () => _openRemote(entry),
+          ),
         if (onlyThis && entry.attr.isFile)
-          MenuAction(title: 'Edit', callback: () => _editRemote(entry)),
+          MenuAction(
+            title: 'fileManagerEdit'.tr(),
+            callback: () => _editRemote(entry),
+          ),
         MenuAction(
           title: transferLabel,
           attributes: MenuActionAttributes(disabled: busy),
@@ -1306,7 +1325,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
         ),
         MenuSeparator(),
         MenuAction(
-          title: 'Copy',
+          title: 'commonCopy'.tr(),
           activator: const SingleActivator(LogicalKeyboardKey.keyC, meta: true),
           callback: () {
             _ensureRemoteContextSelection(entry, index);
@@ -1314,7 +1333,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           },
         ),
         MenuAction(
-          title: 'Cut',
+          title: 'fileManagerCut'.tr(),
           activator: const SingleActivator(LogicalKeyboardKey.keyX, meta: true),
           callback: () {
             _ensureRemoteContextSelection(entry, index);
@@ -1322,14 +1341,16 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           },
         ),
         MenuAction(
-          title: 'Paste',
+          title: 'fileManagerPaste'.tr(),
           attributes: MenuActionAttributes(disabled: !canPaste),
           activator: const SingleActivator(LogicalKeyboardKey.keyV, meta: true),
           callback: () => _pasteInto(_FileSide.remote),
         ),
         MenuSeparator(),
         MenuAction(
-          title: entries.length == 1 ? 'Delete' : 'Delete ${entries.length}',
+          title: entries.length == 1
+              ? 'commonDelete'.tr()
+              : 'Delete ${entries.length}',
           attributes: MenuActionAttributes(destructive: true, disabled: busy),
           activator: const SingleActivator(LogicalKeyboardKey.backspace),
           callback: () {
@@ -1350,14 +1371,14 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     return Menu(
       children: [
         MenuAction(
-          title: 'Paste',
+          title: 'fileManagerPaste'.tr(),
           attributes: MenuActionAttributes(disabled: !canPaste),
           activator: const SingleActivator(LogicalKeyboardKey.keyV, meta: true),
           callback: () => _pasteInto(side),
         ),
         MenuSeparator(),
         MenuAction(
-          title: 'Go up',
+          title: 'fileManagerGoUp'.tr(),
           attributes: MenuActionAttributes(disabled: !canGoUp),
           callback: () =>
               side == _FileSide.local ? _goUpLocal() : _goUpRemote(),
@@ -1365,7 +1386,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
         if (side == _FileSide.local)
           MenuAction(title: 'Choose folder…', callback: _chooseLocalDirectory),
         MenuAction(
-          title: 'Refresh',
+          title: 'commonRefresh'.tr(),
           callback: () =>
               side == _FileSide.local ? _refreshLocal() : _refreshRemote(),
         ),
@@ -1411,7 +1432,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       color: scheme.onSurfaceVariant,
     );
     final localPane = _FilePane(
-      title: 'Local',
+      title: 'fileManagerLocal'.tr(),
       path: _localDirectory.path,
       pathTextStyle: pathTextStyle,
       focused: _focusedSide == _FileSide.local,
@@ -1470,7 +1491,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       ),
     );
     final remotePane = _FilePane(
-      title: 'Remote',
+      title: 'fileManagerRemote'.tr(),
       path: _remotePath,
       pathTextStyle: pathTextStyle,
       focused: _focusedSide == _FileSide.remote,
@@ -1664,7 +1685,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     final clipboard = _clipboard;
     if (clipboard == null || clipboard.isEmpty) return null;
     final count = clipboard.entries.length;
-    final verb = clipboard.mode == _ClipboardMode.cut ? 'Cut' : 'Copied';
+    final verb = clipboard.mode == _ClipboardMode.cut
+        ? 'fileManagerCut'.tr()
+        : 'fileManagerCopied'.tr();
     final source = clipboard.entries.first.side == _FileSide.local
         ? 'local'
         : 'remote';
@@ -1803,7 +1826,7 @@ class _FilePane extends StatelessWidget {
                             ),
                           ...headerActions,
                           IconButton(
-                            tooltip: 'Go up',
+                            tooltip: 'fileManagerGoUp'.tr(),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
@@ -1838,7 +1861,7 @@ class _FilePane extends StatelessWidget {
                               icon: const Icon(Symbols.terminal, size: 18),
                             ),
                           IconButton(
-                            tooltip: 'Refresh',
+                            tooltip: 'commonRefresh'.tr(),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
@@ -1920,7 +1943,7 @@ class _LocalFileList extends StatelessWidget {
             dragData: dragData,
             icon: isDirectory ? Symbols.folder : Symbols.description,
             name: name,
-            detail: isDirectory ? 'Folder' : null,
+            detail: isDirectory ? 'fileManagerFolder'.tr() : null,
             selected: selected,
             dimmed: dimmed,
             onTap: () => onTapEntry(entry, index),
@@ -1979,7 +2002,9 @@ class _RemoteFileList extends StatelessWidget {
             dragData: dragData,
             icon: isDirectory ? Symbols.folder : Symbols.description,
             name: entry.filename,
-            detail: isDirectory ? 'Folder' : _formatBytes(entry.attr.size),
+            detail: isDirectory
+                ? 'fileManagerFolder'.tr()
+                : _formatBytes(entry.attr.size),
             selected: selected,
             dimmed: dimmed,
             onTap: () => onTapEntry(entry, index),
@@ -2221,7 +2246,7 @@ class _FileEditorModalState extends State<_FileEditorModal> {
       });
       showStyledSnackBar(
         message: widget.name,
-        title: 'Saved',
+        title: 'fileManagerSaved'.tr(),
         icon: Symbols.check_circle,
         accentColor: Theme.of(context).colorScheme.primary,
       );
@@ -2278,7 +2303,7 @@ class _FileEditorModalState extends State<_FileEditorModal> {
                         ? 'Saving…'
                         : _isDirty
                         ? 'Unsaved changes'
-                        : 'Saved',
+                        : 'fileManagerSaved'.tr(),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -2289,7 +2314,7 @@ class _FileEditorModalState extends State<_FileEditorModal> {
                   onPressed: _saving
                       ? null
                       : () => unawaited(_requestDismiss()),
-                  child: const Text('Close'),
+                  child: Text('commonClose'.tr()),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
@@ -2303,7 +2328,7 @@ class _FileEditorModalState extends State<_FileEditorModal> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Symbols.save, size: 18),
-                  label: const Text('Save'),
+                  label: Text('commonSave'.tr()),
                 ),
               ],
             ),
