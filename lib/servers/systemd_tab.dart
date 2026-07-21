@@ -442,11 +442,11 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
 
   String _filterLabel(_ServiceFilter filter, SystemdUnitsSnapshot snapshot) {
     return switch (filter) {
-      _ServiceFilter.all => 'All (${snapshot.units.length})',
-      _ServiceFilter.active => 'Active (${snapshot.activeCount})',
-      _ServiceFilter.failed => 'Failed (${snapshot.failedCount})',
+      _ServiceFilter.all => 'systemdFilterAll'.tr(args: ['${snapshot.units.length}']),
+      _ServiceFilter.active => 'systemdFilterActive'.tr(args: ['${snapshot.activeCount}']),
+      _ServiceFilter.failed => 'systemdFilterFailed'.tr(args: ['${snapshot.failedCount}']),
       _ServiceFilter.inactive =>
-        'Inactive (${snapshot.units.where((u) => !u.isActive && !u.isFailed).length})',
+        'systemdFilterInactive'.tr(args: ['${snapshot.units.where((u) => !u.isActive && !u.isFailed).length}']),
     };
   }
 }
