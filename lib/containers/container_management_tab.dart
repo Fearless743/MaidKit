@@ -30,6 +30,7 @@ class ContainerManagementTab extends ConsumerStatefulWidget {
     required this.connectionError,
     required this.onConnect,
     required this.refreshInterval,
+    this.focusComposeProject,
   });
 
   final Server server;
@@ -37,6 +38,7 @@ class ContainerManagementTab extends ConsumerStatefulWidget {
   final String? connectionError;
   final Future<void> Function() onConnect;
   final Duration refreshInterval;
+  final String? focusComposeProject;
 
   @override
   ConsumerState<ContainerManagementTab> createState() =>
@@ -131,7 +133,9 @@ class _ContainerManagementTabState
   }) async {
     final title = switch (action) {
       ContainerAction.stop => 'containerStopConfirm'.tr(args: [container.name]),
-      ContainerAction.restart => 'containerRestartConfirm'.tr(args: [container.name]),
+      ContainerAction.restart => 'containerRestartConfirm'.tr(
+        args: [container.name],
+      ),
       ContainerAction.kill => 'containerKillConfirm'.tr(args: [container.name]),
       ContainerAction.remove =>
         forceRemove
@@ -255,6 +259,7 @@ class _ContainerManagementTabState
         onRefresh: _load,
         onAction: _runAction,
         onInstallRuntime: _installRuntime,
+        focusComposeProject: widget.focusComposeProject,
       ),
     );
   }
@@ -263,12 +268,16 @@ class _ContainerManagementTabState
 /// Linked compose project and the live containers that belong to it.
 class _ServerProjectGroup {
   _ServerProjectGroup({
-    required this.link,
+    this.link,
+    required this.name,
+    this.directory,
     required this.runtime,
     required this.scope,
   });
 
-  final ComposeProjectLink link;
+  final ComposeProjectLink? link;
+  final String name;
+  final String? directory;
   final ContainerRuntime runtime;
   final ContainerScope scope;
   final containers = <ServerContainer>[];
@@ -288,6 +297,7 @@ List<_ServerProjectGroup> _projectGroupsForServer({
   required Server server,
   required List<ComposeProjectLink> links,
   required List<ContainerEnvironment> environments,
+  String? focusComposeProject,
 }) {
   final groups = <_ServerProjectGroup>[];
   for (final link in links.where((item) => item.serverId == server.id)) {
@@ -295,6 +305,8 @@ List<_ServerProjectGroup> _projectGroupsForServer({
     final scope = ContainerScope.values.byName(link.scope);
     final group = _ServerProjectGroup(
       link: link,
+      name: link.name,
+      directory: link.directory,
       runtime: runtime,
       scope: scope,
     );
@@ -309,9 +321,26 @@ List<_ServerProjectGroup> _projectGroupsForServer({
     }
     groups.add(group);
   }
-  groups.sort(
-    (a, b) => a.link.name.toLowerCase().compareTo(b.link.name.toLowerCase()),
-  );
+  if (focusComposeProject != null &&
+      !groups.any((group) => group.name == focusComposeProject)) {
+    for (final environment in environments.where((env) => env.isAvailable)) {
+      final matching = environment.containers
+          .where((container) => container.composeProject == focusComposeProject)
+          .toList();
+      if (matching.isEmpty) continue;
+      final group = _ServerProjectGroup(
+        name: focusComposeProject,
+        runtime: environment.runtime,
+        scope: environment.scope,
+      );
+      group.containers.addAll(matching);
+      groups.add(group);
+    }
+  }
+  if (focusComposeProject != null) {
+    groups.removeWhere((group) => group.name != focusComposeProject);
+  }
+  groups.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   return groups;
 }
 
@@ -359,6 +388,7 @@ class _ContainerEnvironments extends ConsumerWidget {
     required this.onRefresh,
     required this.onAction,
     required this.onInstallRuntime,
+    this.focusComposeProject,
   });
 
   final Server server;
@@ -371,6 +401,7 @@ class _ContainerEnvironments extends ConsumerWidget {
   )
   onAction;
   final Future<void> Function() onInstallRuntime;
+  final String? focusComposeProject;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -395,6 +426,7 @@ class _ContainerEnvironments extends ConsumerWidget {
       server: server,
       links: links,
       environments: environments,
+      focusComposeProject: focusComposeProject,
     );
     final projectKeys = _projectContainerKeys(projects);
     final standaloneEnvironments = _environmentsWithoutProjects(
@@ -558,10 +590,9 @@ class _ProjectCollapsibleTile extends StatelessWidget {
     return '${name[0].toUpperCase()}${name.substring(1)}';
   }
 
-  String get _scopeLabel =>
-      project.scope == ContainerScope.root
-          ? 'commonRoot'.tr()
-          : 'commonUser'.tr();
+  String get _scopeLabel => project.scope == ContainerScope.root
+      ? 'commonRoot'.tr()
+      : 'commonUser'.tr();
 
   @override
   Widget build(BuildContext context) {
@@ -572,8 +603,8 @@ class _ProjectCollapsibleTile extends StatelessWidget {
     final statusLabel = count == 0
         ? 'containerNoContainers'.tr()
         : running == count
-            ? 'containerRunningCount'.tr(args: ['$running'])
-            : 'containerRunningFraction'.tr(args: ['$running', '$count']);
+        ? 'containerRunningCount'.tr(args: ['$running'])
+        : 'containerRunningFraction'.tr(args: ['$running', '$count']);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -594,7 +625,7 @@ class _ProjectCollapsibleTile extends StatelessWidget {
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
           title: Text(
-            project.link.name,
+            project.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleSmall,
@@ -605,7 +636,7 @@ class _ProjectCollapsibleTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  project.link.directory,
+                  project.directory ?? 'Detected from running containers',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -625,14 +656,16 @@ class _ProjectCollapsibleTile extends StatelessWidget {
               ],
             ),
           ),
-          trailing: IconButton(
-            tooltip: 'containersOpenProject'.tr(),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => context.router.push(
-              ProjectDetailRoute(linkId: project.link.id),
-            ),
-            icon: const Icon(Symbols.open_in_new, size: 20),
-          ),
+          trailing: project.link == null
+              ? null
+              : IconButton(
+                  tooltip: 'containersOpenProject'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => context.router.push(
+                    ProjectDetailRoute(linkId: project.link!.id),
+                  ),
+                  icon: const Icon(Symbols.open_in_new, size: 20),
+                ),
           children: [
             Divider(height: 1, color: scheme.outlineVariant),
             if (project.containers.isEmpty)
@@ -690,10 +723,9 @@ class _ContainerEnvironmentSection extends StatelessWidget {
     return '${name[0].toUpperCase()}${name.substring(1)}';
   }
 
-  String get _scopeLabel =>
-      environment.scope == ContainerScope.root
-          ? 'commonRoot'.tr()
-          : 'commonUser'.tr();
+  String get _scopeLabel => environment.scope == ContainerScope.root
+      ? 'commonRoot'.tr()
+      : 'commonUser'.tr();
 
   IconData get _runtimeIcon => switch (environment.runtime) {
     ContainerRuntime.docker => Symbols.deployed_code,

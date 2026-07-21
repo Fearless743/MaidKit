@@ -19,12 +19,20 @@ import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'systemd_tab.dart';
+import 'web_server_tab.dart';
 
 @RoutePage()
 class ServerDetailPage extends ConsumerStatefulWidget {
-  const ServerDetailPage({super.key, required this.server});
+  const ServerDetailPage({
+    super.key,
+    required this.server,
+    this.initialTab = 0,
+    this.initialComposeProject,
+  });
 
   final Server server;
+  final int initialTab;
+  final String? initialComposeProject;
 
   @override
   ConsumerState<ServerDetailPage> createState() => _ServerDetailPageState();
@@ -139,6 +147,8 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
         refreshInterval: refreshInterval,
         onConnect: _connect,
         onRefreshProcesses: _loadProcesses,
+        initialTab: widget.initialTab,
+        initialComposeProject: widget.initialComposeProject,
       ),
     );
   }
@@ -192,6 +202,8 @@ class _DetailWorkspace extends StatelessWidget {
     required this.refreshInterval,
     required this.onConnect,
     required this.onRefreshProcesses,
+    required this.initialTab,
+    required this.initialComposeProject,
   });
 
   final Server server;
@@ -201,6 +213,8 @@ class _DetailWorkspace extends StatelessWidget {
   final Duration refreshInterval;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshProcesses;
+  final int initialTab;
+  final String? initialComposeProject;
 
   @override
   Widget build(BuildContext context) {
@@ -213,6 +227,8 @@ class _DetailWorkspace extends StatelessWidget {
       refreshInterval: refreshInterval,
       onConnect: onConnect,
       onRefreshProcesses: onRefreshProcesses,
+      initialTab: initialTab,
+      initialComposeProject: initialComposeProject,
     );
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -406,6 +422,8 @@ class _InspectorTabs extends StatelessWidget {
     required this.refreshInterval,
     required this.onConnect,
     required this.onRefreshProcesses,
+    required this.initialTab,
+    required this.initialComposeProject,
   });
 
   final bool connected;
@@ -415,12 +433,15 @@ class _InspectorTabs extends StatelessWidget {
   final Duration refreshInterval;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshProcesses;
+  final int initialTab;
+  final String? initialComposeProject;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 9,
+      length: 10,
+      initialIndex: initialTab.clamp(0, 9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -429,20 +450,42 @@ class _InspectorTabs extends StatelessWidget {
             tabAlignment: TabAlignment.start,
             dividerColor: scheme.outlineVariant,
             tabs: [
-              Tab(icon: Icon(Symbols.monitoring, size: 18), text: 'detailActivity'.tr()),
-              Tab(icon: Icon(Symbols.terminal, size: 18), text: 'detailProcesses'.tr()),
+              Tab(
+                icon: Icon(Symbols.monitoring, size: 18),
+                text: 'detailActivity'.tr(),
+              ),
+              Tab(
+                icon: Icon(Symbols.terminal, size: 18),
+                text: 'detailProcesses'.tr(),
+              ),
               Tab(
                 icon: Icon(Symbols.settings_applications, size: 18),
                 text: 'detailServices'.tr(),
               ),
               Tab(
+                icon: Icon(Symbols.language, size: 18),
+                text: 'detailWebServers'.tr(),
+              ),
+              Tab(
                 icon: Icon(Symbols.deployed_code, size: 18),
                 text: 'detailContainers'.tr(),
               ),
-              Tab(icon: Icon(Symbols.image, size: 18), text: 'detailImages'.tr()),
-              Tab(icon: Icon(Symbols.schedule, size: 18), text: 'detailCrontab'.tr()),
-              Tab(icon: Icon(Symbols.inventory_2, size: 18), text: 'detailPackages'.tr()),
-              Tab(icon: Icon(Symbols.shield, size: 18), text: 'detailFirewall'.tr()),
+              Tab(
+                icon: Icon(Symbols.image, size: 18),
+                text: 'detailImages'.tr(),
+              ),
+              Tab(
+                icon: Icon(Symbols.schedule, size: 18),
+                text: 'detailCrontab'.tr(),
+              ),
+              Tab(
+                icon: Icon(Symbols.inventory_2, size: 18),
+                text: 'detailPackages'.tr(),
+              ),
+              Tab(
+                icon: Icon(Symbols.shield, size: 18),
+                text: 'detailFirewall'.tr(),
+              ),
               Tab(
                 icon: Icon(Symbols.swap_horiz, size: 18),
                 text: 'detailPortForwarding'.tr(),
@@ -466,11 +509,16 @@ class _InspectorTabs extends StatelessWidget {
                       )
                     : _ConnectionPrompt(
                         message:
-                            connectionError ??
-                            'detailConnectToCollect'.tr(),
+                            connectionError ?? 'detailConnectToCollect'.tr(),
                         onConnect: onConnect,
                       ),
                 SystemdTab(
+                  server: server,
+                  connected: connected,
+                  connectionError: connectionError,
+                  onConnect: onConnect,
+                ),
+                WebServerTab(
                   server: server,
                   connected: connected,
                   connectionError: connectionError,
@@ -482,6 +530,7 @@ class _InspectorTabs extends StatelessWidget {
                   connectionError: connectionError,
                   onConnect: onConnect,
                   refreshInterval: refreshInterval,
+                  focusComposeProject: initialComposeProject,
                 ),
                 ImageManagementTab(
                   server: server,
@@ -555,12 +604,14 @@ class _ServerIdentity extends StatelessWidget {
                 children: [
                   _StatusChip(connected: connected, status: session?.status),
                   if (session?.stats?.updatedAt != null)
-                        Text(
-                          'detailUpdated'.tr(args: [_formatTimestamp(session!.stats!.updatedAt)]),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
+                    Text(
+                      'detailUpdated'.tr(
+                        args: [_formatTimestamp(session!.stats!.updatedAt)],
+                      ),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -680,7 +731,9 @@ class _MetricGrid extends StatelessWidget {
           icon: Symbols.speed,
           label: 'detailLoadAverage',
           value: _loadLabel(stats!),
-          detail: stats!.cpuCount == null ? null : 'detailCpuCount'.tr(args: ['${stats!.cpuCount}']),
+          detail: stats!.cpuCount == null
+              ? null
+              : 'detailCpuCount'.tr(args: ['${stats!.cpuCount}']),
         ),
         const SizedBox(height: 8),
         _MetricCard(
@@ -709,7 +762,9 @@ class _MetricGrid extends StatelessWidget {
           value: _formatUptime(stats!.uptime),
           detail: swapUsed == null || stats!.swapTotalKb == null
               ? null
-              : 'detailSwap'.tr(args: [_formatKb(swapUsed), _formatKb(stats!.swapTotalKb!)]),
+              : 'detailSwap'.tr(
+                  args: [_formatKb(swapUsed), _formatKb(stats!.swapTotalKb!)],
+                ),
         ),
       ],
     );
@@ -945,67 +1000,67 @@ class _ProcessHeaderRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
+          SizedBox(
+            width: 64,
+            child: _SortHeader(
+              label: 'detailPid',
+              active: sort == _ProcessSort.pid,
+              ascending: ascending,
+              onTap: () => onSort(_ProcessSort.pid),
+            ),
+          ),
+          SizedBox(
+            width: 88,
+            child: _SortHeader(
+              label: 'commonUser',
+              active: sort == _ProcessSort.user,
+              ascending: ascending,
+              onTap: () => onSort(_ProcessSort.user),
+            ),
+          ),
+          if (wide) ...[
             SizedBox(
               width: 64,
               child: _SortHeader(
-                label: 'detailPid',
-                active: sort == _ProcessSort.pid,
+                label: 'detailCpu',
+                active: sort == _ProcessSort.cpu,
                 ascending: ascending,
-                onTap: () => onSort(_ProcessSort.pid),
+                alignEnd: true,
+                onTap: () => onSort(_ProcessSort.cpu),
               ),
             ),
+            const SizedBox(width: 12),
             SizedBox(
-              width: 88,
+              width: 64,
               child: _SortHeader(
-                label: 'commonUser',
-                active: sort == _ProcessSort.user,
+                label: 'detailMemory',
+                active: sort == _ProcessSort.mem,
                 ascending: ascending,
-                onTap: () => onSort(_ProcessSort.user),
+                alignEnd: true,
+                onTap: () => onSort(_ProcessSort.mem),
               ),
             ),
-            if (wide) ...[
-              SizedBox(
-                width: 64,
-                child: _SortHeader(
-                  label: 'detailCpu',
-                  active: sort == _ProcessSort.cpu,
-                  ascending: ascending,
-                  alignEnd: true,
-                  onTap: () => onSort(_ProcessSort.cpu),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 64,
-                child: _SortHeader(
-                  label: 'detailMemory',
-                  active: sort == _ProcessSort.mem,
-                  ascending: ascending,
-                  alignEnd: true,
-                  onTap: () => onSort(_ProcessSort.mem),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 72,
-                child: _SortHeader(
-                  label: 'detailRss',
-                  active: sort == _ProcessSort.rss,
-                  ascending: ascending,
-                  alignEnd: true,
-                  onTap: () => onSort(_ProcessSort.rss),
-                ),
-              ),
-              const SizedBox(width: 16),
-            ],
-            Expanded(
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 72,
               child: _SortHeader(
-                label: 'detailCommand',
-                active: sort == _ProcessSort.command,
+                label: 'detailRss',
+                active: sort == _ProcessSort.rss,
                 ascending: ascending,
-                onTap: () => onSort(_ProcessSort.command),
+                alignEnd: true,
+                onTap: () => onSort(_ProcessSort.rss),
               ),
             ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            child: _SortHeader(
+              label: 'detailCommand',
+              active: sort == _ProcessSort.command,
+              ascending: ascending,
+              onTap: () => onSort(_ProcessSort.command),
+            ),
+          ),
         ],
       ),
     );

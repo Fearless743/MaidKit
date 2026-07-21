@@ -118,11 +118,16 @@ class ContainerDetailRouteArgs {
 class ProjectDetailRoute extends _i9.PageRouteInfo<ProjectDetailRouteArgs> {
   ProjectDetailRoute({
     _i10.Key? key,
-    required int linkId,
+    int? projectId,
+    int? linkId,
     List<_i9.PageRouteInfo>? children,
   }) : super(
          ProjectDetailRoute.name,
-         args: ProjectDetailRouteArgs(key: key, linkId: linkId),
+         args: ProjectDetailRouteArgs(
+           key: key,
+           projectId: projectId,
+           linkId: linkId,
+         ),
          initialChildren: children,
        );
 
@@ -131,33 +136,43 @@ class ProjectDetailRoute extends _i9.PageRouteInfo<ProjectDetailRouteArgs> {
   static _i9.PageInfo page = _i9.PageInfo(
     name,
     builder: (data) {
-      final args = data.argsAs<ProjectDetailRouteArgs>();
-      return _i2.ProjectDetailPage(key: args.key, linkId: args.linkId);
+      final args = data.argsAs<ProjectDetailRouteArgs>(
+        orElse: () => const ProjectDetailRouteArgs(),
+      );
+      return _i2.ProjectDetailPage(
+        key: args.key,
+        projectId: args.projectId,
+        linkId: args.linkId,
+      );
     },
   );
 }
 
 class ProjectDetailRouteArgs {
-  const ProjectDetailRouteArgs({this.key, required this.linkId});
+  const ProjectDetailRouteArgs({this.key, this.projectId, this.linkId});
 
   final _i10.Key? key;
 
-  final int linkId;
+  final int? projectId;
+
+  final int? linkId;
 
   @override
   String toString() {
-    return 'ProjectDetailRouteArgs{key: $key, linkId: $linkId}';
+    return 'ProjectDetailRouteArgs{key: $key, projectId: $projectId, linkId: $linkId}';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     if (other is! ProjectDetailRouteArgs) return false;
-    return key == other.key && linkId == other.linkId;
+    return key == other.key &&
+        projectId == other.projectId &&
+        linkId == other.linkId;
   }
 
   @override
-  int get hashCode => key.hashCode ^ linkId.hashCode;
+  int get hashCode => key.hashCode ^ projectId.hashCode ^ linkId.hashCode;
 }
 
 /// generated route for
@@ -182,10 +197,17 @@ class ServerDetailRoute extends _i9.PageRouteInfo<ServerDetailRouteArgs> {
   ServerDetailRoute({
     _i10.Key? key,
     required _i11.Server server,
+    int initialTab = 0,
+    String? initialComposeProject,
     List<_i9.PageRouteInfo>? children,
   }) : super(
          ServerDetailRoute.name,
-         args: ServerDetailRouteArgs(key: key, server: server),
+         args: ServerDetailRouteArgs(
+           key: key,
+           server: server,
+           initialTab: initialTab,
+           initialComposeProject: initialComposeProject,
+         ),
          initialChildren: children,
        );
 
@@ -195,32 +217,53 @@ class ServerDetailRoute extends _i9.PageRouteInfo<ServerDetailRouteArgs> {
     name,
     builder: (data) {
       final args = data.argsAs<ServerDetailRouteArgs>();
-      return _i4.ServerDetailPage(key: args.key, server: args.server);
+      return _i4.ServerDetailPage(
+        key: args.key,
+        server: args.server,
+        initialTab: args.initialTab,
+        initialComposeProject: args.initialComposeProject,
+      );
     },
   );
 }
 
 class ServerDetailRouteArgs {
-  const ServerDetailRouteArgs({this.key, required this.server});
+  const ServerDetailRouteArgs({
+    this.key,
+    required this.server,
+    this.initialTab = 0,
+    this.initialComposeProject,
+  });
 
   final _i10.Key? key;
 
   final _i11.Server server;
 
+  final int initialTab;
+
+  final String? initialComposeProject;
+
   @override
   String toString() {
-    return 'ServerDetailRouteArgs{key: $key, server: $server}';
+    return 'ServerDetailRouteArgs{key: $key, server: $server, initialTab: $initialTab, initialComposeProject: $initialComposeProject}';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     if (other is! ServerDetailRouteArgs) return false;
-    return key == other.key && server == other.server;
+    return key == other.key &&
+        server == other.server &&
+        initialTab == other.initialTab &&
+        initialComposeProject == other.initialComposeProject;
   }
 
   @override
-  int get hashCode => key.hashCode ^ server.hashCode;
+  int get hashCode =>
+      key.hashCode ^
+      server.hashCode ^
+      initialTab.hashCode ^
+      initialComposeProject.hashCode;
 }
 
 /// generated route for

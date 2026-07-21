@@ -65,14 +65,46 @@ class ContainerCacheEntries extends Table {
   Set<Column<Object>> get primaryKey => {serverId, runtime, scope, containerId};
 }
 
+/// A named deployment bundle. A project is deliberately not tied to one
+/// deployment technology: its resources can be compose stacks, web servers,
+/// standalone containers, or future integrations such as databases.
+class DeploymentProjects extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
+/// A deployable or supporting item belonging to a [DeploymentProjects] row.
+/// Configuration is JSON so each resource kind can evolve without a schema
+/// migration. It must only contain non-secret, portable deployment metadata.
+class DeploymentResources extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get projectId => integer()();
+  TextColumn get kind => text()();
+  TextColumn get name => text()();
+  IntColumn get serverId => integer().nullable()();
+  TextColumn get configuration => text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
 @DriftDatabase(
-  tables: [Servers, VaultMetadata, ComposeProjectLinks, ContainerCacheEntries],
+  tables: [
+    Servers,
+    VaultMetadata,
+    ComposeProjectLinks,
+    ContainerCacheEntries,
+    DeploymentProjects,
+    DeploymentResources,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'maid_kit'));
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -118,6 +150,30 @@ class AppDatabase extends _$AppDatabase {
       if (from < 6) {
         await m.createTable(containerCacheEntries);
       }
+      if (from < 7) {
+        await m.createTable(deploymentProjects);
+        await m.createTable(deploymentResources);
+        // Preserve every existing Compose link as its own general project.
+        // The link remains the live-operation authority while the new catalog
+        // supplies a portable resource description around it.
+        await customStatement('''
+          INSERT INTO deployment_projects (name, description, created_at, updated_at)
+          SELECT name, 'Migrated Compose link ' || id, linked_at, linked_at
+          FROM compose_project_links
+        ''');
+        await customStatement('''
+          INSERT INTO deployment_resources
+            (project_id, kind, name, server_id, configuration, created_at, updated_at)
+          SELECT deployment_projects.id, 'compose', compose_project_links.name,
+            compose_project_links.server_id,
+            '{"compose_link_id":' || compose_project_links.id || '}',
+            compose_project_links.linked_at, compose_project_links.linked_at
+          FROM compose_project_links
+          INNER JOIN deployment_projects
+            ON deployment_projects.description =
+              'Migrated Compose link ' || compose_project_links.id
+        ''');
+      }
     },
   );
 
@@ -129,4 +185,10 @@ class AppDatabase extends _$AppDatabase {
 
   Stream<List<ContainerCacheEntry>> watchContainerCacheEntries() =>
       select(containerCacheEntries).watch();
+
+  Stream<List<DeploymentProject>> watchDeploymentProjects() =>
+      select(deploymentProjects).watch();
+
+  Stream<List<DeploymentResource>> watchDeploymentResources() =>
+      select(deploymentResources).watch();
 }

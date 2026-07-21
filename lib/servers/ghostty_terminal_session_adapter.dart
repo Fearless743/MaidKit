@@ -473,6 +473,15 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
     );
   }
 
+  void _scrollViewportByPixels(double delta) {
+    _scrollAccumulator += delta;
+    final lines = _scrollAccumulator ~/ _cellHeight;
+    if (lines == 0) return;
+    _scrollAccumulator -= lines * _cellHeight;
+    widget.adapter._terminal.scrollViewport(lines);
+    setState(() {});
+  }
+
   Future<void> _copySelection() async {
     final text = widget.adapter._terminal.formatSelection(trim: true);
     if (text != null && text.isNotEmpty) {
@@ -621,26 +630,44 @@ class _GhosttyTerminalViewState extends State<_GhosttyTerminalView>
               },
               onPointerSignal: (event) {
                 if (event is! PointerScrollEvent) return;
-                _scrollAccumulator += event.scrollDelta.dy;
-                final lines = _scrollAccumulator ~/ _cellHeight;
-                if (lines == 0) return;
-                _scrollAccumulator -= lines * _cellHeight;
-                widget.adapter._terminal.scrollViewport(lines);
-                setState(() {});
+                _scrollViewportByPixels(event.scrollDelta.dy);
               },
+              // Trackpads can report a two-finger gesture as pan/zoom events
+              // rather than wheel-style pointer signals. A pan moves terminal
+              // content in the opposite direction of the fingers, matching a
+              // normal scrollable's drag behavior.
+              onPointerPanZoomUpdate: (event) =>
+                  _scrollViewportByPixels(-event.panDelta.dy),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   _scheduleResize(constraints);
-                  return CustomPaint(
-                    painter: _GhosttyTerminalPainter(
-                      frame,
-                      cursorAnimation: _cursorAnimation,
-                      cursorFrom: _cursorFrom!,
-                      cursorTo: _cursorTo!,
-                      showCursor: widget.showCursor,
-                      findHits: _visibleFindHits(),
-                    ),
-                    child: const SizedBox.expand(),
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomPaint(
+                        painter: _GhosttyTerminalPainter(
+                          frame,
+                          cursorAnimation: _cursorAnimation,
+                          cursorFrom: _cursorFrom!,
+                          cursorTo: _cursorTo!,
+                          showCursor: widget.showCursor,
+                          findHits: _visibleFindHits(),
+                        ),
+                      ),
+                      Positioned(
+                        top: _verticalPadding,
+                        right: 4,
+                        bottom: _verticalPadding,
+                        child: _GhosttyTerminalScrollbar(
+                          scrollbar: widget.adapter._terminal.scrollbar,
+                          onScrollToRow: (row) {
+                            _focusNode.requestFocus();
+                            widget.adapter._terminal.scrollToRow(row);
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -1132,6 +1159,82 @@ class _GhosttyTerminalFrame {
   final int backgroundArgb;
   final int? cursorArgb;
   final String? composingText;
+}
+
+/// A lightweight scrollbar that maps directly to libghostty's row-based
+/// scrollback coordinates. It deliberately overlays the grid so resizing the
+/// terminal does not change when scrollback becomes available.
+class _GhosttyTerminalScrollbar extends StatelessWidget {
+  const _GhosttyTerminalScrollbar({
+    required this.scrollbar,
+    required this.onScrollToRow,
+  });
+
+  static const _width = 10.0;
+  static const _minimumThumbExtent = 24.0;
+
+  final ghostty.Scrollbar scrollbar;
+  final ValueChanged<int> onScrollToRow;
+
+  @override
+  Widget build(BuildContext context) {
+    final maximumOffset = scrollbar.total - scrollbar.visible;
+    if (maximumOffset <= 0) return const SizedBox(width: _width);
+
+    return SizedBox(
+      width: _width,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final trackExtent = constraints.maxHeight;
+          final thumbExtent =
+              (trackExtent * scrollbar.visible / scrollbar.total)
+                  .clamp(_minimumThumbExtent, trackExtent)
+                  .toDouble();
+          final travel = trackExtent - thumbExtent;
+          final thumbTop = travel == 0
+              ? 0.0
+              : travel * scrollbar.offset / maximumOffset;
+
+          void scrollTo(double localY) {
+            final top = (localY - thumbExtent / 2)
+                .clamp(0.0, travel)
+                .toDouble();
+            final row = travel == 0
+                ? 0
+                : (top / travel * maximumOffset).round();
+            onScrollToRow(row);
+          }
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => scrollTo(details.localPosition.dy),
+            onVerticalDragUpdate: (details) =>
+                scrollTo(details.localPosition.dy),
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.center,
+                  child: Container(width: 2, color: Colors.white24),
+                ),
+                Positioned(
+                  top: thumbTop,
+                  left: 2,
+                  right: 2,
+                  height: thumbExtent,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white54,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _GhosttyTerminalCell {

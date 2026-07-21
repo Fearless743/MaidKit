@@ -16,6 +16,9 @@ import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'systemd_models.dart';
 import 'terminal_session_adapter.dart';
+import 'web_server_adapter.dart';
+import 'web_server_adapters.dart';
+import 'web_server_models.dart';
 
 typedef HostKeyApproval = Future<bool> Function(HostKeyPrompt prompt);
 
@@ -805,6 +808,568 @@ cut -d. -f1 /proc/uptime 2>/dev/null || true
       };
       if (result.exitCode != 0) throw StateError(_commandError(result));
     });
+  }
+
+  /// Detects installed web servers (nginx, caddy, …) via registered adapters.
+  Future<List<WebServerDetection>> detectWebServers(
+    int serverId, {
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      final detections = <WebServerDetection>[];
+      for (final adapter in builtInWebServerAdapters) {
+        try {
+          final installed = await adapter.isInstalled(remote);
+          if (!installed) {
+            detections.add(
+              WebServerDetection(
+                adapterId: adapter.id,
+                label: adapter.label,
+                installed: false,
+              ),
+            );
+            continue;
+          }
+          // Unprivileged probe for the picker; full site load is separate.
+          final version = await remote.run(
+            adapter.id == 'nginx' ? 'nginx -v 2>&1' : 'caddy version 2>&1',
+          );
+          final active = await remote.run(
+            'systemctl is-active ${remote.quote(adapter.serviceUnit)} 2>/dev/null || true',
+          );
+          detections.add(
+            WebServerDetection(
+              adapterId: adapter.id,
+              label: adapter.label,
+              installed: true,
+              version: version.combined.trim().isEmpty
+                  ? null
+                  : version.combined.trim().split('\n').first,
+              running: active.output.trim().toLowerCase() == 'active',
+            ),
+          );
+        } catch (_) {
+          detections.add(
+            WebServerDetection(
+              adapterId: adapter.id,
+              label: adapter.label,
+              installed: false,
+            ),
+          );
+        }
+      }
+      return detections;
+    });
+  }
+
+  /// Full status + site listing for one web server adapter.
+  Future<WebServerStatus> getWebServerStatus(
+    int serverId, {
+    required String adapterId,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final adapter = webServerAdapterById(adapterId);
+    if (adapter == null) {
+      throw ArgumentError.value(adapterId, 'adapterId', 'Unknown web server.');
+    }
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      return adapter.loadStatus(remote);
+    });
+  }
+
+  /// Runs a lifecycle action and returns a structured success/failure result.
+  Future<WebServerTaskResult> runWebServerAction(
+    int serverId, {
+    required String adapterId,
+    required WebServerAction action,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    final adapter = _requireWebServerAdapter(adapterId);
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+        onOutput: onOutput,
+      );
+      final title = '${action.englishLabel} ${adapter.label}';
+      final steps = <WebServerTaskStep>[];
+      try {
+        // Pre-validate before reload so a bad config never replaces a live one
+        // without a clear check step in the task log.
+        if (action == WebServerAction.reload) {
+          try {
+            final output = await adapter.validateConfig(remote);
+            final summary = summarizeCommandOutput(output);
+            steps.add(
+              WebServerTaskStep(
+                id: 'validate',
+                label: 'Config check',
+                success: true,
+                detail: summary.isEmpty
+                    ? 'Configuration syntax is valid.'
+                    : summary,
+              ),
+            );
+            onOutput?.call('\n✓ Config check passed.\n');
+          } catch (error) {
+            final detail = summarizeCommandOutput('$error');
+            steps.add(
+              WebServerTaskStep(
+                id: 'validate',
+                label: 'Config check',
+                success: false,
+                detail: detail.isEmpty ? error.toString() : detail,
+              ),
+            );
+            onOutput?.call('\n✗ Config check failed — reload aborted.\n');
+            return WebServerTaskResult(
+              success: false,
+              title: title,
+              summary: detail.isEmpty
+                  ? 'Config check failed; ${adapter.label} was not reloaded.'
+                  : 'Config check failed: $detail',
+              steps: steps,
+              detail: error.toString(),
+            );
+          }
+        }
+
+        await adapter.runAction(remote, action);
+        steps.add(
+          WebServerTaskStep(
+            id: action.name,
+            label: action.englishLabel,
+            success: true,
+            detail: '${adapter.label} ${action.systemctlVerb} completed.',
+          ),
+        );
+
+        // Post-check running state for start/stop/restart/reload.
+        if (action == WebServerAction.start ||
+            action == WebServerAction.stop ||
+            action == WebServerAction.restart ||
+            action == WebServerAction.reload) {
+          final active = await remote.run(
+            'systemctl is-active ${remote.quote(adapter.serviceUnit)} 2>/dev/null || true',
+          );
+          final running = active.output.trim().toLowerCase() == 'active';
+          final expectRunning = action != WebServerAction.stop;
+          final ok = running == expectRunning;
+          steps.add(
+            WebServerTaskStep(
+              id: 'verify',
+              label: 'Service state',
+              success: ok,
+              detail: running
+                  ? '${adapter.serviceUnit} is active.'
+                  : '${adapter.serviceUnit} is ${active.output.trim().isEmpty ? 'inactive' : active.output.trim()}.',
+            ),
+          );
+          if (!ok) {
+            onOutput?.call('\n✗ Service state check failed.\n');
+            return WebServerTaskResult(
+              success: false,
+              title: title,
+              summary: expectRunning
+                  ? '${adapter.label} did not become active after ${action.systemctlVerb}.'
+                  : '${adapter.label} is still active after stop.',
+              steps: steps,
+              detail: active.combined,
+            );
+          }
+          onOutput?.call(
+            running ? '\n✓ Service is active.\n' : '\n✓ Service is stopped.\n',
+          );
+        }
+
+        return WebServerTaskResult(
+          success: true,
+          title: title,
+          summary: switch (action) {
+            WebServerAction.start => '${adapter.label} started and is running.',
+            WebServerAction.stop => '${adapter.label} stopped.',
+            WebServerAction.restart =>
+              '${adapter.label} restarted and is running.',
+            WebServerAction.reload =>
+              '${adapter.label} config reloaded successfully.',
+            WebServerAction.enable => '${adapter.label} enabled on boot.',
+            WebServerAction.disable => '${adapter.label} disabled on boot.',
+          },
+          steps: steps,
+        );
+      } catch (error) {
+        final detail = summarizeCommandOutput('$error');
+        steps.add(
+          WebServerTaskStep(
+            id: action.name,
+            label: action.englishLabel,
+            success: false,
+            detail: detail.isEmpty ? error.toString() : detail,
+          ),
+        );
+        return WebServerTaskResult(
+          success: false,
+          title: title,
+          summary: detail.isEmpty
+              ? 'Failed to ${action.systemctlVerb} ${adapter.label}.'
+              : 'Failed to ${action.systemctlVerb} ${adapter.label}: $detail',
+          steps: steps,
+          detail: error.toString(),
+        );
+      }
+    });
+  }
+
+  /// Validates config and returns a structured result (does not throw on fail).
+  Future<WebServerTaskResult> validateWebServerConfig(
+    int serverId, {
+    required String adapterId,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    final adapter = _requireWebServerAdapter(adapterId);
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+        onOutput: onOutput,
+      );
+      final title = 'Validate ${adapter.label}';
+      try {
+        final output = await adapter.validateConfig(remote);
+        final summary = summarizeCommandOutput(output);
+        onOutput?.call('\n✓ Configuration is valid.\n');
+        return WebServerTaskResult(
+          success: true,
+          title: title,
+          summary: summary.isEmpty
+              ? '${adapter.label} configuration is valid.'
+              : summary,
+          steps: [
+            WebServerTaskStep(
+              id: 'validate',
+              label: 'Config check',
+              success: true,
+              detail: summary.isEmpty
+                  ? 'Configuration syntax is valid.'
+                  : summary,
+            ),
+          ],
+          detail: output,
+        );
+      } catch (error) {
+        final detail = summarizeCommandOutput('$error');
+        onOutput?.call('\n✗ Configuration check failed.\n');
+        return WebServerTaskResult(
+          success: false,
+          title: title,
+          summary: detail.isEmpty
+              ? '${adapter.label} configuration is invalid.'
+              : detail,
+          steps: [
+            WebServerTaskStep(
+              id: 'validate',
+              label: 'Config check',
+              success: false,
+              detail: detail.isEmpty ? error.toString() : detail,
+            ),
+          ],
+          detail: error.toString(),
+        );
+      }
+    });
+  }
+
+  Future<String> readWebServerConfig(
+    int serverId, {
+    required String adapterId,
+    String? siteId,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final adapter = _requireWebServerAdapter(adapterId);
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      final text = await adapter.readConfig(remote, siteId: siteId);
+      final bytes = utf8.encode(text);
+      if (bytes.length > webServerMaxEditableBytes) {
+        throw StateError(
+          'Config is larger than 1 MB and cannot be opened in the editor.',
+        );
+      }
+      return text;
+    });
+  }
+
+  /// Writes config, optionally validates and reloads. Structured task result.
+  Future<WebServerTaskResult> applyWebServerConfig(
+    int serverId, {
+    required String adapterId,
+    required String content,
+    required WebServerApplyMode mode,
+    String? siteId,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) async {
+    final adapter = _requireWebServerAdapter(adapterId);
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+        onOutput: onOutput,
+      );
+      final title = switch (mode) {
+        WebServerApplyMode.saveOnly => 'Save ${adapter.label} config',
+        WebServerApplyMode.saveAndValidate => 'Save & check ${adapter.label}',
+        WebServerApplyMode.saveValidateReload =>
+          'Save, check & reload ${adapter.label}',
+      };
+      final steps = <WebServerTaskStep>[];
+
+      try {
+        await adapter.writeConfig(remote, content: content, siteId: siteId);
+        steps.add(
+          const WebServerTaskStep(
+            id: 'save',
+            label: 'Save',
+            success: true,
+            detail: 'Config written to disk.',
+          ),
+        );
+        onOutput?.call('\n✓ Config saved.\n');
+      } catch (error) {
+        final detail = summarizeCommandOutput('$error');
+        steps.add(
+          WebServerTaskStep(
+            id: 'save',
+            label: 'Save',
+            success: false,
+            detail: detail.isEmpty ? error.toString() : detail,
+          ),
+        );
+        return WebServerTaskResult(
+          success: false,
+          title: title,
+          summary: detail.isEmpty
+              ? 'Failed to write ${adapter.label} config.'
+              : 'Failed to write config: $detail',
+          steps: steps,
+          detail: error.toString(),
+        );
+      }
+
+      if (mode == WebServerApplyMode.saveOnly) {
+        return WebServerTaskResult(
+          success: true,
+          title: title,
+          summary: '${adapter.label} config saved.',
+          steps: steps,
+        );
+      }
+
+      try {
+        final output = await adapter.validateConfig(remote);
+        final summary = summarizeCommandOutput(output);
+        steps.add(
+          WebServerTaskStep(
+            id: 'validate',
+            label: 'Config check',
+            success: true,
+            detail: summary.isEmpty
+                ? 'Configuration syntax is valid.'
+                : summary,
+          ),
+        );
+        onOutput?.call('\n✓ Config check passed.\n');
+      } catch (error) {
+        final detail = summarizeCommandOutput('$error');
+        steps.add(
+          WebServerTaskStep(
+            id: 'validate',
+            label: 'Config check',
+            success: false,
+            detail: detail.isEmpty ? error.toString() : detail,
+          ),
+        );
+        onOutput?.call('\n✗ Config check failed — reload skipped.\n');
+        return WebServerTaskResult(
+          success: false,
+          title: title,
+          summary: detail.isEmpty
+              ? 'Config saved but check failed. Service was not reloaded.'
+              : 'Config saved but check failed: $detail',
+          steps: steps,
+          detail: error.toString(),
+        );
+      }
+
+      if (mode == WebServerApplyMode.saveAndValidate) {
+        return WebServerTaskResult(
+          success: true,
+          title: title,
+          summary: '${adapter.label} config saved and validated.',
+          steps: steps,
+        );
+      }
+
+      try {
+        await adapter.runAction(remote, WebServerAction.reload);
+        steps.add(
+          WebServerTaskStep(
+            id: 'reload',
+            label: 'Reload',
+            success: true,
+            detail: '${adapter.label} reloaded.',
+          ),
+        );
+        final active = await remote.run(
+          'systemctl is-active ${remote.quote(adapter.serviceUnit)} 2>/dev/null || true',
+        );
+        final running = active.output.trim().toLowerCase() == 'active';
+        steps.add(
+          WebServerTaskStep(
+            id: 'verify',
+            label: 'Service state',
+            success: running,
+            detail: running
+                ? '${adapter.serviceUnit} is active.'
+                : '${adapter.serviceUnit} is not active after reload.',
+          ),
+        );
+        if (!running) {
+          onOutput?.call('\n✗ Service is not active after reload.\n');
+          return WebServerTaskResult(
+            success: false,
+            title: title,
+            summary:
+                'Config saved and valid, but ${adapter.label} is not active after reload.',
+            steps: steps,
+            detail: active.combined,
+          );
+        }
+        onOutput?.call('\n✓ Config reloaded; service is active.\n');
+        return WebServerTaskResult(
+          success: true,
+          title: title,
+          summary: '${adapter.label} config saved, validated, and reloaded.',
+          steps: steps,
+        );
+      } catch (error) {
+        final detail = summarizeCommandOutput('$error');
+        steps.add(
+          WebServerTaskStep(
+            id: 'reload',
+            label: 'Reload',
+            success: false,
+            detail: detail.isEmpty ? error.toString() : detail,
+          ),
+        );
+        return WebServerTaskResult(
+          success: false,
+          title: title,
+          summary: detail.isEmpty
+              ? 'Config valid but reload failed.'
+              : 'Config valid but reload failed: $detail',
+          steps: steps,
+          detail: error.toString(),
+        );
+      }
+    });
+  }
+
+  Future<String> getWebServerLogs(
+    int serverId, {
+    required String adapterId,
+    int lines = 200,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    final adapter = _requireWebServerAdapter(adapterId);
+    return withClient(serverId, (client) async {
+      final remote = _webServerRemote(
+        client,
+        sshUserIsRoot: sshUserIsRoot,
+        sudoPassword: sudoPassword,
+      );
+      return adapter.getLogs(remote, lines: lines);
+    });
+  }
+
+  WebServerAdapter _requireWebServerAdapter(String adapterId) {
+    final adapter = webServerAdapterById(adapterId);
+    if (adapter == null) {
+      throw ArgumentError.value(adapterId, 'adapterId', 'Unknown web server.');
+    }
+    return adapter;
+  }
+
+  WebServerRemote _webServerRemote(
+    SSHClient client, {
+    required bool sshUserIsRoot,
+    String? sudoPassword,
+    void Function(String chunk)? onOutput,
+  }) {
+    return _SshWebServerRemote(
+      execute: (command, {privileged = false, stdinPayload}) async {
+        onOutput?.call('\$ $command\n');
+        final _CommandResult result;
+        if (!privileged) {
+          result = await _execute(client, command, stdin: stdinPayload);
+        } else {
+          final prefix = _rootPrefix(sshUserIsRoot, sudoPassword);
+          // sudo -S reads the password as the first stdin line; remaining
+          // bytes are available to the command (used by tee for file writes).
+          final String? stdin;
+          if (sshUserIsRoot) {
+            stdin = stdinPayload;
+          } else if (sudoPassword == null) {
+            stdin = stdinPayload;
+          } else if (stdinPayload == null) {
+            stdin = sudoPassword;
+          } else {
+            stdin = '$sudoPassword\n$stdinPayload';
+          }
+          result = await _execute(client, '$prefix$command', stdin: stdin);
+        }
+        final mapped = WebServerCommandResult(
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        );
+        final combined = mapped.combined.trim();
+        if (combined.isNotEmpty) {
+          onOutput?.call(combined.endsWith('\n') ? combined : '$combined\n');
+        }
+        if (result.exitCode != 0) {
+          onOutput?.call('[exit ${result.exitCode}]\n');
+        }
+        return mapped;
+      },
+      quoteFn: _shellSingleQuote,
+    );
   }
 
   String _rootPrefix(bool sshUserIsRoot, String? sudoPassword) {
@@ -2705,10 +3270,7 @@ class _TerminalConnection {
 
 /// Handle for a live `logs -f` stream. Call [cancel] to stop the remote process.
 class LogFollowHandle {
-  LogFollowHandle._({
-    required this.done,
-    required this._cancel,
-  });
+  LogFollowHandle._({required this.done, required this._cancel});
 
   /// Completes when the remote log process exits or is cancelled.
   final Future<void> done;
@@ -2753,4 +3315,27 @@ class _CommandResult {
   final String stdout;
   final String stderr;
   final int exitCode;
+}
+
+/// Bridges [SshConnectionManager] command execution to [WebServerRemote].
+class _SshWebServerRemote implements WebServerRemote {
+  _SshWebServerRemote({required this.execute, required this.quoteFn});
+
+  final Future<WebServerCommandResult> Function(
+    String command, {
+    bool privileged,
+    String? stdinPayload,
+  })
+  execute;
+  final String Function(String value) quoteFn;
+
+  @override
+  Future<WebServerCommandResult> run(
+    String command, {
+    bool privileged = false,
+    String? stdinPayload,
+  }) => execute(command, privileged: privileged, stdinPayload: stdinPayload);
+
+  @override
+  String quote(String value) => quoteFn(value);
 }
