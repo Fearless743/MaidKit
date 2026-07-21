@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -11,7 +12,9 @@ import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/servers/systemd_models.dart';
 import 'package:maid_kit/shared/presentation/cloud_file_picker.dart';
+import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
 import 'container_list_tile.dart';
 import 'compose_project_actions.dart';
@@ -581,7 +584,7 @@ class _ProjectEditDialogState extends State<_ProjectEditDialog> {
   );
 }
 
-class _ResourceTile extends ConsumerWidget {
+class _ResourceTile extends ConsumerStatefulWidget {
   const _ResourceTile({
     required this.resource,
     this.serverName,
@@ -594,16 +597,447 @@ class _ResourceTile extends ConsumerWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ResourceTile> createState() => _ResourceTileState();
+}
+
+class _ResourceTileState extends ConsumerState<_ResourceTile> {
+  var _expanded = false;
+  var _busy = false;
+
+  DeploymentResource get resource => widget.resource;
+  Server? get server => widget.server;
+
+  Map<String, Object?> get config => _configuration(resource.configuration);
+  DeploymentResourceKind get kind =>
+      deploymentResourceKindFromId(resource.kind);
+
+  /// Portable JSON plus fields resolved from a linked [ComposeProjectLink]
+  /// (migrated resources often only store `compose_link_id`).
+  Map<String, Object?> get effectiveConfig {
+    final base = Map<String, Object?>.of(config);
+    final link = _composeLink;
+    if (link == null) return base;
+    base.putIfAbsent('directory', () => link.directory);
+    base.putIfAbsent('runtime', () => link.runtime);
+    base.putIfAbsent('scope', () => link.scope);
+    base.putIfAbsent('compose_project', () => link.name);
+    if ('${base['directory'] ?? ''}'.trim().isEmpty) {
+      base['directory'] = link.directory;
+    }
+    if ('${base['runtime'] ?? ''}'.trim().isEmpty) {
+      base['runtime'] = link.runtime;
+    }
+    if ('${base['scope'] ?? ''}'.trim().isEmpty) {
+      base['scope'] = link.scope;
+    }
+    if ('${base['compose_project'] ?? ''}'.trim().isEmpty) {
+      base['compose_project'] = link.name;
+    }
+    return base;
+  }
+
+  ComposeProjectLink? get _composeLink {
+    final raw = config['compose_link_id'];
+    if (raw == null) return null;
+    final linkId = raw is int ? raw : int.tryParse('$raw');
+    if (linkId == null) return null;
+    final links =
+        ref.watch(composeProjectLinksProvider).asData?.value ??
+        const <ComposeProjectLink>[];
+    return links.where((item) => item.id == linkId).firstOrNull;
+  }
+
+  ContainerRuntime get _runtime => _runtimeFrom(effectiveConfig);
+  ContainerScope get _scope => _scopeFrom(effectiveConfig);
+
+  String get _composeName =>
+      '${effectiveConfig['compose_project'] ?? resource.name}'.trim();
+  String get _composeDirectory =>
+      '${effectiveConfig['directory'] ?? ''}'.trim();
+  bool get _composeReady =>
+      server != null && _composeDirectory.isNotEmpty && _composeName.isNotEmpty;
+  String get _containerRef =>
+      '${effectiveConfig['container'] ?? resource.name}'.trim();
+  String get _systemdUnit {
+    final unit =
+        '${effectiveConfig['unit'] ?? effectiveConfig['service_unit'] ?? ''}'
+            .trim();
+    if (unit.isNotEmpty) return unit;
+    if (kind == DeploymentResourceKind.systemdService) return resource.name;
+    return '';
+  }
+
+  List<_QuickActionSpec> get _quickActions {
+    if (server == null) return const [];
+    return switch (kind) {
+      DeploymentResourceKind.compose => [
+        _QuickActionSpec(
+          id: 'compose_up',
+          label: 'Start',
+          icon: Symbols.play_arrow,
+          enabled: _composeReady,
+        ),
+        _QuickActionSpec(
+          id: 'compose_pull',
+          label: 'Pull images',
+          icon: Symbols.download,
+          enabled: _composeReady,
+        ),
+        _QuickActionSpec(
+          id: 'compose_restart',
+          label: 'Restart',
+          icon: Symbols.restart_alt,
+          enabled: _composeReady,
+        ),
+        _QuickActionSpec(
+          id: 'compose_logs',
+          label: 'Logs',
+          icon: Symbols.terminal,
+          enabled: _composeReady,
+        ),
+        _QuickActionSpec(
+          id: 'compose_stop',
+          label: 'Stop',
+          icon: Symbols.stop,
+          enabled: _composeReady,
+        ),
+      ],
+      DeploymentResourceKind.container => [
+        _QuickActionSpec(
+          id: 'container_restart',
+          label: 'Restart',
+          icon: Symbols.restart_alt,
+          enabled: _containerRef.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'container_logs',
+          label: 'Logs',
+          icon: Symbols.terminal,
+          enabled: _containerRef.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'container_start',
+          label: 'Start',
+          icon: Symbols.play_arrow,
+          enabled: _containerRef.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'container_stop',
+          label: 'Stop',
+          icon: Symbols.stop,
+          enabled: _containerRef.isNotEmpty,
+        ),
+      ],
+      DeploymentResourceKind.systemdService ||
+      DeploymentResourceKind.webServer => [
+        _QuickActionSpec(
+          id: 'systemd_status',
+          label: 'Status',
+          icon: Symbols.info,
+          enabled: _systemdUnit.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'systemd_logs',
+          label: 'Logs',
+          icon: Symbols.terminal,
+          enabled: _systemdUnit.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'systemd_restart',
+          label: 'Restart',
+          icon: Symbols.restart_alt,
+          enabled: _systemdUnit.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'systemd_start',
+          label: 'Start',
+          icon: Symbols.play_arrow,
+          enabled: _systemdUnit.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'systemd_stop',
+          label: 'Stop',
+          icon: Symbols.stop,
+          enabled: _systemdUnit.isNotEmpty,
+        ),
+      ],
+      _ => const [],
+    };
+  }
+
+  Future<String?> _sudoPassword() async {
+    final host = server;
+    if (host == null) return null;
+    final credential = await ref
+        .read(serverRepositoryProvider)
+        .credentialFor(host);
+    return credential.type == CredentialType.password
+        ? credential.password
+        : null;
+  }
+
+  Future<void> _runQuickAction(String id) async {
+    final host = server;
+    if (host == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      switch (id) {
+        case 'compose_up':
+          await _runCompose(ComposeProjectAction.up);
+        case 'compose_pull':
+          await _runCompose(ComposeProjectAction.pull);
+        case 'compose_restart':
+          await _runCompose(ComposeProjectAction.restart);
+        case 'compose_stop':
+          await _runCompose(ComposeProjectAction.stop);
+        case 'compose_logs':
+          await _showComposeLogs();
+        case 'container_start':
+          await _runContainer(ContainerAction.start);
+        case 'container_stop':
+          await _runContainer(ContainerAction.stop);
+        case 'container_restart':
+          await _runContainer(ContainerAction.restart);
+        case 'container_logs':
+          await _showContainerLogs();
+        case 'systemd_status':
+          await _showSystemdStatus();
+        case 'systemd_logs':
+          await _showSystemdLogs();
+        case 'systemd_start':
+          await _runSystemd(SystemdUnitAction.start);
+        case 'systemd_stop':
+          await _runSystemd(SystemdUnitAction.stop);
+        case 'systemd_restart':
+          await _runSystemd(SystemdUnitAction.restart);
+      }
+    } catch (error) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: '$error',
+          title: 'Action failed',
+          icon: Symbols.error,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _runCompose(ComposeProjectAction action) async {
+    final host = server!;
+    if (!_composeReady) {
+      throw StateError(
+        'Compose directory is missing. Re-link this stack with a remote path, '
+        'or restore the original Compose project link.',
+      );
+    }
+    await runComposeProjectActionWithTerminal(
+      ref: ref,
+      serverId: host.id,
+      serverName: host.name,
+      runtime: _runtime,
+      scope: _scope,
+      projectName: _composeName,
+      directory: _composeDirectory,
+      action: action,
+      sudoPassword: await _sudoPassword(),
+    );
+  }
+
+  Future<void> _runContainer(ContainerAction action) async {
+    final host = server!;
+    if (_containerRef.isEmpty) {
+      throw StateError('Container name is not set for this resource.');
+    }
+    await ref
+        .read(connectionManagerProvider)
+        .runContainerAction(
+          host.id,
+          runtime: _runtime,
+          scope: _scope,
+          containerId: _containerRef,
+          action: action,
+          sudoPassword: await _sudoPassword(),
+        );
+    if (mounted) {
+      showStyledSnackBar(
+        message: resource.name,
+        title: 'Container ${action.pastLabel}',
+        icon: Symbols.check_circle,
+      );
+    }
+  }
+
+  Future<void> _runSystemd(SystemdUnitAction action) async {
+    final host = server!;
+    final unit = _systemdUnit;
+    if (unit.isEmpty) {
+      throw StateError('Systemd unit is not set for this resource.');
+    }
+    await ref
+        .read(connectionManagerProvider)
+        .runSystemdUnitAction(
+          host.id,
+          unit: unit,
+          action: action,
+          sshUserIsRoot: host.username == 'root',
+          sudoPassword: await _sudoPassword(),
+        );
+    if (mounted) {
+      final past = switch (action) {
+        SystemdUnitAction.start => 'started',
+        SystemdUnitAction.stop => 'stopped',
+        SystemdUnitAction.restart => 'restarted',
+        SystemdUnitAction.reload => 'reloaded',
+        SystemdUnitAction.enable => 'enabled',
+        SystemdUnitAction.disable => 'disabled',
+      };
+      showStyledSnackBar(
+        message: unit,
+        title: 'Service $past',
+        icon: Symbols.check_circle,
+      );
+    }
+  }
+
+  Future<void> _showComposeLogs() async {
+    final host = server!;
+    if (!_composeReady) {
+      throw StateError(
+        'Compose directory is missing. Re-link this stack with a remote path, '
+        'or restore the original Compose project link.',
+      );
+    }
+    await _showRemoteText(
+      title: 'Logs · $_composeName',
+      load: () async {
+        final sudo = await _sudoPassword();
+        return ref
+            .read(connectionManagerProvider)
+            .readComposeProjectLogs(
+              host.id,
+              runtime: _runtime,
+              scope: _scope,
+              projectName: _composeName,
+              directory: _composeDirectory,
+              sudoPassword: sudo,
+            );
+      },
+    );
+  }
+
+  Future<void> _showContainerLogs() async {
+    final host = server!;
+    await _showRemoteText(
+      title: 'Logs · $_containerRef',
+      load: () async {
+        final sudo = await _sudoPassword();
+        return ref
+            .read(connectionManagerProvider)
+            .readContainerLogs(
+              host.id,
+              runtime: _runtime,
+              scope: _scope,
+              containerId: _containerRef,
+              sudoPassword: sudo,
+            );
+      },
+    );
+  }
+
+  Future<void> _showSystemdStatus() async {
+    final host = server!;
+    final unit = _systemdUnit;
+    await _showRemoteText(
+      title: 'Status · $unit',
+      load: () async {
+        final sudo = await _sudoPassword();
+        return ref
+            .read(connectionManagerProvider)
+            .getSystemdUnitStatus(
+              host.id,
+              unit: unit,
+              sshUserIsRoot: host.username == 'root',
+              sudoPassword: sudo,
+            );
+      },
+    );
+  }
+
+  Future<void> _showSystemdLogs() async {
+    final host = server!;
+    final unit = _systemdUnit;
+    await _showRemoteText(
+      title: 'Logs · $unit',
+      load: () async {
+        final sudo = await _sudoPassword();
+        return ref
+            .read(connectionManagerProvider)
+            .getSystemdUnitLogs(
+              host.id,
+              unit: unit,
+              sshUserIsRoot: host.username == 'root',
+              sudoPassword: sudo,
+            );
+      },
+    );
+  }
+
+  Future<void> _showRemoteText({
+    required String title,
+    required Future<String> Function() load,
+  }) async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (_) => _RemoteTextSheet(title: title, load: load),
+    );
+  }
+
+  void _openOnServer() {
+    final host = server;
+    if (host == null) return;
+    if (kind == DeploymentResourceKind.serverFolder) {
+      pickRemotePaths(
+        context,
+        ref,
+        host,
+        title: resource.name,
+        initialPath: '${effectiveConfig['path'] ?? '.'}',
+        selection: CloudFilePickerSelection.fileOrFolder,
+      );
+      return;
+    }
+    context.router.root.push(
+      ServerDetailRoute(
+        server: host,
+        initialTab: _serverTabFor(kind),
+        initialComposeProject: kind == DeploymentResourceKind.compose
+            ? _composeName
+            : null,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final kind = deploymentResourceKindFromId(resource.kind);
-    final config = _configuration(resource.configuration);
-    final configSummary = deploymentResourceConfigSummary(config);
+    final theme = Theme.of(context);
+    final configSummary = deploymentResourceConfigSummary(effectiveConfig);
     final subtitleParts = <String>[
       deploymentResourceKindLabel(kind),
-      ?serverName,
+      ?widget.serverName,
       if (configSummary.isNotEmpty) configSummary,
     ];
+    final actions = _quickActions;
+    // Show the most useful actions as chips; remainder stay in overflow menu.
+    final primary = actions.take(4).toList();
+    final overflow = actions.skip(4).toList();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -612,113 +1046,338 @@ class _ResourceTile extends ConsumerWidget {
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: scheme.outlineVariant),
       ),
-      child: ExpansionTile(
-        shape: const Border(),
-        collapsedShape: const Border(),
-        leading: Icon(deploymentResourceKindIcon(kind), color: scheme.primary),
-        title: Text(resource.name),
-        subtitle: Text(
-          subtitleParts.join(' · '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: IconButton(
-          tooltip: 'Remove from project',
-          icon: const Icon(Symbols.close),
-          onPressed: onDelete,
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (kind == DeploymentResourceKind.server && server != null)
-            _ServerLivePanel(server: server!),
-          if (kind == DeploymentResourceKind.compose && server != null)
-            _ComposeLivePanel(
-              server: server!,
-              resource: resource,
-              configuration: config,
-            ),
-          if (config.isNotEmpty) ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Configuration',
-                style: Theme.of(context).textTheme.labelMedium,
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+              child: Row(
+                children: [
+                  Icon(deploymentResourceKindIcon(kind), color: scheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(resource.name, style: theme.textTheme.titleSmall),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitleParts.join(' · '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_busy)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  Icon(
+                    _expanded ? Symbols.expand_less : Symbols.expand_more,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  IconButton(
+                    tooltip: 'Remove from project',
+                    icon: const Icon(Symbols.close),
+                    onPressed: widget.onDelete,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 6),
-            ...config.entries.map(
-              (entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 120,
-                      child: Text(
-                        entry.key,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+          ),
+          if (actions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final action in primary)
+                    OutlinedButton.icon(
+                      onPressed: _busy || !action.enabled
+                          ? null
+                          : () => _runQuickAction(action.id),
+                      icon: Icon(action.icon, size: 16),
+                      label: Text(action.label),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                    ),
+                  if (overflow.isNotEmpty)
+                    PopupMenuButton<String>(
+                      tooltip: 'More actions',
+                      enabled: !_busy,
+                      onSelected: _runQuickAction,
+                      itemBuilder: (_) => [
+                        for (final action in overflow)
+                          PopupMenuItem(
+                            value: action.id,
+                            enabled: action.enabled,
+                            child: Text(action.label),
+                          ),
+                      ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Symbols.more_horiz,
+                              size: 18,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'More',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    Expanded(
+                ],
+              ),
+            ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Divider(height: 1, color: scheme.outlineVariant),
+                  const SizedBox(height: 12),
+                  if (kind == DeploymentResourceKind.compose && server != null)
+                    _ComposeLivePanel(
+                      server: server!,
+                      resource: resource,
+                      configuration: effectiveConfig,
+                    ),
+                  if (!_composeReady && kind == DeploymentResourceKind.compose)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
-                        _formatConfigValue(entry.value),
-                        style: Theme.of(context).textTheme.bodySmall,
+                        'This Compose resource is missing a remote directory. '
+                        'Expand configuration below or re-add the stack with a path.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.error,
+                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ] else if (kind != DeploymentResourceKind.server)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Text('No portable configuration recorded.'),
-              ),
-            ),
-          if (server != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  if (kind == DeploymentResourceKind.serverFolder) {
-                    pickRemotePaths(
-                      context,
-                      ref,
-                      server!,
-                      title: resource.name,
-                      initialPath: '${config['path'] ?? '.'}',
-                      selection: CloudFilePickerSelection.fileOrFolder,
-                    );
-                    return;
-                  }
-                  context.router.root.push(
-                    ServerDetailRoute(
-                      server: server!,
-                      initialTab: _serverTabFor(kind),
-                      initialComposeProject:
-                          kind == DeploymentResourceKind.compose
-                          ? '${config['compose_project'] ?? resource.name}'
-                          : null,
+                  if (effectiveConfig.isNotEmpty) ...[
+                    Text('Configuration', style: theme.textTheme.labelMedium),
+                    const SizedBox(height: 6),
+                    ...effectiveConfig.entries.map(
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 120,
+                              child: Text(
+                                entry.key,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                _formatConfigValue(entry.value),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  );
-                },
-                icon: const Icon(Symbols.open_in_new, size: 18),
-                label: Text(
-                  kind == DeploymentResourceKind.serverFolder
-                      ? 'Browse ${server!.name}'
-                      : 'Open on ${server!.name}',
-                ),
+                    const SizedBox(height: 8),
+                  ] else
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text('No portable configuration recorded.'),
+                    ),
+                  if (server != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _openOnServer,
+                        icon: const Icon(Symbols.open_in_new, size: 18),
+                        label: Text(
+                          kind == DeploymentResourceKind.serverFolder
+                              ? 'Browse ${server!.name}'
+                              : 'Open on ${server!.name}',
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
         ],
       ),
     );
   }
+}
+
+class _QuickActionSpec {
+  const _QuickActionSpec({
+    required this.id,
+    required this.label,
+    required this.icon,
+    this.enabled = true,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final bool enabled;
+}
+
+class _RemoteTextSheet extends StatefulWidget {
+  const _RemoteTextSheet({required this.title, required this.load});
+
+  final String title;
+  final Future<String> Function() load;
+
+  @override
+  State<_RemoteTextSheet> createState() => _RemoteTextSheetState();
+}
+
+class _RemoteTextSheetState extends State<_RemoteTextSheet> {
+  late Future<String> _future;
+  String? _text;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() {
+    _text = null;
+    _future = widget.load().then((value) {
+      if (mounted) setState(() => _text = value);
+      return value;
+    });
+  }
+
+  Future<void> _copy() async {
+    final text = _text;
+    if (text == null || text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    showStyledSnackBar(
+      message: 'Copied to clipboard',
+      title: widget.title,
+      icon: Symbols.content_copy,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final canCopy = _text != null && _text!.isNotEmpty;
+    return SheetScaffold(
+      titleText: widget.title,
+      heightFactor: 0.78,
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: () => setState(_reload),
+          icon: const Icon(Symbols.refresh),
+          style: IconButton.styleFrom(minimumSize: const Size(36, 36)),
+        ),
+        IconButton(
+          tooltip: 'Copy',
+          onPressed: canCopy ? _copy : null,
+          icon: const Icon(Symbols.content_copy),
+          style: IconButton.styleFrom(minimumSize: const Size(36, 36)),
+        ),
+      ],
+      child: FutureBuilder<String>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Could not load: ${snapshot.error}',
+                    style: TextStyle(color: scheme.error),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonal(
+                      onPressed: () => setState(_reload),
+                      child: const Text('Retry'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          final text = snapshot.data ?? '';
+          if (text.trim().isEmpty) {
+            return const Center(child: Text('No output.'));
+          }
+          return SelectionArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Text(
+                text,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontFamily: MaidKitFonts.mono,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+ContainerRuntime _runtimeFrom(Map<String, Object?> config) {
+  final raw = '${config['runtime'] ?? 'docker'}';
+  return ContainerRuntime.values.firstWhere(
+    (value) => value.name == raw,
+    orElse: () => ContainerRuntime.docker,
+  );
+}
+
+ContainerScope _scopeFrom(Map<String, Object?> config) {
+  final raw = '${config['scope'] ?? 'user'}';
+  return ContainerScope.values.firstWhere(
+    (value) => value.name == raw,
+    orElse: () => ContainerScope.user,
+  );
 }
 
 String _formatConfigValue(Object? value) {
@@ -742,81 +1401,6 @@ String _formatConfigValue(Object? value) {
   }
   final text = '$value'.trim();
   return text.isEmpty ? '—' : text;
-}
-
-class _ServerLivePanel extends ConsumerWidget {
-  const _ServerLivePanel({required this.server});
-  final Server server;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref
-        .watch(sessionsProvider)
-        .asData
-        ?.value
-        .where((item) => item.serverId == server.id)
-        .firstOrNull;
-    final stats = session?.stats;
-    final connected = session?.status == SessionStatus.connected;
-    final memoryUsed =
-        stats?.memoryTotalKb == null || stats?.memoryAvailableKb == null
-        ? null
-        : stats!.memoryTotalKb! - stats.memoryAvailableKb!;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Live server', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _LiveMetric(
-                label: connected ? 'Connected' : 'Not connected',
-                value: '${server.username}@${server.host}',
-              ),
-              if (stats?.loadAverage != null)
-                _LiveMetric(
-                  label: 'Load',
-                  value: stats!.loadAverage!.toStringAsFixed(2),
-                ),
-              if (memoryUsed != null && stats?.memoryTotalKb != null)
-                _LiveMetric(
-                  label: 'Memory',
-                  value:
-                      '${(memoryUsed / 1024).toStringAsFixed(0)} / ${(stats!.memoryTotalKb! / 1024).toStringAsFixed(0)} MB',
-                ),
-              if (stats?.uptime != null)
-                _LiveMetric(
-                  label: 'Uptime',
-                  value: '${stats!.uptime!.inHours}h',
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiveMetric extends StatelessWidget {
-  const _LiveMetric({required this.label, required this.value});
-  final String label;
-  final String value;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-    decoration: BoxDecoration(
-      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      '$label: $value',
-      style: Theme.of(context).textTheme.labelSmall,
-    ),
-  );
 }
 
 class _ComposeLivePanel extends ConsumerStatefulWidget {
@@ -861,30 +1445,116 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
     ];
   }
 
-  Future<void> _run(ComposeProjectAction action) async {
-    final directory = '${widget.configuration['directory'] ?? ''}'.trim();
-    if (directory.isEmpty) return;
+  ContainerRuntime get _runtime => _runtimeFrom(widget.configuration);
+  ContainerScope get _scope => _scopeFrom(widget.configuration);
+  String get _directory => '${widget.configuration['directory'] ?? ''}'.trim();
+
+  Future<String?> _sudoPassword() async {
     final credential = await ref
         .read(serverRepositoryProvider)
         .credentialFor(widget.server);
+    return credential.type == CredentialType.password
+        ? credential.password
+        : null;
+  }
+
+  Future<void> _run(ComposeProjectAction action) async {
+    if (_directory.isEmpty) return;
     await runComposeProjectActionWithTerminal(
       ref: ref,
       serverId: widget.server.id,
       serverName: widget.server.name,
-      runtime: ContainerRuntime.values.byName(
-        '${widget.configuration['runtime'] ?? 'docker'}',
-      ),
-      scope: ContainerScope.values.byName(
-        '${widget.configuration['scope'] ?? 'user'}',
-      ),
+      runtime: _runtime,
+      scope: _scope,
       projectName: _name,
-      directory: directory,
+      directory: _directory,
       action: action,
-      sudoPassword: credential.type == CredentialType.password
-          ? credential.password
-          : null,
+      sudoPassword: await _sudoPassword(),
     );
     if (mounted) setState(() => _containers = _load());
+  }
+
+  Future<void> _showStackLogs() async {
+    if (_directory.isEmpty || !mounted) return;
+    final sudo = await _sudoPassword();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (_) => _RemoteTextSheet(
+        title: 'Logs · $_name',
+        load: () => ref
+            .read(connectionManagerProvider)
+            .readComposeProjectLogs(
+              widget.server.id,
+              runtime: _runtime,
+              scope: _scope,
+              projectName: _name,
+              directory: _directory,
+              sudoPassword: sudo,
+            ),
+      ),
+    );
+  }
+
+  Future<void> _containerAction(
+    ServerContainer container,
+    ContainerAction action,
+  ) async {
+    try {
+      await ref
+          .read(connectionManagerProvider)
+          .runContainerAction(
+            widget.server.id,
+            runtime: _runtime,
+            scope: _scope,
+            containerId: container.id,
+            action: action,
+            sudoPassword: await _sudoPassword(),
+          );
+      if (mounted) {
+        showStyledSnackBar(
+          message: container.name,
+          title: 'Container ${action.pastLabel}',
+          icon: Symbols.check_circle,
+        );
+        setState(() => _containers = _load());
+      }
+    } catch (error) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: '$error',
+          title: 'Action failed',
+          icon: Symbols.error,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _containerLogs(ServerContainer container) async {
+    final sudo = await _sudoPassword();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (_) => _RemoteTextSheet(
+        title: 'Logs · ${container.name}',
+        load: () => ref
+            .read(connectionManagerProvider)
+            .readContainerLogs(
+              widget.server.id,
+              runtime: _runtime,
+              scope: _scope,
+              containerId: container.id,
+              sudoPassword: sudo,
+            ),
+      ),
+    );
   }
 
   @override
@@ -899,6 +1569,12 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
             children: [
               Text('Live stack', style: Theme.of(context).textTheme.titleSmall),
               const Spacer(),
+              if (_directory.isNotEmpty)
+                IconButton(
+                  tooltip: 'Stack logs',
+                  icon: const Icon(Symbols.terminal, size: 18),
+                  onPressed: _showStackLogs,
+                ),
               if (snapshot.connectionState == ConnectionState.done)
                 IconButton(
                   tooltip: 'Refresh containers',
@@ -915,8 +1591,9 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
           else if (snapshot.data!.isEmpty)
             const Text('No containers currently match this Compose project.')
           else
-            ...snapshot.data!.map(
-              (item) => ContainerListTile(
+            ...snapshot.data!.map((item) {
+              final running = isContainerRunning(item);
+              return ContainerListTile(
                 container: item,
                 contentPadding: EdgeInsets.zero,
                 onOpen: () => context.router.root.push(
@@ -926,23 +1603,56 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                     initialComposeProject: _name,
                   ),
                 ),
-              ),
-            ),
-          if ('${widget.configuration['directory'] ?? ''}'.isNotEmpty) ...[
+                trailing: PopupMenuButton<String>(
+                  tooltip: 'Container actions',
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'restart':
+                        _containerAction(item, ContainerAction.restart);
+                      case 'start':
+                        _containerAction(item, ContainerAction.start);
+                      case 'stop':
+                        _containerAction(item, ContainerAction.stop);
+                      case 'logs':
+                        _containerLogs(item);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (running)
+                      const PopupMenuItem(
+                        value: 'restart',
+                        child: Text('Restart'),
+                      ),
+                    if (running)
+                      const PopupMenuItem(value: 'stop', child: Text('Stop'))
+                    else
+                      const PopupMenuItem(value: 'start', child: Text('Start')),
+                    const PopupMenuItem(value: 'logs', child: Text('Logs')),
+                  ],
+                ),
+              );
+            }),
+          if (_directory.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
+              runSpacing: 6,
               children: [
                 for (final action in [
                   ComposeProjectAction.up,
-                  ComposeProjectAction.stop,
-                  ComposeProjectAction.restart,
                   ComposeProjectAction.pull,
+                  ComposeProjectAction.restart,
+                  ComposeProjectAction.stop,
                 ])
                   OutlinedButton(
                     onPressed: () => _run(action),
                     child: Text(action.label),
                   ),
+                OutlinedButton.icon(
+                  onPressed: _showStackLogs,
+                  icon: const Icon(Symbols.terminal, size: 16),
+                  label: const Text('Logs'),
+                ),
               ],
             ),
           ],
@@ -1040,7 +1750,7 @@ class _LinkResourceSheet extends ConsumerStatefulWidget {
 }
 
 class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
-  var _kind = DeploymentResourceKind.server;
+  var _kind = DeploymentResourceKind.compose;
   int? _serverId;
   var _name = '';
   var _location = '';
@@ -1052,10 +1762,9 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
   String? _suggestionError;
 
   static const _linkableKinds = [
-    DeploymentResourceKind.server,
-    DeploymentResourceKind.serverFolder,
-    DeploymentResourceKind.container,
     DeploymentResourceKind.compose,
+    DeploymentResourceKind.container,
+    DeploymentResourceKind.serverFolder,
     DeploymentResourceKind.firewallRule,
     DeploymentResourceKind.systemdService,
   ];

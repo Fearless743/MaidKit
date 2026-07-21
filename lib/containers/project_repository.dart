@@ -185,6 +185,7 @@ class ProjectRepository {
     serverId: serverId,
     configuration: {
       'compose_link_id': linkId,
+      'compose_project': name,
       'directory': directory,
       'runtime': runtime.name,
       'scope': scope.name,
