@@ -8,8 +8,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
-import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
+import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/cloud_file_picker.dart';
 import 'container_models.dart';
@@ -18,8 +18,8 @@ import 'compose_project_actions.dart';
 import 'deployment_project_models.dart';
 import 'project_repository.dart';
 
-/// Detail view for a stored deployment project, independent of remote runtime
-/// state. [linkId] remains for links opened from the server container view.
+/// Detail view for a stored deployment project — a collection of resources.
+/// [linkId] remains for links opened from the server container view.
 @RoutePage()
 class ProjectDetailPage extends ConsumerWidget {
   const ProjectDetailPage({super.key, this.projectId, this.linkId});
@@ -72,16 +72,27 @@ int? _projectForComposeLink(List<DeploymentResource> resources, int? linkId) {
   return null;
 }
 
-class _ProjectDetail extends ConsumerWidget {
+class _ProjectDetail extends ConsumerStatefulWidget {
   const _ProjectDetail({required this.project, required this.resources});
   final DeploymentProject project;
   final List<DeploymentResource> resources;
 
-  Future<void> _linkResource(
-    BuildContext context,
-    WidgetRef ref,
-    List<Server> servers,
-  ) async {
+  @override
+  ConsumerState<_ProjectDetail> createState() => _ProjectDetailState();
+}
+
+class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
+  DeploymentResourceKind? _kindFilter;
+  String _query = '';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addResource(List<Server> servers) async {
     final draft = await showModalBottomSheet<_ResourceDraft>(
       context: context,
       isScrollControlled: true,
@@ -93,89 +104,481 @@ class _ProjectDetail extends ConsumerWidget {
     await ref
         .read(projectRepositoryProvider)
         .addResource(
-          projectId: project.id,
+          projectId: widget.project.id,
           kind: draft.kind.name,
           name: draft.name,
           serverId: draft.serverId,
           configuration: draft.configuration,
         );
+    if (mounted) {
+      showStyledSnackBar(
+        message: '“${draft.name}” added to the project.',
+        title: 'Resource added',
+        icon: Symbols.check_circle,
+      );
+    }
+  }
+
+  Future<void> _editProject() async {
+    final draft = await showDialog<_ProjectEditDraft>(
+      context: context,
+      builder: (context) => _ProjectEditDialog(
+        initialName: widget.project.name,
+        initialDescription: widget.project.description,
+      ),
+    );
+    if (draft == null) return;
+    await ref
+        .read(projectRepositoryProvider)
+        .updateProject(
+          projectId: widget.project.id,
+          name: draft.name,
+          description: draft.description,
+        );
+  }
+
+  Future<void> _deleteProject() async {
+    final count = widget.resources.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete project?'),
+        content: Text(
+          count == 0
+              ? 'Delete “${widget.project.name}”? This cannot be undone.'
+              : 'Delete “${widget.project.name}” and its $count resource'
+                    '${count == 1 ? '' : 's'}? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(projectRepositoryProvider).deleteProject(widget.project.id);
+    if (mounted) context.router.maybePop();
+  }
+
+  Future<void> _deleteResource(DeploymentResource resource) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove resource?'),
+        content: Text(
+          'Remove “${resource.name}” from this project? '
+          'Remote infrastructure is not deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(projectRepositoryProvider).deleteResource(resource.id);
+  }
+
+  List<DeploymentResource> get _filteredResources {
+    final query = _query.trim().toLowerCase();
+    return widget.resources.where((resource) {
+      final kind = deploymentResourceKindFromId(resource.kind);
+      if (_kindFilter != null && kind != _kindFilter) return false;
+      if (query.isEmpty) return true;
+      if (resource.name.toLowerCase().contains(query)) return true;
+      if (resource.kind.toLowerCase().contains(query)) return true;
+      final config = resource.configuration.toLowerCase();
+      return config.contains(query);
+    }).toList();
+  }
+
+  Map<DeploymentResourceKind, List<DeploymentResource>> get _grouped {
+    final map = <DeploymentResourceKind, List<DeploymentResource>>{};
+    for (final resource in _filteredResources) {
+      final kind = deploymentResourceKindFromId(resource.kind);
+      map.putIfAbsent(kind, () => []).add(resource);
+    }
+    for (final list in map.values) {
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+    return map;
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final servers =
         ref.watch(serversProvider).asData?.value ?? const <Server>[];
     final serverNames = {for (final server in servers) server.id: server.name};
     final serverById = {for (final server in servers) server.id: server};
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final kindCounts = <DeploymentResourceKind, int>{};
+    for (final resource in widget.resources) {
+      final kind = deploymentResourceKindFromId(resource.kind);
+      kindCounts[kind] = (kindCounts[kind] ?? 0) + 1;
+    }
+    final serverIds = {
+      for (final r in widget.resources)
+        if (r.serverId != null) r.serverId!,
+    };
+    final grouped = _grouped;
+    final orderedKinds = DeploymentResourceKind.values
+        .where((kind) => grouped.containsKey(kind))
+        .toList();
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(project.name),
+        title: Text(widget.project.name),
         actions: [
           IconButton(
-            tooltip: 'Link resource',
-            icon: const Icon(Symbols.add_link),
-            onPressed: () => _linkResource(context, ref, servers),
+            tooltip: 'Edit project',
+            icon: const Icon(Symbols.edit),
+            onPressed: _editProject,
           ),
           IconButton(
             tooltip: 'Delete project',
             icon: const Icon(Symbols.delete),
-            onPressed: () async {
-              await ref
-                  .read(projectRepositoryProvider)
-                  .deleteProject(project.id);
-              if (context.mounted) context.router.maybePop();
-            },
+            onPressed: _deleteProject,
+          ),
+          const SizedBox(width: 4),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton.icon(
+              onPressed: () => _addResource(servers),
+              icon: const Icon(Symbols.add, size: 18),
+              label: const Text('Add resource'),
+            ),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Text('Deployment project', style: theme.textTheme.headlineSmall),
-          if (project.description?.isNotEmpty ?? false) ...[
-            const SizedBox(height: 8),
-            Text(project.description!),
-          ],
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text('Managed resources', style: theme.textTheme.titleMedium),
-              const Spacer(),
-              Text(
-                '${resources.length} total',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.project.description?.isNotEmpty ?? false) ...[
+                    Text(
+                      widget.project.description!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _SummaryPill(
+                        icon: Symbols.inventory_2,
+                        label:
+                            '${widget.resources.length} resource'
+                            '${widget.resources.length == 1 ? '' : 's'}',
+                      ),
+                      if (serverIds.isNotEmpty)
+                        _SummaryPill(
+                          icon: Symbols.dns,
+                          label: serverIds.length == 1
+                              ? (serverNames[serverIds.first] ?? '1 server')
+                              : '${serverIds.length} servers',
+                        ),
+                      for (final entry in kindCounts.entries)
+                        _SummaryPill(
+                          icon: deploymentResourceKindIcon(entry.key),
+                          label:
+                              '${deploymentResourceKindLabel(entry.key)}'
+                              '${entry.value > 1 ? ' ×${entry.value}' : ''}',
+                        ),
+                    ],
+                  ),
+                  if (widget.resources.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'Filter resources',
+                        prefixIcon: const Icon(Symbols.search, size: 20),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear',
+                                icon: const Icon(Symbols.close, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _query = '');
+                                },
+                              ),
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setState(() => _query = value),
+                    ),
+                    if (kindCounts.length > 1) ...[
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            FilterChip(
+                              label: const Text('All'),
+                              selected: _kindFilter == null,
+                              onSelected: (_) =>
+                                  setState(() => _kindFilter = null),
+                            ),
+                            const SizedBox(width: 8),
+                            for (final kind in kindCounts.keys) ...[
+                              FilterChip(
+                                avatar: Icon(
+                                  deploymentResourceKindIcon(kind),
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  '${deploymentResourceKindLabel(kind)}'
+                                  ' (${kindCounts[kind]})',
+                                ),
+                                selected: _kindFilter == kind,
+                                onSelected: (selected) => setState(
+                                  () => _kindFilter = selected ? kind : null,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Text('Resources', style: theme.textTheme.titleMedium),
+                      const Spacer(),
+                      if (widget.resources.isNotEmpty)
+                        Text(
+                          _filteredResources.length == widget.resources.length
+                              ? '${widget.resources.length} total'
+                              : '${_filteredResources.length} of ${widget.resources.length}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+          if (widget.resources.isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+              sliver: SliverToBoxAdapter(
+                child: _EmptyResources(
+                  projectName: widget.project.name,
+                  onAdd: () => _addResource(servers),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (resources.isEmpty)
-            _EmptyResources(
-              projectName: project.name,
-              onLink: () => _linkResource(context, ref, servers),
+            )
+          else if (_filteredResources.isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+              sliver: const SliverToBoxAdapter(
+                child: Center(
+                  child: Text('No resources match the current filters.'),
+                ),
+              ),
             )
           else
-            ...resources.map(
-              (resource) => _ResourceTile(
-                resource: resource,
-                serverName: resource.serverId == null
-                    ? null
-                    : serverNames[resource.serverId!],
-                server: resource.serverId == null
-                    ? null
-                    : serverById[resource.serverId!],
-                onDelete: () => ref
-                    .read(projectRepositoryProvider)
-                    .deleteResource(resource.id),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final kind = orderedKinds[index];
+                  final items = grouped[kind]!;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (orderedKinds.length > 1 || _kindFilter != null) ...[
+                          Row(
+                            children: [
+                              Icon(
+                                deploymentResourceKindIcon(kind),
+                                size: 18,
+                                color: scheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                deploymentResourceKindLabel(kind),
+                                style: theme.textTheme.titleSmall,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${items.length}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        for (final resource in items)
+                          _ResourceTile(
+                            resource: resource,
+                            serverName: resource.serverId == null
+                                ? null
+                                : serverNames[resource.serverId!],
+                            server: resource.serverId == null
+                                ? null
+                                : serverById[resource.serverId!],
+                            onDelete: () => _deleteResource(resource),
+                          ),
+                      ],
+                    ),
+                  );
+                }, childCount: orderedKinds.length),
               ),
             ),
         ],
       ),
     );
   }
+}
+
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+        color: scheme.surfaceContainerLowest,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: scheme.primary),
+          const SizedBox(width: 6),
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProjectEditDraft {
+  const _ProjectEditDraft({required this.name, this.description});
+  final String name;
+  final String? description;
+}
+
+class _ProjectEditDialog extends StatefulWidget {
+  const _ProjectEditDialog({
+    required this.initialName,
+    this.initialDescription,
+  });
+  final String initialName;
+  final String? initialDescription;
+
+  @override
+  State<_ProjectEditDialog> createState() => _ProjectEditDialogState();
+}
+
+class _ProjectEditDialogState extends State<_ProjectEditDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _descriptionController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _descriptionController = TextEditingController(
+      text: widget.initialDescription ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    final description = _descriptionController.text.trim();
+    Navigator.pop(
+      context,
+      _ProjectEditDraft(
+        name: name,
+        description: description.isEmpty ? null : description,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Edit project'),
+    content: SizedBox(
+      width: 420,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Project name'),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descriptionController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Description (optional)',
+              alignLabelWithHint: true,
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Save')),
+    ],
+  );
 }
 
 class _ResourceTile extends ConsumerWidget {
@@ -189,20 +592,38 @@ class _ResourceTile extends ConsumerWidget {
   final String? serverName;
   final Server? server;
   final VoidCallback onDelete;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final kind = deploymentResourceKindFromId(resource.kind);
     final config = _configuration(resource.configuration);
+    final configSummary = deploymentResourceConfigSummary(config);
+    final subtitleParts = <String>[
+      deploymentResourceKindLabel(kind),
+      ?serverName,
+      if (configSummary.isNotEmpty) configSummary,
+    ];
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
       child: ExpansionTile(
-        leading: Icon(_iconFor(kind), color: scheme.primary),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: Icon(deploymentResourceKindIcon(kind), color: scheme.primary),
         title: Text(resource.name),
-        subtitle: Text([_labelFor(kind), serverName].nonNulls.join(' · ')),
+        subtitle: Text(
+          subtitleParts.join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         trailing: IconButton(
-          tooltip: 'Remove resource',
+          tooltip: 'Remove from project',
           icon: const Icon(Symbols.close),
           onPressed: onDelete,
         ),
@@ -215,6 +636,49 @@ class _ResourceTile extends ConsumerWidget {
               server: server!,
               resource: resource,
               configuration: config,
+            ),
+          if (config.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Configuration',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...config.entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 120,
+                      child: Text(
+                        entry.key,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _formatConfigValue(entry.value),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ] else if (kind != DeploymentResourceKind.server)
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text('No portable configuration recorded.'),
+              ),
             ),
           if (server != null)
             Align(
@@ -251,15 +715,33 @@ class _ResourceTile extends ConsumerWidget {
                 ),
               ),
             ),
-          if (kind != DeploymentResourceKind.compose && config.isEmpty)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('No portable configuration recorded.'),
-            ),
         ],
       ),
     );
   }
+}
+
+String _formatConfigValue(Object? value) {
+  if (value is List) {
+    if (value.isEmpty) return '—';
+    if (value.first is Map) {
+      return value
+          .map((item) {
+            if (item is Map) {
+              final name = item['name'] ?? item['path'];
+              return name?.toString() ?? item.toString();
+            }
+            return item.toString();
+          })
+          .join(', ');
+    }
+    return value.join(', ');
+  }
+  if (value is Map) {
+    return value.entries.map((e) => '${e.key}: ${e.value}').join(', ');
+  }
+  final text = '$value'.trim();
+  return text.isEmpty ? '—' : text;
 }
 
 class _ServerLivePanel extends ConsumerWidget {
@@ -413,7 +895,18 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Live stack', style: Theme.of(context).textTheme.titleSmall),
+          Row(
+            children: [
+              Text('Live stack', style: Theme.of(context).textTheme.titleSmall),
+              const Spacer(),
+              if (snapshot.connectionState == ConnectionState.done)
+                IconButton(
+                  tooltip: 'Refresh containers',
+                  icon: const Icon(Symbols.refresh, size: 18),
+                  onPressed: () => setState(() => _containers = _load()),
+                ),
+            ],
+          ),
           const SizedBox(height: 6),
           if (snapshot.connectionState != ConnectionState.done)
             const LinearProgressIndicator()
@@ -460,31 +953,52 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
 }
 
 class _EmptyResources extends StatelessWidget {
-  const _EmptyResources({required this.projectName, required this.onLink});
+  const _EmptyResources({required this.projectName, required this.onAdd});
   final String projectName;
-  final VoidCallback onLink;
+  final VoidCallback onAdd;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 32),
-    child: Column(
-      children: [
-        const Icon(Symbols.add_link, size: 32),
-        const SizedBox(height: 12),
-        Text('No resources have been added to $projectName.'),
-        const SizedBox(height: 4),
-        Text(
-          'Link a server, its folder, a container, or a Compose deployment.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: onLink,
-          icon: const Icon(Symbols.add_link),
-          label: const Text('Link resource'),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+        color: theme.colorScheme.surfaceContainerLowest,
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Symbols.add_link,
+            size: 32,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No resources in $projectName',
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Add servers, folders, containers, Compose stacks, '
+            'firewall rules, or systemd units to this collection.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Symbols.add, size: 18),
+            label: const Text('Add resource'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Map<String, Object?> _configuration(String source) {
@@ -494,30 +1008,6 @@ Map<String, Object?> _configuration(String source) {
   } catch (_) {}
   return const {};
 }
-
-IconData _iconFor(DeploymentResourceKind kind) => switch (kind) {
-  DeploymentResourceKind.server => Symbols.dns,
-  DeploymentResourceKind.serverFolder => Symbols.folder,
-  DeploymentResourceKind.compose => Symbols.deployed_code,
-  DeploymentResourceKind.container => Symbols.deployed_code,
-  DeploymentResourceKind.webServer => Symbols.language,
-  DeploymentResourceKind.firewallRule => Symbols.security,
-  DeploymentResourceKind.systemdService => Symbols.settings,
-  DeploymentResourceKind.database => Symbols.database,
-  DeploymentResourceKind.other => Symbols.extension,
-};
-
-String _labelFor(DeploymentResourceKind kind) => switch (kind) {
-  DeploymentResourceKind.server => 'Server',
-  DeploymentResourceKind.serverFolder => 'Server folder',
-  DeploymentResourceKind.compose => 'Compose stack',
-  DeploymentResourceKind.container => 'Container',
-  DeploymentResourceKind.webServer => 'Web server',
-  DeploymentResourceKind.firewallRule => 'Firewall rule',
-  DeploymentResourceKind.systemdService => 'Systemd service',
-  DeploymentResourceKind.database => 'Database integration',
-  DeploymentResourceKind.other => 'Integration',
-};
 
 int _serverTabFor(DeploymentResourceKind kind) => switch (kind) {
   DeploymentResourceKind.systemdService => 2,
@@ -560,6 +1050,15 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
   var _suggestions = const <String>[];
   var _loadingSuggestions = false;
   String? _suggestionError;
+
+  static const _linkableKinds = [
+    DeploymentResourceKind.server,
+    DeploymentResourceKind.serverFolder,
+    DeploymentResourceKind.container,
+    DeploymentResourceKind.compose,
+    DeploymentResourceKind.firewallRule,
+    DeploymentResourceKind.systemdService,
+  ];
 
   String get _locationLabel => switch (_kind) {
     DeploymentResourceKind.serverFolder => 'Folder path',
@@ -698,185 +1197,205 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => SheetScaffold(
-    titleText: 'Link resource',
-    heightFactor: 0.68,
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      children: [
-        DropdownButtonFormField<DeploymentResourceKind>(
-          initialValue: _kind,
-          decoration: const InputDecoration(labelText: 'Resource type'),
-          items: const [
-            DropdownMenuItem(
-              value: DeploymentResourceKind.server,
-              child: Text('Server'),
+  Widget build(BuildContext context) {
+    final canSubmit =
+        _serverId != null &&
+        _name.trim().isNotEmpty &&
+        (_locationLabel.isEmpty || _location.trim().isNotEmpty) &&
+        (_kind != DeploymentResourceKind.compose ||
+            _directory.trim().isNotEmpty);
+
+    return SheetScaffold(
+      titleText: 'Add resource',
+      heightFactor: 0.72,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          Text(
+            'Add an item to this project collection.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-            DropdownMenuItem(
-              value: DeploymentResourceKind.serverFolder,
-              child: Text('Server folder'),
-            ),
-            DropdownMenuItem(
-              value: DeploymentResourceKind.container,
-              child: Text('Container'),
-            ),
-            DropdownMenuItem(
-              value: DeploymentResourceKind.compose,
-              child: Text('Compose deployment'),
-            ),
-            DropdownMenuItem(
-              value: DeploymentResourceKind.firewallRule,
-              child: Text('Firewall rule'),
-            ),
-            DropdownMenuItem(
-              value: DeploymentResourceKind.systemdService,
-              child: Text('Systemd service'),
-            ),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _kind = value!;
-              _location = '';
-            });
-            _loadSuggestions();
-          },
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<int>(
-          initialValue: _serverId,
-          decoration: const InputDecoration(labelText: 'Server'),
-          items: [
-            for (final server in widget.servers)
-              DropdownMenuItem(value: server.id, child: Text(server.name)),
-          ],
-          onChanged: (value) {
-            setState(() => _serverId = value);
-            _loadSuggestions();
-          },
-        ),
-        const SizedBox(height: 12),
-        TextFormField(
-          decoration: const InputDecoration(labelText: 'Display name'),
-          onChanged: (value) => _name = value,
-          onFieldSubmitted: (_) => _submit(),
-        ),
-        if (_locationLabel.isNotEmpty) ...[
+          ),
           const SizedBox(height: 12),
-          Autocomplete<String>(
-            optionsBuilder: (value) {
-              final query = value.text.toLowerCase();
-              return _suggestions.where(
-                (item) => query.isEmpty || item.toLowerCase().contains(query),
-              );
-            },
-            onSelected: _selectSuggestion,
-            fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-              if (controller.text != _location) {
-                controller.value = TextEditingValue(
-                  text: _location,
-                  selection: TextSelection.collapsed(offset: _location.length),
-                );
-              }
-              return TextFormField(
-                controller: controller,
-                focusNode: focusNode,
-                decoration: InputDecoration(
-                  labelText: _locationLabel,
-                  suffixIcon: _loadingSuggestions
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : IconButton(
-                          tooltip: 'Refresh suggestions',
-                          icon: const Icon(Symbols.refresh),
-                          onPressed: _loadSuggestions,
-                        ),
+          DropdownButtonFormField<DeploymentResourceKind>(
+            initialValue: _kind,
+            decoration: const InputDecoration(labelText: 'Resource type'),
+            items: [
+              for (final kind in _linkableKinds)
+                DropdownMenuItem(
+                  value: kind,
+                  child: Row(
+                    children: [
+                      Icon(deploymentResourceKindIcon(kind), size: 18),
+                      const SizedBox(width: 8),
+                      Text(deploymentResourceKindLabel(kind)),
+                    ],
+                  ),
                 ),
-                onChanged: (value) => _location = value,
-                onFieldSubmitted: (_) => _submit(),
-              );
+            ],
+            onChanged: (value) {
+              setState(() {
+                _kind = value!;
+                _location = '';
+              });
+              _loadSuggestions();
             },
           ),
-          if (_suggestionError != null) ...[
-            const SizedBox(height: 6),
+          const SizedBox(height: 12),
+          if (widget.servers.isEmpty)
             Text(
-              'Could not load suggestions: $_suggestionError',
+              'Add a server in the Servers tab before linking resources.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.error,
               ),
+            )
+          else
+            DropdownButtonFormField<int>(
+              initialValue: _serverId,
+              decoration: const InputDecoration(labelText: 'Server'),
+              items: [
+                for (final server in widget.servers)
+                  DropdownMenuItem(value: server.id, child: Text(server.name)),
+              ],
+              onChanged: (value) {
+                setState(() => _serverId = value);
+                _loadSuggestions();
+              },
             ),
-          ] else if (_suggestions.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Detected on this server',
-              style: Theme.of(context).textTheme.labelMedium,
+          const SizedBox(height: 12),
+          TextFormField(
+            decoration: const InputDecoration(
+              labelText: 'Display name',
+              helperText: 'Shown in this project’s resource list.',
             ),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final item in _suggestions.take(12))
-                  ActionChip(
-                    label: Text(item),
-                    onPressed: () => _selectSuggestion(item),
+            onChanged: (value) => setState(() => _name = value),
+            onFieldSubmitted: (_) {
+              if (canSubmit) _submit();
+            },
+          ),
+          if (_locationLabel.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Autocomplete<String>(
+              optionsBuilder: (value) {
+                final query = value.text.toLowerCase();
+                return _suggestions.where(
+                  (item) => query.isEmpty || item.toLowerCase().contains(query),
+                );
+              },
+              onSelected: _selectSuggestion,
+              fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                if (controller.text != _location) {
+                  controller.value = TextEditingValue(
+                    text: _location,
+                    selection: TextSelection.collapsed(
+                      offset: _location.length,
+                    ),
+                  );
+                }
+                return TextFormField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    labelText: _locationLabel,
+                    suffixIcon: _loadingSuggestions
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: 'Refresh suggestions',
+                            icon: const Icon(Symbols.refresh),
+                            onPressed: _loadSuggestions,
+                          ),
                   ),
-              ],
+                  onChanged: (value) => setState(() => _location = value),
+                  onFieldSubmitted: (_) {
+                    if (canSubmit) _submit();
+                  },
+                );
+              },
             ),
-          ],
-          if (_kind == DeploymentResourceKind.compose) ...[
-            const SizedBox(height: 12),
-            TextFormField(
-              decoration: const InputDecoration(
-                labelText: 'Remote project directory',
+            if (_suggestionError != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Could not load suggestions: $_suggestionError',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
-              onChanged: (value) => _directory = value,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<ContainerRuntime>(
-              initialValue: _runtime,
-              decoration: const InputDecoration(labelText: 'Runtime'),
-              items: [
-                for (final runtime in ContainerRuntime.values)
-                  DropdownMenuItem(value: runtime, child: Text(runtime.name)),
-              ],
-              onChanged: (value) => setState(() => _runtime = value!),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<ContainerScope>(
-              initialValue: _scope,
-              decoration: const InputDecoration(labelText: 'Scope'),
-              items: [
-                for (final scope in ContainerScope.values)
-                  DropdownMenuItem(value: scope, child: Text(scope.name)),
-              ],
-              onChanged: (value) => setState(() => _scope = value!),
-            ),
-          ],
-          if (_kind == DeploymentResourceKind.serverFolder) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _serverId == null ? null : _pickFolder,
-                icon: const Icon(Symbols.folder_open, size: 18),
-                label: const Text('Browse server folders'),
+            ] else if (_suggestions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Detected on this server',
+                style: Theme.of(context).textTheme.labelMedium,
               ),
-            ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final item in _suggestions.take(12))
+                    ActionChip(
+                      label: Text(item),
+                      onPressed: () => _selectSuggestion(item),
+                    ),
+                ],
+              ),
+            ],
+            if (_kind == DeploymentResourceKind.compose) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'Remote project directory',
+                ),
+                onChanged: (value) => setState(() => _directory = value),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<ContainerRuntime>(
+                initialValue: _runtime,
+                decoration: const InputDecoration(labelText: 'Runtime'),
+                items: [
+                  for (final runtime in ContainerRuntime.values)
+                    DropdownMenuItem(value: runtime, child: Text(runtime.name)),
+                ],
+                onChanged: (value) => setState(() => _runtime = value!),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<ContainerScope>(
+                initialValue: _scope,
+                decoration: const InputDecoration(labelText: 'Scope'),
+                items: [
+                  for (final scope in ContainerScope.values)
+                    DropdownMenuItem(value: scope, child: Text(scope.name)),
+                ],
+                onChanged: (value) => setState(() => _scope = value!),
+              ),
+            ],
+            if (_kind == DeploymentResourceKind.serverFolder) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _serverId == null ? null : _pickFolder,
+                  icon: const Icon(Symbols.folder_open, size: 18),
+                  label: const Text('Browse server folders'),
+                ),
+              ),
+            ],
           ],
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: canSubmit ? _submit : null,
+            icon: const Icon(Symbols.add),
+            label: const Text('Add to project'),
+          ),
         ],
-        const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Symbols.add_link),
-          label: const Text('Link resource'),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

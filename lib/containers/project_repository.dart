@@ -96,6 +96,27 @@ class ProjectRepository {
         );
   }
 
+  Future<void> updateProject({
+    required int projectId,
+    required String name,
+    String? description,
+  }) async {
+    final normalizedDescription = description?.trim();
+    await (_database.update(
+      _database.deploymentProjects,
+    )..where((table) => table.id.equals(projectId))).write(
+      DeploymentProjectsCompanion(
+        name: Value(name.trim()),
+        description: Value(
+          normalizedDescription == null || normalizedDescription.isEmpty
+              ? null
+              : normalizedDescription,
+        ),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+  }
+
   Future<void> addResource({
     required int projectId,
     required String kind,
@@ -133,9 +154,20 @@ class ProjectRepository {
     });
   }
 
-  Future<void> deleteResource(int resourceId) => (_database.delete(
-    _database.deploymentResources,
-  )..where((table) => table.id.equals(resourceId))).go();
+  Future<void> deleteResource(int resourceId) async {
+    final resource = await (_database.select(
+      _database.deploymentResources,
+    )..where((table) => table.id.equals(resourceId))).getSingleOrNull();
+    await (_database.delete(
+      _database.deploymentResources,
+    )..where((table) => table.id.equals(resourceId))).go();
+    if (resource == null) return;
+    await (_database.update(
+      _database.deploymentProjects,
+    )..where((table) => table.id.equals(resource.projectId))).write(
+      DeploymentProjectsCompanion(updatedAt: Value(DateTime.now().toUtc())),
+    );
+  }
 
   /// Save a compose link as a resource in a general deployment project.
   Future<void> addComposeResource({
