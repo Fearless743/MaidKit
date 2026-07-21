@@ -11,19 +11,35 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'package:auto_route/auto_route.dart' as _i9;
 import 'package:flutter/material.dart' as _i10;
-import 'package:maid_kit/containers/container_detail_page.dart' as _i1;
+import 'package:maid_kit/containers/container_detail_page.dart' as _i2;
 import 'package:maid_kit/containers/container_models.dart' as _i12;
-import 'package:maid_kit/containers/project_detail_page.dart' as _i2;
-import 'package:maid_kit/containers/projects_page.dart' as _i3;
+import 'package:maid_kit/containers/project_detail_page.dart' as _i3;
+import 'package:maid_kit/containers/projects_page.dart' as _i4;
 import 'package:maid_kit/data/local/app_database.dart' as _i11;
-import 'package:maid_kit/servers/server_detail_page.dart' as _i4;
-import 'package:maid_kit/servers/server_workspace_page.dart' as _i5;
-import 'package:maid_kit/servers/servers_page.dart' as _i6;
-import 'package:maid_kit/servers/sessions_page.dart' as _i7;
+import 'package:maid_kit/servers/about_page.dart' as _i1;
+import 'package:maid_kit/servers/server_detail_page.dart' as _i5;
+import 'package:maid_kit/servers/server_workspace_page.dart' as _i6;
+import 'package:maid_kit/servers/servers_page.dart' as _i7;
 import 'package:maid_kit/servers/settings_page.dart' as _i8;
 
 /// generated route for
-/// [_i1.ContainerDetailPage]
+/// [_i1.AboutPage]
+class AboutRoute extends _i9.PageRouteInfo<void> {
+  const AboutRoute({List<_i9.PageRouteInfo>? children})
+    : super(AboutRoute.name, initialChildren: children);
+
+  static const String name = 'AboutRoute';
+
+  static _i9.PageInfo page = _i9.PageInfo(
+    name,
+    builder: (data) {
+      return const _i1.AboutPage();
+    },
+  );
+}
+
+/// generated route for
+/// [_i2.ContainerDetailPage]
 class ContainerDetailRoute extends _i9.PageRouteInfo<ContainerDetailRouteArgs> {
   ContainerDetailRoute({
     _i10.Key? key,
@@ -52,7 +68,7 @@ class ContainerDetailRoute extends _i9.PageRouteInfo<ContainerDetailRouteArgs> {
     name,
     builder: (data) {
       final args = data.argsAs<ContainerDetailRouteArgs>();
-      return _i1.ContainerDetailPage(
+      return _i2.ContainerDetailPage(
         key: args.key,
         server: args.server,
         runtime: args.runtime,
@@ -114,7 +130,7 @@ class ContainerDetailRouteArgs {
 }
 
 /// generated route for
-/// [_i2.ProjectDetailPage]
+/// [_i3.ProjectDetailPage]
 class ProjectDetailRoute extends _i9.PageRouteInfo<ProjectDetailRouteArgs> {
   ProjectDetailRoute({
     _i10.Key? key,
@@ -139,7 +155,7 @@ class ProjectDetailRoute extends _i9.PageRouteInfo<ProjectDetailRouteArgs> {
       final args = data.argsAs<ProjectDetailRouteArgs>(
         orElse: () => const ProjectDetailRouteArgs(),
       );
-      return _i2.ProjectDetailPage(
+      return _i3.ProjectDetailPage(
         key: args.key,
         projectId: args.projectId,
         linkId: args.linkId,
@@ -176,7 +192,7 @@ class ProjectDetailRouteArgs {
 }
 
 /// generated route for
-/// [_i3.ProjectsPage]
+/// [_i4.ProjectsPage]
 class ProjectsRoute extends _i9.PageRouteInfo<void> {
   const ProjectsRoute({List<_i9.PageRouteInfo>? children})
     : super(ProjectsRoute.name, initialChildren: children);
@@ -186,19 +202,20 @@ class ProjectsRoute extends _i9.PageRouteInfo<void> {
   static _i9.PageInfo page = _i9.PageInfo(
     name,
     builder: (data) {
-      return const _i3.ProjectsPage();
+      return const _i4.ProjectsPage();
     },
   );
 }
 
 /// generated route for
-/// [_i4.ServerDetailPage]
+/// [_i5.ServerDetailPage]
 class ServerDetailRoute extends _i9.PageRouteInfo<ServerDetailRouteArgs> {
   ServerDetailRoute({
     _i10.Key? key,
     required _i11.Server server,
     int initialTab = 0,
     String? initialComposeProject,
+    bool embedded = false,
     List<_i9.PageRouteInfo>? children,
   }) : super(
          ServerDetailRoute.name,
@@ -207,6 +224,7 @@ class ServerDetailRoute extends _i9.PageRouteInfo<ServerDetailRouteArgs> {
            server: server,
            initialTab: initialTab,
            initialComposeProject: initialComposeProject,
+           embedded: embedded,
          ),
          initialChildren: children,
        );
@@ -217,11 +235,12 @@ class ServerDetailRoute extends _i9.PageRouteInfo<ServerDetailRouteArgs> {
     name,
     builder: (data) {
       final args = data.argsAs<ServerDetailRouteArgs>();
-      return _i4.ServerDetailPage(
+      return _i5.ServerDetailPage(
         key: args.key,
         server: args.server,
         initialTab: args.initialTab,
         initialComposeProject: args.initialComposeProject,
+        embedded: args.embedded,
       );
     },
   );
@@ -233,6 +252,7 @@ class ServerDetailRouteArgs {
     required this.server,
     this.initialTab = 0,
     this.initialComposeProject,
+    this.embedded = false,
   });
 
   final _i10.Key? key;
@@ -243,9 +263,11 @@ class ServerDetailRouteArgs {
 
   final String? initialComposeProject;
 
+  final bool embedded;
+
   @override
   String toString() {
-    return 'ServerDetailRouteArgs{key: $key, server: $server, initialTab: $initialTab, initialComposeProject: $initialComposeProject}';
+    return 'ServerDetailRouteArgs{key: $key, server: $server, initialTab: $initialTab, initialComposeProject: $initialComposeProject, embedded: $embedded}';
   }
 
   @override
@@ -255,7 +277,8 @@ class ServerDetailRouteArgs {
     return key == other.key &&
         server == other.server &&
         initialTab == other.initialTab &&
-        initialComposeProject == other.initialComposeProject;
+        initialComposeProject == other.initialComposeProject &&
+        embedded == other.embedded;
   }
 
   @override
@@ -263,11 +286,12 @@ class ServerDetailRouteArgs {
       key.hashCode ^
       server.hashCode ^
       initialTab.hashCode ^
-      initialComposeProject.hashCode;
+      initialComposeProject.hashCode ^
+      embedded.hashCode;
 }
 
 /// generated route for
-/// [_i5.ServerWorkspacePage]
+/// [_i6.ServerWorkspacePage]
 class ServerWorkspaceRoute extends _i9.PageRouteInfo<void> {
   const ServerWorkspaceRoute({List<_i9.PageRouteInfo>? children})
     : super(ServerWorkspaceRoute.name, initialChildren: children);
@@ -277,13 +301,13 @@ class ServerWorkspaceRoute extends _i9.PageRouteInfo<void> {
   static _i9.PageInfo page = _i9.PageInfo(
     name,
     builder: (data) {
-      return const _i5.ServerWorkspacePage();
+      return const _i6.ServerWorkspacePage();
     },
   );
 }
 
 /// generated route for
-/// [_i6.ServersPage]
+/// [_i7.ServersPage]
 class ServersRoute extends _i9.PageRouteInfo<void> {
   const ServersRoute({List<_i9.PageRouteInfo>? children})
     : super(ServersRoute.name, initialChildren: children);
@@ -293,23 +317,7 @@ class ServersRoute extends _i9.PageRouteInfo<void> {
   static _i9.PageInfo page = _i9.PageInfo(
     name,
     builder: (data) {
-      return const _i6.ServersPage();
-    },
-  );
-}
-
-/// generated route for
-/// [_i7.SessionsPage]
-class SessionsRoute extends _i9.PageRouteInfo<void> {
-  const SessionsRoute({List<_i9.PageRouteInfo>? children})
-    : super(SessionsRoute.name, initialChildren: children);
-
-  static const String name = 'SessionsRoute';
-
-  static _i9.PageInfo page = _i9.PageInfo(
-    name,
-    builder: (data) {
-      return const _i7.SessionsPage();
+      return const _i7.ServersPage();
     },
   );
 }

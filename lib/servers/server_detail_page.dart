@@ -28,11 +28,13 @@ class ServerDetailPage extends ConsumerStatefulWidget {
     required this.server,
     this.initialTab = 0,
     this.initialComposeProject,
+    this.embedded = false,
   });
 
   final Server server;
   final int initialTab;
   final String? initialComposeProject;
+  final bool embedded;
 
   @override
   ConsumerState<ServerDetailPage> createState() => _ServerDetailPageState();
@@ -127,6 +129,18 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
     final connected = session?.status == SessionStatus.connected;
     final refreshInterval = ref.watch(focusedServerRefreshIntervalProvider);
 
+    final workspace = _DetailWorkspace(
+      server: widget.server,
+      session: session,
+      connected: connected,
+      processes: _processes,
+      refreshInterval: refreshInterval,
+      onConnect: _connect,
+      onRefreshProcesses: _loadProcesses,
+      initialTab: widget.initialTab,
+      initialComposeProject: widget.initialComposeProject,
+    );
+    if (widget.embedded) return workspace;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.server.name),
@@ -139,17 +153,7 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
           const SizedBox(width: 8),
         ],
       ),
-      body: _DetailWorkspace(
-        server: widget.server,
-        session: session,
-        connected: connected,
-        processes: _processes,
-        refreshInterval: refreshInterval,
-        onConnect: _connect,
-        onRefreshProcesses: _loadProcesses,
-        initialTab: widget.initialTab,
-        initialComposeProject: widget.initialComposeProject,
-      ),
+      body: workspace,
     );
   }
 }

@@ -16,12 +16,7 @@ class ServerWorkspacePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AutoTabsRouter(
-      routes: const [
-        ServersRoute(),
-        ProjectsRoute(),
-        SessionsRoute(),
-        SettingsRoute(),
-      ],
+      routes: const [ServersRoute(), ProjectsRoute(), SettingsRoute()],
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       transitionBuilder: (context, child, animation) {
@@ -52,7 +47,7 @@ class _ServerTabsShell extends ConsumerWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex < 3
+                      selectedIndex: tabsRouter.activeIndex < 2
                           ? tabsRouter.activeIndex
                           : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
@@ -67,7 +62,7 @@ class _ServerTabsShell extends ConsumerWidget {
                             const DeploySessionsRailButton(),
                             IconButton(
                               tooltip: 'tabSettings'.tr(),
-                              onPressed: () => tabsRouter.setActiveIndex(3),
+                              onPressed: () => tabsRouter.setActiveIndex(2),
                               icon: const Icon(Symbols.settings),
                             ),
                           ],
@@ -81,13 +76,11 @@ class _ServerTabsShell extends ConsumerWidget {
                         ),
                         NavigationRailDestination(
                           icon: const Icon(Symbols.deployed_code),
-                          selectedIcon: const Icon(Symbols.deployed_code, fill: 1),
+                          selectedIcon: const Icon(
+                            Symbols.deployed_code,
+                            fill: 1,
+                          ),
                           label: Text('tabProjects').tr(),
-                        ),
-                        NavigationRailDestination(
-                          icon: const Icon(Symbols.terminal),
-                          selectedIcon: const Icon(Symbols.terminal, fill: 1),
-                          label: Text('tabSessions').tr(),
                         ),
                       ],
                     ),
@@ -122,11 +115,6 @@ class _ServerTabsShell extends ConsumerWidget {
                       icon: const Icon(Symbols.deployed_code),
                       selectedIcon: const Icon(Symbols.deployed_code, fill: 1),
                       label: 'tabProjects'.tr(),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Symbols.terminal, fill: 1),
-                      selectedIcon: const Icon(Symbols.terminal),
-                      label: 'tabSessions'.tr(),
                     ),
                     NavigationDestination(
                       icon: const Icon(Symbols.settings, fill: 1),

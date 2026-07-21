@@ -67,6 +67,7 @@ dependencies:
     sdk: flutter
   material_symbols_icons: ^4.2951.0
   styled_widget: ^0.4.1
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   auto_route_generator: ^10.5.0
@@ -113,6 +114,7 @@ flutter:
 
   assets:
     - assets/translations/
+    - assets/icons/
 
   fonts:
     - family: IBM Plex Sans

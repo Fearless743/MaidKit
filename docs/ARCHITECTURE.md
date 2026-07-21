@@ -28,7 +28,10 @@ lib/
 
 ## Navigation
 
-`AppRouter` owns top-level routes. `ServerWorkspacePage` is a nested `AutoTabsRouter` shell with `ServersPage` and `SessionsPage` as child routes.
+`AppRouter` owns top-level routes. `ServerWorkspacePage` is a nested
+`AutoTabsRouter` shell with servers, projects, and settings routes.
+`ServersPage` contains the server dashboard and terminal/file-management
+workspace as in-page tabs.
 
 When changing routes:
 

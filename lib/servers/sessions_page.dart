@@ -7,6 +7,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'server_connection_actions.dart';
+import 'server_detail_page.dart';
+import 'servers_page.dart';
 import 'file_management_tab.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -14,9 +16,9 @@ import 'terminal_command_palette.dart';
 import 'terminal_find_host.dart';
 import 'terminal_tabs_provider.dart';
 
-@RoutePage()
-class SessionsPage extends ConsumerWidget {
-  const SessionsPage({super.key});
+/// Unified server workspace with dashboard, terminal, and file-management tabs.
+class SessionsWorkspace extends ConsumerWidget {
+  const SessionsWorkspace({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,8 +43,9 @@ class SessionsPage extends ConsumerWidget {
                   )
                 : _SessionLayoutView(tabs: tabs, servers: servers),
           ),
-          if (tabs.selectedTab != null)
-            _TerminalStatusBar(session: focusedSession),
+          _AnimatedTerminalStatusBar(
+            session: tabs.selectedTab is TerminalTab ? focusedSession : null,
+          ),
         ],
       ),
     );
@@ -559,15 +562,10 @@ class _DraggablePaneTab extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            tab.type == SessionTabType.terminal
-                                ? Symbols.terminal
-                                : Symbols.folder,
-                            size: 16,
-                          ),
+                          Icon(_tabIcon(tab), size: 16),
                           const SizedBox(width: 6),
                           Text(
-                            tab.serverName,
+                            _tabLabel(tab),
                             style: Theme.of(context).textTheme.labelMedium,
                           ),
                         ],
@@ -627,31 +625,30 @@ class _PaneTabChip extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    tab.type == SessionTabType.terminal
-                        ? Symbols.terminal
-                        : Symbols.folder,
+                    _tabIcon(tab),
                     size: 16,
                     color: selected ? scheme.primary : null,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    tab.serverName,
+                    _tabLabel(tab),
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: selected ? scheme.primary : null,
                     ),
                   ),
                   const SizedBox(width: 2),
-                  IconButton(
-                    tooltip: 'sessionsCloseTab'.tr(),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
+                  if (tab is! DashboardTab)
+                    IconButton(
+                      tooltip: 'sessionsCloseTab'.tr(),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      onPressed: onClose,
+                      icon: const Icon(Symbols.close, size: 16),
                     ),
-                    onPressed: onClose,
-                    icon: const Icon(Symbols.close, size: 16),
-                  ),
                 ],
               ),
             ),
@@ -681,18 +678,53 @@ class _PaneTabStack extends StatelessWidget {
     if (paneTabs.isEmpty) return const SizedBox.shrink();
     final selectedIndex = paneTabs.indexWhere((tab) => tab.id == selectedTabId);
     final index = selectedIndex < 0 ? 0 : selectedIndex;
-    return IndexedStack(
-      index: index,
-      sizing: StackFit.expand,
+    final selectedTab = paneTabs[index];
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        for (final tab in paneTabs)
-          _SessionTabBody(
-            tab: tab,
-            autofocus: paneFocused && tab.id == selectedTabId,
+        for (final tab in paneTabs.where((tab) => tab.id != selectedTab.id))
+          _AnimatedPaneTabContent(
+            key: ValueKey(tab.id),
+            active: false,
+            child: _SessionTabBody(tab: tab, autofocus: false),
           ),
+        _AnimatedPaneTabContent(
+          key: ValueKey(selectedTab.id),
+          active: true,
+          child: _SessionTabBody(tab: selectedTab, autofocus: paneFocused),
+        ),
       ],
     );
   }
+}
+
+/// Keeps inactive views mounted while animating the visible pane tab in and
+/// the previous tab out, so terminal and file-management state is retained.
+class _AnimatedPaneTabContent extends StatelessWidget {
+  const _AnimatedPaneTabContent({
+    required this.active,
+    required this.child,
+    super.key,
+  });
+
+  final bool active;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: !active,
+    child: AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      opacity: active ? 1 : 0,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        offset: active ? Offset.zero : const Offset(0.02, 0),
+        child: child,
+      ),
+    ),
+  );
 }
 
 class _SessionTabBody extends StatelessWidget {
@@ -706,6 +738,19 @@ class _SessionTabBody extends StatelessWidget {
     // GlobalKey reparents State when this tab moves across the layout tree
     // (split creation, drag between panes, etc.).
     final key = sessionTabViewKey(tab.id);
+    if (tab is DashboardTab) {
+      return ServerDashboardTab(key: key);
+    }
+    if (tab is ServerDetailTab) {
+      final detailTab = tab as ServerDetailTab;
+      return ServerDetailPage(
+        key: key,
+        server: detailTab.server,
+        initialTab: detailTab.initialTab,
+        initialComposeProject: detailTab.initialComposeProject,
+        embedded: true,
+      );
+    }
     if (tab is FileManagementTab) {
       return FileManagementTabView(key: key, tab: tab as FileManagementTab);
     }
@@ -723,8 +768,52 @@ class _SessionTabBody extends StatelessWidget {
   }
 }
 
+IconData _tabIcon(SessionTab tab) => switch (tab.type) {
+  SessionTabType.dashboard => Symbols.dashboard,
+  SessionTabType.serverDetail => Symbols.dns,
+  SessionTabType.terminal => Symbols.terminal,
+  SessionTabType.fileManagement => Symbols.folder,
+};
+
+String _tabLabel(SessionTab tab) =>
+    tab is DashboardTab ? 'tabDashboard'.tr() : tab.serverName;
+
+class _AnimatedTerminalStatusBar extends StatelessWidget {
+  const _AnimatedTerminalStatusBar({required this.session});
+
+  final SshSessionInfo? session;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 180),
+    reverseDuration: const Duration(milliseconds: 140),
+    transitionBuilder: (child, animation) {
+      final curve = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+      return ClipRect(
+        child: SizeTransition(
+          sizeFactor: curve,
+          alignment: Alignment.bottomCenter,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.35),
+              end: Offset.zero,
+            ).animate(curve),
+            child: FadeTransition(opacity: curve, child: child),
+          ),
+        ),
+      );
+    },
+    child: session == null
+        ? const SizedBox.shrink(key: ValueKey('no-session'))
+        : _TerminalStatusBar(
+            key: ValueKey(session!.serverId),
+            session: session!,
+          ),
+  );
+}
+
 class _TerminalStatusBar extends StatelessWidget {
-  const _TerminalStatusBar({required this.session});
+  const _TerminalStatusBar({required this.session, super.key});
 
   final SshSessionInfo? session;
 
@@ -735,8 +824,8 @@ class _TerminalStatusBar extends StatelessWidget {
         stats?.memoryTotalKb == null || stats?.memoryAvailableKb == null
         ? null
         : stats!.memoryTotalKb! - stats.memoryAvailableKb!;
-      final items = <String>[
-        if (session != null) 'commonConnected'.tr() else 'No session',
+    final items = <String>[
+      if (session != null) 'commonConnected'.tr() else 'No session',
       if (stats?.loadAverage != null)
         'Load ${stats!.loadAverage!.toStringAsFixed(2)}',
       if (usedMemory != null && stats?.memoryTotalKb != null)
@@ -909,18 +998,18 @@ class _ServerCardActions extends StatelessWidget {
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
               ),
-               IconButton.filledTonal(
-                 tooltip: 'sessionsNewTerminal'.tr(),
-                 visualDensity: VisualDensity.compact,
-                 onPressed: onOpenTerminal,
-                 icon: const Icon(Symbols.add, size: 20),
-               ),
-               IconButton(
-                 tooltip: 'sessionsOpenFileManagement'.tr(),
-                 visualDensity: VisualDensity.compact,
-                 onPressed: onOpenFiles,
-                 icon: const Icon(Symbols.folder, size: 20),
-               ),
+              IconButton.filledTonal(
+                tooltip: 'sessionsNewTerminal'.tr(),
+                visualDensity: VisualDensity.compact,
+                onPressed: onOpenTerminal,
+                icon: const Icon(Symbols.add, size: 20),
+              ),
+              IconButton(
+                tooltip: 'sessionsOpenFileManagement'.tr(),
+                visualDensity: VisualDensity.compact,
+                onPressed: onOpenFiles,
+                icon: const Icon(Symbols.folder, size: 20),
+              ),
             ],
           );
         }

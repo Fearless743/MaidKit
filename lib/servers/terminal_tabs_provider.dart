@@ -27,7 +27,7 @@ void _releaseSessionTabViewKey(String tabId) {
   _sessionTabViewKeys.remove(tabId);
 }
 
-enum SessionTabType { terminal, fileManagement }
+enum SessionTabType { dashboard, serverDetail, terminal, fileManagement }
 
 sealed class SessionTab {
   const SessionTab({
@@ -65,6 +65,32 @@ class FileManagementTab extends SessionTab {
 
   @override
   SessionTabType get type => SessionTabType.fileManagement;
+}
+
+/// The persistent server overview, shown in the same pane tab system as live
+/// terminals and file-management views.
+class DashboardTab extends SessionTab {
+  const DashboardTab()
+    : super(id: 'dashboard', serverId: -1, serverName: 'Dashboard');
+
+  @override
+  SessionTabType get type => SessionTabType.dashboard;
+}
+
+class ServerDetailTab extends SessionTab {
+  ServerDetailTab({
+    required super.id,
+    required this.server,
+    this.initialTab = 0,
+    this.initialComposeProject,
+  }) : super(serverId: server.id, serverName: server.name);
+
+  final Server server;
+  final int initialTab;
+  final String? initialComposeProject;
+
+  @override
+  SessionTabType get type => SessionTabType.serverDetail;
 }
 
 /// A pane owns a tab strip and shows one selected tab at a time.
@@ -186,7 +212,20 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
   static const _uuid = Uuid();
 
   @override
-  TerminalTabsState build() => const TerminalTabsState();
+  TerminalTabsState build() {
+    const dashboard = DashboardTab();
+    const pane = SessionPane(
+      id: 'main',
+      tabIds: ['dashboard'],
+      selectedTabId: 'dashboard',
+    );
+    return const TerminalTabsState(
+      tabs: [dashboard],
+      panes: {'main': pane},
+      layout: SessionLayoutLeaf('main'),
+      focusedPaneId: 'main',
+    );
+  }
 
   Future<void> open(
     Server server,
@@ -222,6 +261,32 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
       serverName: server.name,
     );
     _insertTab(tab, targetPaneId: paneId);
+  }
+
+  void openServerDetails(
+    Server server, {
+    int initialTab = 0,
+    String? initialComposeProject,
+    String? paneId,
+  }) {
+    final existing = state.tabs
+        .whereType<ServerDetailTab>()
+        .where((tab) => tab.serverId == server.id)
+        .firstOrNull;
+    if (existing != null) {
+      select(existing.id);
+      return;
+    }
+    if (paneId != null) focusPane(paneId);
+    _insertTab(
+      ServerDetailTab(
+        id: 'server-${server.id}',
+        server: server,
+        initialTab: initialTab,
+        initialComposeProject: initialComposeProject,
+      ),
+      targetPaneId: paneId,
+    );
   }
 
   /// Splits the focused pane and opens an empty sibling for the user to fill.
@@ -362,6 +427,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
 
   Future<void> close(String tabId) async {
     final tab = state.tabs.where((tab) => tab.id == tabId).firstOrNull;
+    if (tab is DashboardTab) return;
     if (tab is TerminalTab) {
       await ref.read(connectionManagerProvider).closeTerminal(tabId);
     }
@@ -372,6 +438,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
   Future<void> closePane(String paneId) async {
     final pane = state.panes[paneId];
     if (pane == null) return;
+    if (pane.tabIds.contains(DashboardTab().id)) return;
     final tabIds = [...pane.tabIds];
     for (final tabId in tabIds) {
       final tab = state.tabs.where((t) => t.id == tabId).firstOrNull;

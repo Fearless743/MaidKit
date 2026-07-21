@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.dart';
+import 'package:maid_kit/servers/about_page.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/theme.dart';
 
@@ -17,9 +19,10 @@ void main() {
     EasyLocalization.logger.enableBuildModes = [];
   });
 
-  testWidgets('opens Settings from the desktop navigation rail', (
-    WidgetTester tester,
-  ) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    PackageInfo? packageInfo,
+  }) async {
     final router = AppRouter();
     addTearDown(router.dispose);
 
@@ -39,10 +42,12 @@ void main() {
             biometricUnlockEnabledProvider.overrideWith(
               (ref) => Future.value(false),
             ),
+            if (packageInfo != null)
+              packageInfoProvider.overrideWith((ref) async => packageInfo),
           ],
           child: MaterialApp.router(
             theme: createMaidKitTheme(Brightness.light),
-            locale: Locale('en', 'US'),
+            locale: const Locale('en', 'US'),
             supportedLocales: const [Locale('en', 'US'), Locale('zh', 'CN')],
             localizationsDelegates: const [
               GlobalMaterialLocalizations.delegate,
@@ -55,6 +60,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('opens Settings from the desktop navigation rail', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
 
     final settingsLabel = 'tabSettings'.tr();
     await tester.tap(find.byTooltip(settingsLabel));
@@ -62,5 +73,40 @@ void main() {
 
     expect(find.text('settingsTitle'.tr()), findsOneWidget);
     expect(find.text('settingsTerminalRenderer'.tr()), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('settingsAbout'.tr()),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('settingsAbout'.tr()), findsOneWidget);
+  });
+
+  testWidgets('opens About from Settings', (WidgetTester tester) async {
+    await pumpApp(
+      tester,
+      packageInfo: PackageInfo(
+        appName: 'MaidKit',
+        packageName: 'dev.solsynth.maid_kit',
+        version: '1.0.0',
+        buildNumber: '1',
+      ),
+    );
+
+    await tester.tap(find.byTooltip('tabSettings'.tr()));
+    await tester.pumpAndSettle();
+
+    final aboutTile = find.text('aboutTitle'.tr());
+    await tester.scrollUntilVisible(
+      aboutTile,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(aboutTile);
+    await tester.pumpAndSettle();
+
+    expect(find.text('aboutTitle'.tr()), findsWidgets);
+    expect(find.text('aboutOpenSourceLicenses'.tr()), findsOneWidget);
+    expect(find.text('1.0.0'), findsWidgets);
   });
 }

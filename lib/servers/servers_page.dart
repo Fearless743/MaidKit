@@ -9,15 +9,14 @@ import 'package:styled_widget/styled_widget.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
-import 'package:maid_kit/routing/app_router.gr.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'sessions_page.dart';
 import 'terminal_tabs_provider.dart';
 
-@RoutePage()
-class ServersPage extends ConsumerWidget {
-  const ServersPage({super.key});
+class ServerDashboardTab extends ConsumerWidget {
+  const ServerDashboardTab({super.key});
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final draft = await showModalBottomSheet<ServerDraft>(
@@ -98,29 +97,73 @@ class ServersPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final servers = ref.watch(serversProvider);
     final sessions = ref.watch(sessionsProvider).asData?.value ?? const [];
+    return _ServersCatalog(
+      servers: servers,
+      sessions: sessions,
+      onAdd: () => _add(context, ref),
+      onConnect: (server) => _connect(context, ref, server),
+      onEdit: (server) => _edit(context, ref, server),
+      onDelete: (server) => _delete(ref, server),
+      onOpenDetail: (server) =>
+          ref.read(terminalTabsProvider.notifier).openServerDetails(server),
+      onRefresh: (server) =>
+          ref.read(connectionManagerProvider).refreshServerInfo(server),
+    );
+  }
+}
+
+@RoutePage()
+class ServersPage extends StatelessWidget {
+  const ServersPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SessionsWorkspace();
+}
+
+class _ServersCatalog extends StatelessWidget {
+  const _ServersCatalog({
+    required this.servers,
+    required this.sessions,
+    required this.onAdd,
+    required this.onConnect,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onOpenDetail,
+    required this.onRefresh,
+  });
+
+  final AsyncValue<List<Server>> servers;
+  final List<SshSessionInfo> sessions;
+  final VoidCallback onAdd;
+  final ValueChanged<Server> onConnect;
+  final ValueChanged<Server> onEdit;
+  final ValueChanged<Server> onDelete;
+  final ValueChanged<Server> onOpenDetail;
+  final ValueChanged<Server> onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: servers.when(
         data: (items) => items.isEmpty
-            ? _EmptyServers(onAdd: () => _add(context, ref))
+            ? _EmptyServers(onAdd: onAdd)
             : _ServerGrid(
                 servers: items,
                 sessions: sessions,
-                onConnect: (server) => _connect(context, ref, server),
-                onEdit: (server) => _edit(context, ref, server),
-                onDelete: (server) => _delete(ref, server),
-                onOpenDetail: (server) =>
-                    context.router.root.push(ServerDetailRoute(server: server)),
-                onRefresh: (server) => ref
-                    .read(connectionManagerProvider)
-                    .refreshServerInfo(server),
+                onConnect: onConnect,
+                onEdit: onEdit,
+                onDelete: onDelete,
+                onOpenDetail: onOpenDetail,
+                onRefresh: onRefresh,
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-             Center(child: Text('serversLoadError'.tr(args: [error.toString()]))),
+        error: (error, _) => Center(
+          child: Text('serversLoadError'.tr(args: [error.toString()])),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _add(context, ref),
+        onPressed: onAdd,
         icon: const Icon(Symbols.add),
         label: Text('serversAddServer'.tr()),
       ),
@@ -165,7 +208,10 @@ class _ServerGrid extends StatelessWidget {
       return ContextMenuWidget(
         menuProvider: (_) => Menu(
           children: [
-            MenuAction(title: 'serversEditServer'.tr(), callback: () => onEdit(server)),
+            MenuAction(
+              title: 'serversEditServer'.tr(),
+              callback: () => onEdit(server),
+            ),
             MenuSeparator(),
             MenuAction(
               title: 'serversDeleteServer'.tr(),
@@ -459,7 +505,7 @@ class _ServerStats extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                  child: _StatTile(
+                child: _StatTile(
                   label: 'detailLoadAverage'.tr(),
                   value: stats!.loadAverage?.toStringAsFixed(2) ?? '—',
                   detail: _loadDetail(stats!.loadAverage),
@@ -507,7 +553,9 @@ class _ServerStats extends StatelessWidget {
         ],
         if (stats?.updatedAt != null) ...[
           Text(
-            'detailRefreshDetails'.tr(args: [_formatRelative(stats!.updatedAt)]),
+            'detailRefreshDetails'.tr(
+              args: [_formatRelative(stats!.updatedAt)],
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelSmall?.copyWith(color: colorScheme.outline),
@@ -793,7 +841,9 @@ class _AddServerDialogState extends State<_AddServerDialog> {
       value == null || value.trim().isEmpty ? 'serverPortRequired'.tr() : null;
   String? _validPort(String? value) {
     final port = int.tryParse(value ?? '');
-    return port != null && port > 0 && port < 65536 ? null : 'serverPortInvalid'.tr();
+    return port != null && port > 0 && port < 65536
+        ? null
+        : 'serverPortInvalid'.tr();
   }
 
   void _save() {
@@ -852,7 +902,9 @@ class _AddServerDialogState extends State<_AddServerDialog> {
                   child: TextFormField(
                     controller: _port,
                     keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: 'serverPortLabel'.tr()),
+                    decoration: InputDecoration(
+                      labelText: 'serverPortLabel'.tr(),
+                    ),
                     validator: _validPort,
                   ),
                 ),
@@ -861,7 +913,9 @@ class _AddServerDialogState extends State<_AddServerDialog> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _user,
-              decoration: InputDecoration(labelText: 'serverUsernameLabel'.tr()),
+              decoration: InputDecoration(
+                labelText: 'serverUsernameLabel'.tr(),
+              ),
               validator: _required,
             ),
             const SizedBox(height: 12),
@@ -885,7 +939,9 @@ class _AddServerDialogState extends State<_AddServerDialog> {
               TextFormField(
                 controller: _secret,
                 obscureText: true,
-                decoration: InputDecoration(labelText: 'serverPasswordLabel'.tr()),
+                decoration: InputDecoration(
+                  labelText: 'serverPasswordLabel'.tr(),
+                ),
                 validator: _required,
               )
             else ...[
@@ -922,9 +978,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: Text('serverDiscoverSystemInfo'.tr()),
-              subtitle: Text(
-                'serverDiscoverSystemInfoHint'.tr(),
-              ),
+              subtitle: Text('serverDiscoverSystemInfoHint'.tr()),
               value: _collectSystemInfo,
               onChanged: (value) => setState(() => _collectSystemInfo = value),
             ),
@@ -932,7 +986,7 @@ class _AddServerDialogState extends State<_AddServerDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                 TextButton(
+                TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: Text('commonCancel'.tr()),
                 ),
