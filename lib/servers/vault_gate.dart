@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:styled_widget/styled_widget.dart';
 
 import 'server_providers.dart';
 
@@ -115,6 +116,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                         ? 'vaultUnlockTitle'.tr()
                         : 'vaultCreateTitle'.tr(),
                     style: theme.textTheme.headlineSmall,
+                    textAlign: .center,
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -172,7 +174,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                     TextButton(
                       onPressed: _busy ? null : _unlockWithBiometrics,
                       child: Text('vaultBiometricAction'.tr()),
-                    ),
+                    ).padding(top: 8),
                 ],
               ),
             ),
