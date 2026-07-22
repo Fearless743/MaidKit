@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/routing/app_router.gr.dart';
 
+import 'database_backup_service.dart';
 import 'server_providers.dart';
 
 @RoutePage()
@@ -216,6 +220,30 @@ class SettingsPage extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             _SettingsSection(
+              titleKey: 'settingsData',
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    leading: const Icon(Symbols.file_download),
+                    title: const Text('settingsExportData').tr(),
+                    subtitle: const Text('settingsExportDataHint').tr(),
+                    onTap: () => _exportDatabase(context, ref),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    leading: const Icon(Symbols.file_upload),
+                    title: const Text('settingsImportData').tr(),
+                    subtitle: const Text('settingsImportDataHint').tr(),
+                    onTap: () => _importDatabase(context, ref),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _SettingsSection(
               titleKey: 'settingsAbout',
               padding: EdgeInsets.zero,
               child: ListTile(
@@ -242,6 +270,157 @@ class SettingsPage extends ConsumerWidget {
     }
     ref.invalidate(biometricUnlockEnabledProvider);
   }
+
+  Future<void> _exportDatabase(BuildContext context, WidgetRef ref) async {
+    final password = await _backupPasswordDialog(context, confirm: true);
+    if (password == null || !context.mounted) return;
+
+    final path = await FilePicker.saveFile(
+      dialogTitle: 'settingsExportData'.tr(),
+      fileName: 'maidkit-backup.mkb',
+      type: FileType.custom,
+      allowedExtensions: const ['mkb'],
+    );
+    if (path == null || !context.mounted) return;
+
+    try {
+      final archive = await DatabaseBackupService(
+        ref.read(databaseProvider),
+        ref.read(vaultServiceProvider),
+      ).exportArchive(password);
+      await File(path).writeAsString(archive);
+      if (context.mounted) _showMessage(context, 'settingsExportSuccess'.tr());
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage(
+          context,
+          'settingsBackupError'.tr(args: [error.toString()]),
+        );
+      }
+    }
+  }
+
+  Future<void> _importDatabase(BuildContext context, WidgetRef ref) async {
+    final selection = await FilePicker.pickFiles(
+      dialogTitle: 'settingsImportData'.tr(),
+      type: FileType.custom,
+      allowedExtensions: const ['mkb'],
+    );
+    final path = selection?.files.singleOrNull?.path;
+    if (path == null || !context.mounted) return;
+
+    final password = await _backupPasswordDialog(context, confirm: false);
+    if (password == null || !context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('settingsImportConfirmTitle').tr(),
+        content: const Text('settingsImportConfirmDescription').tr(),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('commonCancel').tr(),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('settingsImportData').tr(),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final archive = await File(path).readAsString();
+      await DatabaseBackupService(
+        ref.read(databaseProvider),
+        ref.read(vaultServiceProvider),
+      ).importArchive(archive, password);
+      if (context.mounted) _showMessage(context, 'settingsImportSuccess'.tr());
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage(
+          context,
+          'settingsBackupError'.tr(args: [error.toString()]),
+        );
+      }
+    }
+  }
+}
+
+Future<String?> _backupPasswordDialog(
+  BuildContext context, {
+  required bool confirm,
+}) {
+  final password = TextEditingController();
+  final confirmation = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(
+        confirm
+            ? 'settingsExportPasswordTitle'.tr()
+            : 'settingsImportPasswordTitle'.tr(),
+      ),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('settingsBackupPasswordHint'.tr()),
+            const SizedBox(height: 16),
+            TextField(
+              controller: password,
+              autofocus: true,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'settingsBackupPassword'.tr(),
+              ),
+            ),
+            if (confirm) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmation,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'settingsBackupPasswordConfirm'.tr(),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('commonCancel').tr(),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (password.text.length < 12) {
+              _showMessage(context, 'settingsBackupPasswordTooShort'.tr());
+              return;
+            }
+            if (confirm && password.text != confirmation.text) {
+              _showMessage(context, 'vaultPasswordsDontMatch'.tr());
+              return;
+            }
+            Navigator.of(context).pop(password.text);
+          },
+          child: Text(
+            confirm ? 'settingsExportData'.tr() : 'settingsImportData'.tr(),
+          ),
+        ),
+      ],
+    ),
+  ).whenComplete(() {
+    password.dispose();
+    confirmation.dispose();
+  });
+}
+
+void _showMessage(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 
 class _SettingsSection extends StatelessWidget {
