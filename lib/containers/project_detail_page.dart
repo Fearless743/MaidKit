@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -38,7 +39,7 @@ class ProjectDetailPage extends ConsumerWidget {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, _) =>
-          Scaffold(body: Center(child: Text('Could not load project: $error'))),
+          Scaffold(body: Center(child: Text('deploymentDetailLoadError'.tr(args: ['$error'])))),
       data: (allProjects) {
         final allResources =
             resources.asData?.value ?? const <DeploymentResource>[];
@@ -50,8 +51,8 @@ class ProjectDetailPage extends ConsumerWidget {
         if (project == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: const Center(
-              child: Text('This managed project is no longer available.'),
+            body: Center(
+              child: Text('deploymentDetailUnavailable'.tr()),
             ),
           );
         }
@@ -115,8 +116,8 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
         );
     if (mounted) {
       showStyledSnackBar(
-        message: '“${draft.name}” added to the project.',
-        title: 'Resource added',
+        message: 'deploymentResourceAdded'.tr(args: [draft.name]),
+        title: 'deploymentResourceAddedTitle'.tr(),
         icon: Symbols.check_circle,
       );
     }
@@ -145,17 +146,20 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete project?'),
+        title: Text('deploymentDeleteTitle'.tr()),
         content: Text(
           count == 0
-              ? 'Delete “${widget.project.name}”? This cannot be undone.'
-              : 'Delete “${widget.project.name}” and its $count resource'
-                    '${count == 1 ? '' : 's'}? This cannot be undone.',
+              ? 'deploymentDeleteConfirmEmpty'.tr(args: [widget.project.name])
+              : 'deploymentDeleteConfirm'.tr(args: [
+                  widget.project.name,
+                  '$count',
+                  count == 1 ? '' : 's',
+                ]),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('commonCancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -163,7 +167,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
-            child: const Text('Delete'),
+            child: Text('commonDelete'.tr()),
           ),
         ],
       ),
@@ -177,19 +181,18 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove resource?'),
+        title: Text('deploymentRemoveTitle'.tr()),
         content: Text(
-          'Remove “${resource.name}” from this project? '
-          'Remote infrastructure is not deleted.',
+          'deploymentRemoveConfirm'.tr(args: [resource.name]),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('commonCancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
+            child: Text('commonRemove'.tr()),
           ),
         ],
       ),
@@ -251,12 +254,12 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
         title: Text(widget.project.name),
         actions: [
           IconButton(
-            tooltip: 'Edit project',
+            tooltip: 'deploymentEditProject'.tr(),
             icon: const Icon(Symbols.edit),
             onPressed: _editProject,
           ),
           IconButton(
-            tooltip: 'Delete project',
+            tooltip: 'deploymentDeleteProject'.tr(),
             icon: const Icon(Symbols.delete),
             onPressed: _deleteProject,
           ),
@@ -266,7 +269,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
             child: FilledButton.icon(
               onPressed: () => _addResource(servers),
               icon: const Icon(Symbols.add, size: 18),
-              label: const Text('Add resource'),
+              label: Text('deploymentAddResource'.tr()),
             ),
           ),
         ],
@@ -320,12 +323,12 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
                       controller: _searchController,
                       decoration: InputDecoration(
                         isDense: true,
-                        hintText: 'Filter resources',
+                        hintText: 'deploymentFilterResources'.tr(),
                         prefixIcon: const Icon(Symbols.search, size: 20),
                         suffixIcon: _query.isEmpty
                             ? null
                             : IconButton(
-                                tooltip: 'Clear',
+                                tooltip: 'deploymentClearTooltip'.tr(),
                                 icon: const Icon(Symbols.close, size: 18),
                                 onPressed: () {
                                   _searchController.clear();
@@ -343,7 +346,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
                         child: Row(
                           children: [
                             FilterChip(
-                              label: const Text('All'),
+                              label: Text('deploymentFilterAll'.tr()),
                               selected: _kindFilter == null,
                               onSelected: (_) =>
                                   setState(() => _kindFilter = null),
@@ -374,13 +377,16 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Text('Resources', style: theme.textTheme.titleMedium),
+                      Text('deploymentResourcesTitle'.tr(), style: theme.textTheme.titleMedium),
                       const Spacer(),
                       if (widget.resources.isNotEmpty)
                         Text(
                           _filteredResources.length == widget.resources.length
-                              ? '${widget.resources.length} total'
-                              : '${_filteredResources.length} of ${widget.resources.length}',
+                              ? 'deploymentResourcesTotal'.tr(args: ['${widget.resources.length}'])
+                              : 'deploymentResourcesFiltered'.tr(args: [
+                                  '${_filteredResources.length}',
+                                  '${widget.resources.length}',
+                                ]),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -405,9 +411,9 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
           else if (_filteredResources.isEmpty)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-              sliver: const SliverToBoxAdapter(
+              sliver: SliverToBoxAdapter(
                 child: Center(
-                  child: Text('No resources match the current filters.'),
+                  child: Text('deploymentNoFilterMatch'.tr()),
                 ),
               ),
             )
@@ -550,7 +556,7 @@ class _ProjectEditDialogState extends State<_ProjectEditDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Edit project'),
+    title: Text('deploymentEditTitle'.tr()),
     content: SizedBox(
       width: 420,
       child: Column(
@@ -559,15 +565,15 @@ class _ProjectEditDialogState extends State<_ProjectEditDialog> {
           TextField(
             controller: _nameController,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Project name'),
+            decoration: InputDecoration(labelText: 'deploymentEditNameLabel'.tr()),
             onSubmitted: (_) => _submit(),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _descriptionController,
             maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Description (optional)',
+            decoration: InputDecoration(
+              labelText: 'deploymentEditDescriptionLabel'.tr(),
               alignLabelWithHint: true,
             ),
           ),
@@ -577,9 +583,9 @@ class _ProjectEditDialogState extends State<_ProjectEditDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text('commonCancel'.tr()),
       ),
-      FilledButton(onPressed: _submit, child: const Text('Save')),
+      FilledButton(onPressed: _submit, child: Text('commonSave'.tr())),
     ],
   );
 }
@@ -673,31 +679,31 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
       DeploymentResourceKind.compose => [
         _QuickActionSpec(
           id: 'compose_up',
-          label: 'Start',
+          label: 'deploymentQuickActionStart'.tr(),
           icon: Symbols.play_arrow,
           enabled: _composeReady,
         ),
         _QuickActionSpec(
           id: 'compose_pull',
-          label: 'Pull images',
+          label: 'deploymentQuickActionPull'.tr(),
           icon: Symbols.download,
           enabled: _composeReady,
         ),
         _QuickActionSpec(
           id: 'compose_restart',
-          label: 'Restart',
+          label: 'deploymentQuickActionRestart'.tr(),
           icon: Symbols.restart_alt,
           enabled: _composeReady,
         ),
         _QuickActionSpec(
           id: 'compose_logs',
-          label: 'Logs',
+          label: 'deploymentQuickActionLogs'.tr(),
           icon: Symbols.terminal,
           enabled: _composeReady,
         ),
         _QuickActionSpec(
           id: 'compose_stop',
-          label: 'Stop',
+          label: 'deploymentQuickActionStop'.tr(),
           icon: Symbols.stop,
           enabled: _composeReady,
         ),
@@ -705,25 +711,25 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
       DeploymentResourceKind.container => [
         _QuickActionSpec(
           id: 'container_restart',
-          label: 'Restart',
+          label: 'deploymentQuickActionRestart'.tr(),
           icon: Symbols.restart_alt,
           enabled: _containerRef.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'container_logs',
-          label: 'Logs',
+          label: 'deploymentQuickActionLogs'.tr(),
           icon: Symbols.terminal,
           enabled: _containerRef.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'container_start',
-          label: 'Start',
+          label: 'deploymentQuickActionStart'.tr(),
           icon: Symbols.play_arrow,
           enabled: _containerRef.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'container_stop',
-          label: 'Stop',
+          label: 'deploymentQuickActionStop'.tr(),
           icon: Symbols.stop,
           enabled: _containerRef.isNotEmpty,
         ),
@@ -732,31 +738,31 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
       DeploymentResourceKind.webServer => [
         _QuickActionSpec(
           id: 'systemd_status',
-          label: 'Status',
+          label: 'deploymentQuickActionStatus'.tr(),
           icon: Symbols.info,
           enabled: _systemdUnit.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'systemd_logs',
-          label: 'Logs',
+          label: 'deploymentQuickActionLogs'.tr(),
           icon: Symbols.terminal,
           enabled: _systemdUnit.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'systemd_restart',
-          label: 'Restart',
+          label: 'deploymentQuickActionRestart'.tr(),
           icon: Symbols.restart_alt,
           enabled: _systemdUnit.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'systemd_start',
-          label: 'Start',
+          label: 'deploymentQuickActionStart'.tr(),
           icon: Symbols.play_arrow,
           enabled: _systemdUnit.isNotEmpty,
         ),
         _QuickActionSpec(
           id: 'systemd_stop',
-          label: 'Stop',
+          label: 'deploymentQuickActionStop'.tr(),
           icon: Symbols.stop,
           enabled: _systemdUnit.isNotEmpty,
         ),
@@ -815,7 +821,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
       if (mounted) {
         showStyledSnackBar(
           message: '$error',
-          title: 'Action failed',
+          title: 'deploymentActionFailed'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -829,8 +835,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     final host = server!;
     if (!_composeReady) {
       throw StateError(
-        'Compose directory is missing. Re-link this stack with a remote path, '
-        'or restore the original Compose project link.',
+        'deploymentComposeMissing'.tr(),
       );
     }
     await runComposeProjectActionWithTerminal(
@@ -849,7 +854,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
   Future<void> _runContainer(ContainerAction action) async {
     final host = server!;
     if (_containerRef.isEmpty) {
-      throw StateError('Container name is not set for this resource.');
+      throw StateError('deploymentContainerMissing'.tr());
     }
     await ref
         .read(connectionManagerProvider)
@@ -864,7 +869,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     if (mounted) {
       showStyledSnackBar(
         message: resource.name,
-        title: 'Container ${action.pastLabel}',
+        title: 'deploymentContainerSuccess'.tr(args: [action.pastLabel]),
         icon: Symbols.check_circle,
       );
     }
@@ -874,7 +879,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     final host = server!;
     final unit = _systemdUnit;
     if (unit.isEmpty) {
-      throw StateError('Systemd unit is not set for this resource.');
+      throw StateError('deploymentSystemdMissing'.tr());
     }
     await ref
         .read(connectionManagerProvider)
@@ -887,16 +892,16 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
         );
     if (mounted) {
       final past = switch (action) {
-        SystemdUnitAction.start => 'started',
-        SystemdUnitAction.stop => 'stopped',
-        SystemdUnitAction.restart => 'restarted',
-        SystemdUnitAction.reload => 'reloaded',
-        SystemdUnitAction.enable => 'enabled',
-        SystemdUnitAction.disable => 'disabled',
+        SystemdUnitAction.start => 'deploymentServiceStarted',
+        SystemdUnitAction.stop => 'deploymentServiceStopped',
+        SystemdUnitAction.restart => 'deploymentServiceRestarted',
+        SystemdUnitAction.reload => 'deploymentServiceReloaded',
+        SystemdUnitAction.enable => 'deploymentServiceEnabled',
+        SystemdUnitAction.disable => 'deploymentServiceDisabled',
       };
       showStyledSnackBar(
         message: unit,
-        title: 'Service $past',
+        title: 'deploymentServiceSuccess'.tr(args: [past.tr()]),
         icon: Symbols.check_circle,
       );
     }
@@ -906,12 +911,11 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     final host = server!;
     if (!_composeReady) {
       throw StateError(
-        'Compose directory is missing. Re-link this stack with a remote path, '
-        'or restore the original Compose project link.',
+        'deploymentComposeMissing'.tr(),
       );
     }
     await _showRemoteText(
-      title: 'Logs · $_composeName',
+      title: 'deploymentLogsTitle'.tr(args: [_composeName]),
       load: () async {
         final sudo = await _sudoPassword();
         return ref
@@ -931,7 +935,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
   Future<void> _showContainerLogs() async {
     final host = server!;
     await _showRemoteText(
-      title: 'Logs · $_containerRef',
+      title: 'deploymentLogsTitle'.tr(args: [_containerRef]),
       load: () async {
         final sudo = await _sudoPassword();
         return ref
@@ -951,7 +955,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     final host = server!;
     final unit = _systemdUnit;
     await _showRemoteText(
-      title: 'Status · $unit',
+      title: 'deploymentStatusTitle'.tr(args: [unit]),
       load: () async {
         final sudo = await _sudoPassword();
         return ref
@@ -970,7 +974,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     final host = server!;
     final unit = _systemdUnit;
     await _showRemoteText(
-      title: 'Logs · $unit',
+      title: 'deploymentLogsTitle'.tr(args: [unit]),
       load: () async {
         final sudo = await _sudoPassword();
         return ref
@@ -1089,7 +1093,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                     color: scheme.onSurfaceVariant,
                   ),
                   IconButton(
-                    tooltip: 'Remove from project',
+                    tooltip: 'deploymentRemoveFromProject'.tr(),
                     icon: const Icon(Symbols.close),
                     onPressed: widget.onDelete,
                   ),
@@ -1119,7 +1123,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                     ),
                   if (overflow.isNotEmpty)
                     PopupMenuButton<String>(
-                      tooltip: 'More actions',
+                      tooltip: 'deploymentMoreActions'.tr(),
                       enabled: !_busy,
                       onSelected: _runQuickAction,
                       itemBuilder: (_) => [
@@ -1144,8 +1148,8 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                               color: scheme.onSurfaceVariant,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'More',
+                             Text(
+                              'deploymentMoreActions'.tr(),
                               style: theme.textTheme.labelLarge?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
@@ -1171,19 +1175,18 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                       resource: resource,
                       configuration: effectiveConfig,
                     ),
-                  if (!_composeReady && kind == DeploymentResourceKind.compose)
+                   if (!_composeReady && kind == DeploymentResourceKind.compose)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
-                        'This Compose resource is missing a remote directory. '
-                        'Expand configuration below or re-add the stack with a path.',
+                        'deploymentComposeNotReady'.tr(),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.error,
                         ),
                       ),
                     ),
-                  if (effectiveConfig.isNotEmpty) ...[
-                    Text('Configuration', style: theme.textTheme.labelMedium),
+                   if (effectiveConfig.isNotEmpty) ...[
+                     Text('deploymentConfigTitle'.tr(), style: theme.textTheme.labelMedium),
                     const SizedBox(height: 6),
                     ...effectiveConfig.entries.map(
                       (entry) => Padding(
@@ -1211,12 +1214,12 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                  ] else
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 8),
-                      child: Text('No portable configuration recorded.'),
+                  ]                    else
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text('deploymentConfigEmpty'.tr()),
                     ),
-                  if (server != null)
+                   if (server != null)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: OutlinedButton.icon(
@@ -1224,8 +1227,8 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                         icon: const Icon(Symbols.open_in_new, size: 18),
                         label: Text(
                           kind == DeploymentResourceKind.serverFolder
-                              ? 'Browse ${server!.name}'
-                              : 'Open on ${server!.name}',
+                              ? 'deploymentBrowseServer'.tr(args: [server!.name])
+                              : 'deploymentOpenOnServer'.tr(args: [server!.name]),
                         ),
                       ),
                     ),
@@ -1286,7 +1289,7 @@ class _RemoteTextSheetState extends State<_RemoteTextSheet> {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     showStyledSnackBar(
-      message: 'Copied to clipboard',
+      message: 'deploymentRemoteCopySuccess'.tr(),
       title: widget.title,
       icon: Symbols.content_copy,
     );
@@ -1326,7 +1329,7 @@ class _RemoteTextSheetState extends State<_RemoteTextSheet> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Could not load: ${snapshot.error}',
+                    'deploymentRemoteLoading'.tr(args: ['${snapshot.error}']),
                     style: TextStyle(color: scheme.error),
                   ),
                   const SizedBox(height: 12),
@@ -1334,7 +1337,7 @@ class _RemoteTextSheetState extends State<_RemoteTextSheet> {
                     alignment: Alignment.centerLeft,
                     child: FilledButton.tonal(
                       onPressed: () => setState(_reload),
-                      child: const Text('Retry'),
+                      child: Text('deploymentRemoteRetry'.tr()),
                     ),
                   ),
                 ],
@@ -1343,7 +1346,7 @@ class _RemoteTextSheetState extends State<_RemoteTextSheet> {
           }
           final text = snapshot.data ?? '';
           if (text.trim().isEmpty) {
-            return const Center(child: Text('No output.'));
+            return Center(child: Text('deploymentRemoteEmpty'.tr()));
           }
           return SelectionArea(
             child: SingleChildScrollView(
@@ -1517,7 +1520,7 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
       if (mounted) {
         showStyledSnackBar(
           message: container.name,
-          title: 'Container ${action.pastLabel}',
+          title: 'deploymentContainerSuccess'.tr(args: [action.pastLabel]),
           icon: Symbols.check_circle,
         );
         setState(() => _containers = _load());
@@ -1543,7 +1546,7 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
       useSafeArea: true,
       useRootNavigator: true,
       builder: (_) => _RemoteTextSheet(
-        title: 'Logs · ${container.name}',
+        title: 'deploymentLogsTitle'.tr(args: [container.name]),
         load: () => ref
             .read(connectionManagerProvider)
             .readContainerLogs(
@@ -1567,29 +1570,29 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
         children: [
           Row(
             children: [
-              Text('Live stack', style: Theme.of(context).textTheme.titleSmall),
-              const Spacer(),
-              if (_directory.isNotEmpty)
-                IconButton(
-                  tooltip: 'Stack logs',
-                  icon: const Icon(Symbols.terminal, size: 18),
-                  onPressed: _showStackLogs,
-                ),
-              if (snapshot.connectionState == ConnectionState.done)
-                IconButton(
-                  tooltip: 'Refresh containers',
-                  icon: const Icon(Symbols.refresh, size: 18),
-                  onPressed: () => setState(() => _containers = _load()),
-                ),
+              Text('deploymentLiveStack'.tr(), style: Theme.of(context).textTheme.titleSmall),
+               const Spacer(),
+               if (_directory.isNotEmpty)
+                 IconButton(
+                   tooltip: 'deploymentStackLogs'.tr(),
+                   icon: const Icon(Symbols.terminal, size: 18),
+                   onPressed: _showStackLogs,
+                 ),
+               if (snapshot.connectionState == ConnectionState.done)
+                 IconButton(
+                   tooltip: 'deploymentRefreshContainers'.tr(),
+                   icon: const Icon(Symbols.refresh, size: 18),
+                   onPressed: () => setState(() => _containers = _load()),
+                 ),
             ],
           ),
           const SizedBox(height: 6),
           if (snapshot.connectionState != ConnectionState.done)
             const LinearProgressIndicator()
           else if (snapshot.hasError)
-            Text('Could not load stack: ${snapshot.error}')
+            Text('deploymentStackLoadError'.tr(args: ['${snapshot.error}']))
           else if (snapshot.data!.isEmpty)
-            const Text('No containers currently match this Compose project.')
+            Text('deploymentNoComposeContainers'.tr())
           else
             ...snapshot.data!.map((item) {
               final running = isContainerRunning(item);
@@ -1604,7 +1607,7 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                   ),
                 ),
                 trailing: PopupMenuButton<String>(
-                  tooltip: 'Container actions',
+                  tooltip: 'deploymentContainerActions'.tr(),
                   onSelected: (value) {
                     switch (value) {
                       case 'restart':
@@ -1619,15 +1622,15 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                   },
                   itemBuilder: (_) => [
                     if (running)
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'restart',
-                        child: Text('Restart'),
+                        child: Text('deploymentQuickActionRestart'.tr()),
                       ),
                     if (running)
-                      const PopupMenuItem(value: 'stop', child: Text('Stop'))
+                      PopupMenuItem(value: 'stop', child: Text('deploymentQuickActionStop'.tr()))
                     else
-                      const PopupMenuItem(value: 'start', child: Text('Start')),
-                    const PopupMenuItem(value: 'logs', child: Text('Logs')),
+                      PopupMenuItem(value: 'start', child: Text('deploymentQuickActionStart'.tr())),
+                    PopupMenuItem(value: 'logs', child: Text('deploymentQuickActionLogs'.tr())),
                   ],
                 ),
               );
@@ -1648,10 +1651,10 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                     onPressed: () => _run(action),
                     child: Text(action.label),
                   ),
-                OutlinedButton.icon(
+                 OutlinedButton.icon(
                   onPressed: _showStackLogs,
                   icon: const Icon(Symbols.terminal, size: 16),
-                  label: const Text('Logs'),
+                  label: Text('deploymentQuickActionLogs'.tr()),
                 ),
               ],
             ),
@@ -1687,13 +1690,12 @@ class _EmptyResources extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'No resources in $projectName',
+            'deploymentEmptyResourcesTitle'.tr(args: [projectName]),
             style: theme.textTheme.titleSmall,
           ),
           const SizedBox(height: 6),
           Text(
-            'Add servers, folders, containers, Compose stacks, '
-            'firewall rules, or systemd units to this collection.',
+            'deploymentEmptyResourcesHint'.tr(),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
@@ -1703,7 +1705,7 @@ class _EmptyResources extends StatelessWidget {
           FilledButton.icon(
             onPressed: onAdd,
             icon: const Icon(Symbols.add, size: 18),
-            label: const Text('Add resource'),
+            label: Text('deploymentAddResource'.tr()),
           ),
         ],
       ),
@@ -1770,11 +1772,11 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
   ];
 
   String get _locationLabel => switch (_kind) {
-    DeploymentResourceKind.serverFolder => 'Folder path',
-    DeploymentResourceKind.container => 'Container name or ID',
-    DeploymentResourceKind.compose => 'Compose project name',
-    DeploymentResourceKind.firewallRule => 'Rule, port, or service',
-    DeploymentResourceKind.systemdService => 'Systemd unit name',
+    DeploymentResourceKind.serverFolder => 'deploymentLocationFolder'.tr(),
+    DeploymentResourceKind.container => 'deploymentLocationContainer'.tr(),
+    DeploymentResourceKind.compose => 'deploymentLocationCompose'.tr(),
+    DeploymentResourceKind.firewallRule => 'deploymentLocationFirewall'.tr(),
+    DeploymentResourceKind.systemdService => 'deploymentLocationSystemd'.tr(),
     _ => '',
   };
 
@@ -1879,7 +1881,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
       context,
       ref,
       server,
-      title: 'Choose linked folder',
+      title: 'deploymentChooseLinkedFolder'.tr(),
       initialPath: _location.isEmpty ? '.' : _location,
       selection: CloudFilePickerSelection.folder,
     );
@@ -1915,13 +1917,13 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             _directory.trim().isNotEmpty);
 
     return SheetScaffold(
-      titleText: 'Add resource',
+      titleText: 'deploymentSheetTitle'.tr(),
       heightFactor: 0.72,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           Text(
-            'Add an item to this project collection.',
+            'deploymentSheetInfo'.tr(),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -1929,7 +1931,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           const SizedBox(height: 12),
           DropdownButtonFormField<DeploymentResourceKind>(
             initialValue: _kind,
-            decoration: const InputDecoration(labelText: 'Resource type'),
+            decoration: InputDecoration(labelText: 'deploymentResourceType'.tr()),
             items: [
               for (final kind in _linkableKinds)
                 DropdownMenuItem(
@@ -1954,7 +1956,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           const SizedBox(height: 12),
           if (widget.servers.isEmpty)
             Text(
-              'Add a server in the Servers tab before linking resources.',
+              'deploymentNoServersHint'.tr(),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.error,
               ),
@@ -1962,7 +1964,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           else
             DropdownButtonFormField<int>(
               initialValue: _serverId,
-              decoration: const InputDecoration(labelText: 'Server'),
+              decoration: InputDecoration(labelText: 'deploymentServerLabel'.tr()),
               items: [
                 for (final server in widget.servers)
                   DropdownMenuItem(value: server.id, child: Text(server.name)),
@@ -1974,9 +1976,9 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             ),
           const SizedBox(height: 12),
           TextFormField(
-            decoration: const InputDecoration(
-              labelText: 'Display name',
-              helperText: 'Shown in this project’s resource list.',
+            decoration: InputDecoration(
+              labelText: 'deploymentDisplayName'.tr(),
+              helperText: 'deploymentDisplayNameHelper'.tr(),
             ),
             onChanged: (value) => setState(() => _name = value),
             onFieldSubmitted: (_) {
@@ -2016,11 +2018,11 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           )
-                        : IconButton(
-                            tooltip: 'Refresh suggestions',
-                            icon: const Icon(Symbols.refresh),
-                            onPressed: _loadSuggestions,
-                          ),
+                         : IconButton(
+                             tooltip: 'deploymentRefreshSuggestions'.tr(),
+                             icon: const Icon(Symbols.refresh),
+                             onPressed: _loadSuggestions,
+                           ),
                   ),
                   onChanged: (value) => setState(() => _location = value),
                   onFieldSubmitted: (_) {
@@ -2032,7 +2034,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             if (_suggestionError != null) ...[
               const SizedBox(height: 6),
               Text(
-                'Could not load suggestions: $_suggestionError',
+                'deploymentLoadSuggestionsError'.tr(args: [_suggestionError!]),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.error,
                 ),
@@ -2040,7 +2042,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             ] else if (_suggestions.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                'Detected on this server',
+                'deploymentDetectedOnServer'.tr(),
                 style: Theme.of(context).textTheme.labelMedium,
               ),
               const SizedBox(height: 4),
@@ -2059,15 +2061,15 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             if (_kind == DeploymentResourceKind.compose) ...[
               const SizedBox(height: 12),
               TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Remote project directory',
+                decoration: InputDecoration(
+                  labelText: 'deploymentRemoteDirectory'.tr(),
                 ),
                 onChanged: (value) => setState(() => _directory = value),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<ContainerRuntime>(
                 initialValue: _runtime,
-                decoration: const InputDecoration(labelText: 'Runtime'),
+                decoration: InputDecoration(labelText: 'deploymentRuntime'.tr()),
                 items: [
                   for (final runtime in ContainerRuntime.values)
                     DropdownMenuItem(value: runtime, child: Text(runtime.name)),
@@ -2077,7 +2079,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
               const SizedBox(height: 12),
               DropdownButtonFormField<ContainerScope>(
                 initialValue: _scope,
-                decoration: const InputDecoration(labelText: 'Scope'),
+                decoration: InputDecoration(labelText: 'deploymentScope'.tr()),
                 items: [
                   for (final scope in ContainerScope.values)
                     DropdownMenuItem(value: scope, child: Text(scope.name)),
@@ -2092,7 +2094,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
                 child: OutlinedButton.icon(
                   onPressed: _serverId == null ? null : _pickFolder,
                   icon: const Icon(Symbols.folder_open, size: 18),
-                  label: const Text('Browse server folders'),
+                  label: Text('deploymentBrowseFolders'.tr()),
                 ),
               ),
             ],
@@ -2101,7 +2103,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           FilledButton.icon(
             onPressed: canSubmit ? _submit : null,
             icon: const Icon(Symbols.add),
-            label: const Text('Add to project'),
+            label: Text('deploymentAddToProject'.tr()),
           ),
         ],
       ),

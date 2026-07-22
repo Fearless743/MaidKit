@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -27,15 +28,15 @@ DeploymentResourceKind deploymentResourceKindFromId(String id) {
 /// Short label for UI chips, cards, and resource lists.
 String deploymentResourceKindLabel(DeploymentResourceKind kind) =>
     switch (kind) {
-      DeploymentResourceKind.server => 'Server',
-      DeploymentResourceKind.serverFolder => 'Folder',
-      DeploymentResourceKind.compose => 'Compose',
-      DeploymentResourceKind.container => 'Container',
-      DeploymentResourceKind.webServer => 'Web server',
-      DeploymentResourceKind.firewallRule => 'Firewall',
-      DeploymentResourceKind.systemdService => 'Systemd',
-      DeploymentResourceKind.database => 'Database',
-      DeploymentResourceKind.other => 'Other',
+      DeploymentResourceKind.server => 'deploymentKindServer'.tr(),
+      DeploymentResourceKind.serverFolder => 'deploymentKindFolder'.tr(),
+      DeploymentResourceKind.compose => 'deploymentKindCompose'.tr(),
+      DeploymentResourceKind.container => 'deploymentKindContainer'.tr(),
+      DeploymentResourceKind.webServer => 'deploymentKindWebServer'.tr(),
+      DeploymentResourceKind.firewallRule => 'deploymentKindFirewall'.tr(),
+      DeploymentResourceKind.systemdService => 'deploymentKindSystemd'.tr(),
+      DeploymentResourceKind.database => 'deploymentKindDatabase'.tr(),
+      DeploymentResourceKind.other => 'deploymentKindOther'.tr(),
     };
 
 IconData deploymentResourceKindIcon(DeploymentResourceKind kind) =>

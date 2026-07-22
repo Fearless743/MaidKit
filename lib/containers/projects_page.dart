@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:auto_route/auto_route.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -41,7 +42,10 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
   Future<void> _create() async {
     final draft = await showDialog<_ProjectDraft>(
       context: context,
-      builder: (context) => const _ProjectEditorDialog(),
+      builder: (context) => _ProjectEditorDialog(
+        title: 'deploymentEditorTitleNew'.tr(),
+        confirmLabel: 'deploymentEditorCreate'.tr(),
+      ),
     );
     if (draft == null) return;
     final id = await ref
@@ -55,10 +59,10 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     final draft = await showDialog<_ProjectDraft>(
       context: context,
       builder: (context) => _ProjectEditorDialog(
-        title: 'Edit project',
+        title: 'deploymentEditorTitleEdit'.tr(),
         initialName: project.name,
         initialDescription: project.description,
-        confirmLabel: 'Save',
+        confirmLabel: 'deploymentEditorSave'.tr(),
       ),
     );
     if (draft == null) return;
@@ -75,17 +79,20 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete project?'),
+        title: Text('deploymentDeleteTitle'.tr()),
         content: Text(
           resourceCount == 0
-              ? 'Delete “${project.name}”? This cannot be undone.'
-              : 'Delete “${project.name}” and its $resourceCount resource'
-                    '${resourceCount == 1 ? '' : 's'}? This cannot be undone.',
+              ? 'deploymentDeleteConfirmEmpty'.tr(args: [project.name])
+              : 'deploymentDeleteConfirm'.tr(args: [
+                  project.name,
+                  '$resourceCount',
+                  resourceCount == 1 ? '' : 's',
+                ]),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('commonCancel'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -93,7 +100,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
-            child: const Text('Delete'),
+            child: Text('commonDelete'.tr()),
           ),
         ],
       ),
@@ -106,7 +113,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     try {
       final source = await ref.read(projectRepositoryProvider).exportToml();
       final path = await FilePicker.saveFile(
-        dialogTitle: 'Export deployment catalog',
+        dialogTitle: 'deploymentExportDialogTitle'.tr(),
         fileName: 'maidkit-projects.toml',
         type: FileType.custom,
         allowedExtensions: const ['toml'],
@@ -114,8 +121,8 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       );
       if (path != null && mounted) {
         showStyledSnackBar(
-          message: 'Catalog exported.',
-          title: 'Export complete',
+          message: 'deploymentExportSuccess'.tr(),
+          title: 'deploymentExportComplete'.tr(),
           icon: Symbols.check_circle,
         );
       }
@@ -123,7 +130,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       if (mounted) {
         showStyledSnackBar(
           message: '$error',
-          title: 'Could not export catalog',
+          title: 'deploymentExportError'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -145,9 +152,9 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       if (mounted) {
         showStyledSnackBar(
           message: count == 1
-              ? 'Imported 1 project.'
-              : 'Imported $count projects.',
-          title: 'Import complete',
+              ? 'deploymentImportSuccessOne'.tr()
+              : 'deploymentImportSuccessOther'.tr(args: ['$count']),
+          title: 'deploymentImportComplete'.tr(),
           icon: Symbols.check_circle,
         );
       }
@@ -155,7 +162,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       if (mounted) {
         showStyledSnackBar(
           message: '$error',
-          title: 'Could not import catalog',
+          title: 'deploymentImportError'.tr(),
           icon: Symbols.error,
           accentColor: Theme.of(context).colorScheme.error,
         );
@@ -224,7 +231,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
       body: projects.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
-            Center(child: Text('Could not load projects: $error')),
+            Center(child: Text('deploymentLoadError'.tr(args: ['$error']))),
         data: (items) {
           final allResources =
               resources.asData?.value ?? const <DeploymentResource>[];
@@ -245,14 +252,19 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Deployment projects',
+                            'deploymentProjectsTitle'.tr(),
                             style: theme.textTheme.headlineSmall,
                           ),
                           const SizedBox(height: 2),
                           Text(
                             items.isEmpty
-                                ? 'Collections of servers, stacks, and services'
-                                : '${items.length} project${items.length == 1 ? '' : 's'} · ${allResources.length} resource${allResources.length == 1 ? '' : 's'}',
+                                ? 'deploymentProjectsSubtitleEmpty'.tr()
+                                : 'deploymentProjectsCount'.tr(args: [
+                                    '${items.length}',
+                                    items.length == 1 ? '' : 's',
+                                    '${allResources.length}',
+                                    allResources.length == 1 ? '' : 's',
+                                  ]),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -261,17 +273,17 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                       ),
                     ),
                     PopupMenuButton<String>(
-                      tooltip: 'Import or export TOML catalog',
+                      tooltip: 'deploymentImportExportTooltip'.tr(),
                       onSelected: (value) =>
                           value == 'import' ? _import() : _export(),
-                      itemBuilder: (_) => const [
+                      itemBuilder: (_) => [
                         PopupMenuItem(
                           value: 'import',
-                          child: Text('Import TOML catalog'),
+                          child: Text('deploymentImportCatalog'.tr()),
                         ),
                         PopupMenuItem(
                           value: 'export',
-                          child: Text('Export TOML catalog'),
+                          child: Text('deploymentExportCatalog'.tr()),
                         ),
                       ],
                       icon: const Icon(Symbols.import_export),
@@ -280,7 +292,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                     FilledButton.icon(
                       onPressed: _create,
                       icon: const Icon(Symbols.add, size: 18),
-                      label: const Text('New project'),
+                      label: Text('deploymentNewProject'.tr()),
                     ),
                   ],
                 ),
@@ -295,12 +307,12 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                           controller: _searchController,
                           decoration: InputDecoration(
                             isDense: true,
-                            hintText: 'Search projects and resources',
+                            hintText: 'deploymentSearchHint'.tr(),
                             prefixIcon: const Icon(Symbols.search, size: 20),
                             suffixIcon: _query.isEmpty
                                 ? null
                                 : IconButton(
-                                    tooltip: 'Clear',
+                                    tooltip: 'deploymentClearTooltip'.tr(),
                                     icon: const Icon(Symbols.close, size: 18),
                                     onPressed: () {
                                       _searchController.clear();
@@ -314,29 +326,29 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                       ),
                       const SizedBox(width: 12),
                       PopupMenuButton<_ProjectSort>(
-                        tooltip: 'Sort projects',
+                        tooltip: 'deploymentSortTooltip'.tr(),
                         initialValue: _sort,
                         onSelected: (value) => setState(() => _sort = value),
-                        itemBuilder: (_) => const [
+                        itemBuilder: (_) => [
                           PopupMenuItem(
                             value: _ProjectSort.updatedDesc,
-                            child: Text('Recently updated'),
+                            child: Text('deploymentSortUpdated'.tr()),
                           ),
                           PopupMenuItem(
                             value: _ProjectSort.updatedAsc,
-                            child: Text('Least recently updated'),
+                            child: Text('deploymentSortOldest'.tr()),
                           ),
                           PopupMenuItem(
                             value: _ProjectSort.nameAsc,
-                            child: Text('Name A–Z'),
+                            child: Text('deploymentSortNameAsc'.tr()),
                           ),
                           PopupMenuItem(
                             value: _ProjectSort.nameDesc,
-                            child: Text('Name Z–A'),
+                            child: Text('deploymentSortNameDesc'.tr()),
                           ),
                           PopupMenuItem(
                             value: _ProjectSort.resourceCountDesc,
-                            child: Text('Most resources'),
+                            child: Text('deploymentSortResources'.tr()),
                           ),
                         ],
                         child: Padding(
@@ -354,7 +366,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                _sort.label,
+                                _sort.label.tr(),
                                 style: theme.textTheme.labelLarge,
                               ),
                             ],
@@ -371,7 +383,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                     child: Row(
                       children: [
                         FilterChip(
-                          label: const Text('All'),
+                          label: Text('deploymentFilterAll'.tr()),
                           selected: _kindFilter == null,
                           onSelected: (_) => setState(() => _kindFilter = null),
                         ),
@@ -411,12 +423,12 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No projects match',
+                              'deploymentNoMatch'.tr(),
                               style: theme.textTheme.titleMedium,
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Try a different search or clear filters.',
+                              'deploymentNoMatchHint'.tr(),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -430,7 +442,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                                   _kindFilter = null;
                                 });
                               },
-                              child: const Text('Clear filters'),
+                              child: Text('deploymentClearFilters'.tr()),
                             ),
                           ],
                         ),
@@ -454,18 +466,18 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                             menuProvider: (_) => Menu(
                               children: [
                                 MenuAction(
-                                  title: 'Open',
+                                  title: 'deploymentContextMenuOpen'.tr(),
                                   callback: () => context.router.push(
                                     ProjectDetailRoute(projectId: project.id),
                                   ),
                                 ),
                                 MenuAction(
-                                  title: 'Edit',
+                                  title: 'deploymentContextMenuEdit'.tr(),
                                   callback: () => _edit(project),
                                 ),
                                 MenuSeparator(),
                                 MenuAction(
-                                  title: 'Delete',
+                                  title: 'deploymentContextMenuDelete'.tr(),
                                   attributes: const MenuActionAttributes(
                                     destructive: true,
                                   ),
@@ -507,11 +519,11 @@ enum _ProjectSort {
 
 extension on _ProjectSort {
   String get label => switch (this) {
-    _ProjectSort.updatedDesc => 'Updated',
-    _ProjectSort.updatedAsc => 'Oldest',
-    _ProjectSort.nameAsc => 'Name A–Z',
-    _ProjectSort.nameDesc => 'Name Z–A',
-    _ProjectSort.resourceCountDesc => 'Resources',
+    _ProjectSort.updatedDesc => 'deploymentSortLabelUpdated',
+    _ProjectSort.updatedAsc => 'deploymentSortLabelOldest',
+    _ProjectSort.nameAsc => 'deploymentSortLabelNameAsc',
+    _ProjectSort.nameDesc => 'deploymentSortLabelNameDesc',
+    _ProjectSort.resourceCountDesc => 'deploymentSortLabelResources',
   };
 }
 
@@ -582,9 +594,9 @@ class _ProjectEditorDialogState extends State<_ProjectEditorDialog> {
           TextField(
             controller: _nameController,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Project name',
-              helperText: 'A collection of related deployment resources.',
+            decoration: InputDecoration(
+              labelText: 'deploymentEditorNameLabel'.tr(),
+              helperText: 'deploymentEditorNameHelper'.tr(),
             ),
             onSubmitted: (_) => _submit(),
           ),
@@ -592,8 +604,8 @@ class _ProjectEditorDialogState extends State<_ProjectEditorDialog> {
           TextField(
             controller: _descriptionController,
             maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Description (optional)',
+            decoration: InputDecoration(
+              labelText: 'deploymentEditorDescriptionLabel'.tr(),
               alignLabelWithHint: true,
             ),
           ),
@@ -603,7 +615,7 @@ class _ProjectEditorDialogState extends State<_ProjectEditorDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text('commonCancel'.tr()),
       ),
       FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
     ],
@@ -645,8 +657,8 @@ class _ProjectCard extends StatelessWidget {
     final serverLabel = serverIds.isEmpty
         ? null
         : serverIds.length == 1
-        ? serverNames[serverIds.first] ?? '1 server'
-        : '${serverIds.length} servers';
+        ? serverNames[serverIds.first] ?? 'deploymentServerCountOne'.tr()
+        : 'deploymentServerCountOther'.tr(args: ['${serverIds.length}']);
 
     return Material(
       color: scheme.surfaceContainerLowest,
@@ -674,7 +686,7 @@ class _ProjectCard extends StatelessWidget {
                     ),
                   ),
                   PopupMenuButton<String>(
-                    tooltip: 'Project actions',
+                    tooltip: 'deploymentProjectActions'.tr(),
                     onSelected: (value) {
                       switch (value) {
                         case 'edit':
@@ -683,9 +695,9 @@ class _ProjectCard extends StatelessWidget {
                           onDelete();
                       }
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(value: 'edit', child: Text('deploymentContextMenuEdit'.tr())),
+                      PopupMenuItem(value: 'delete', child: Text('deploymentContextMenuDelete'.tr())),
                     ],
                     icon: Icon(
                       Symbols.more_vert,
@@ -709,7 +721,7 @@ class _ProjectCard extends StatelessWidget {
               const Spacer(),
               if (resources.isEmpty)
                 Text(
-                  'Empty collection — add resources',
+                  'deploymentEmptyCollection'.tr(),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -737,8 +749,11 @@ class _ProjectCard extends StatelessWidget {
                 children: [
                   Text(
                     resources.isEmpty
-                        ? '0 resources'
-                        : '${resources.length} resource${resources.length == 1 ? '' : 's'}',
+                        ? 'deploymentResourceCountZero'.tr()
+                        : 'deploymentResourceCount'.tr(args: [
+                            '${resources.length}',
+                            resources.length == 1 ? '' : 's',
+                          ]),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -824,11 +839,10 @@ class _EmptyState extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
-            Text('No managed projects yet', style: theme.textTheme.titleMedium),
+            Text('deploymentEmptyTitle'.tr(), style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
-              'A project is a portable collection of resources — servers, '
-              'Compose stacks, folders, services, and more.',
+              'deploymentEmptyHint'.tr(),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -841,12 +855,12 @@ class _EmptyState extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onCreate,
                   icon: const Icon(Symbols.add, size: 18),
-                  label: const Text('New project'),
+                  label: Text('deploymentNewProject'.tr()),
                 ),
                 OutlinedButton.icon(
                   onPressed: onImport,
                   icon: const Icon(Symbols.upload, size: 18),
-                  label: const Text('Import TOML'),
+                  label: Text('deploymentImportToml'.tr()),
                 ),
               ],
             ),
