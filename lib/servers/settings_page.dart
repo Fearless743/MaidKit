@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/routing/app_router.gr.dart';
@@ -275,6 +276,15 @@ class SettingsPage extends ConsumerWidget {
     final password = await _backupPasswordDialog(context, confirm: true);
     if (password == null || !context.mounted) return;
 
+    final vault = ref.read(vaultServiceProvider);
+    if (!await vault.unlockWithPassword(password)) {
+      if (context.mounted) {
+        _showMessage(context, 'settingsVaultPasswordInvalid'.tr());
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
     final path = await FilePicker.saveFile(
       dialogTitle: 'settingsExportData'.tr(),
       fileName: 'maidkit-backup.mkb',
@@ -367,15 +377,18 @@ Future<String?> _backupPasswordDialog(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('settingsBackupPasswordHint'.tr()),
+            Text(
+              (confirm
+                      ? 'settingsExportVaultPasswordHint'
+                      : 'settingsImportVaultPasswordHint')
+                  .tr(),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: password,
               autofocus: true,
               obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'settingsBackupPassword'.tr(),
-              ),
+              decoration: InputDecoration(labelText: 'vaultPasswordLabel'.tr()),
             ),
             if (confirm) ...[
               const SizedBox(height: 12),
@@ -383,7 +396,7 @@ Future<String?> _backupPasswordDialog(
                 controller: confirmation,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelText: 'settingsBackupPasswordConfirm'.tr(),
+                  labelText: 'vaultConfirmPasswordLabel'.tr(),
                 ),
               ),
             ],
@@ -397,10 +410,6 @@ Future<String?> _backupPasswordDialog(
         ),
         FilledButton(
           onPressed: () {
-            if (password.text.length < 12) {
-              _showMessage(context, 'settingsBackupPasswordTooShort'.tr());
-              return;
-            }
             if (confirm && password.text != confirmation.text) {
               _showMessage(context, 'vaultPasswordsDontMatch'.tr());
               return;
@@ -420,7 +429,7 @@ Future<String?> _backupPasswordDialog(
 }
 
 void _showMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  showStyledSnackBar(message: message);
 }
 
 class _SettingsSection extends StatelessWidget {

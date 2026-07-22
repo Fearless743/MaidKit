@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
@@ -54,16 +55,18 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
             targetPort: int.parse(_targetPort.text),
           );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('portForwardingStarted').tr()));
+        showStyledSnackBar(
+          message: 'portForwardingStarted'.tr(),
+          icon: Symbols.check_circle,
+          accentColor: Theme.of(context).colorScheme.primary,
+        );
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('portForwardingStartError').tr(args: ['$error']),
-          ),
+        showStyledSnackBar(
+          message: 'portForwardingStartError'.tr(args: ['$error']),
+          icon: Symbols.error,
+          accentColor: Theme.of(context).colorScheme.error,
         );
       }
     } finally {
