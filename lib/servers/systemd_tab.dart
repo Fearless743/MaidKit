@@ -138,7 +138,9 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
       useSafeArea: true,
       useRootNavigator: true,
       builder: (sheetContext) => SheetScaffold(
-        titleText: 'systemdActionConfirm'.tr(args: ['${action.trLabel} ${unit.name}']),
+        titleText: 'systemdActionConfirm'.tr(
+          args: ['${action.trLabel} ${unit.name}'],
+        ),
         heightFactor: critical ? 0.42 : 0.36,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -175,18 +177,16 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
     required bool critical,
   }) {
     final base = switch (action) {
-      SystemdUnitAction.stop =>
-        'systemdStopConfirm'.tr(args: [unit.name]),
-      SystemdUnitAction.restart =>
-        'systemdRestartConfirm'.tr(args: [unit.name]),
-      SystemdUnitAction.reload =>
-        'systemdReloadConfirm'.tr(args: [unit.name]),
-      SystemdUnitAction.disable =>
-        'systemdDisableConfirm'.tr(args: [unit.name]),
-      SystemdUnitAction.enable =>
-        'systemdEnableConfirm'.tr(args: [unit.name]),
-      SystemdUnitAction.start =>
-        'systemdStartConfirm'.tr(args: [unit.name]),
+      SystemdUnitAction.stop => 'systemdStopConfirm'.tr(args: [unit.name]),
+      SystemdUnitAction.restart => 'systemdRestartConfirm'.tr(
+        args: [unit.name],
+      ),
+      SystemdUnitAction.reload => 'systemdReloadConfirm'.tr(args: [unit.name]),
+      SystemdUnitAction.disable => 'systemdDisableConfirm'.tr(
+        args: [unit.name],
+      ),
+      SystemdUnitAction.enable => 'systemdEnableConfirm'.tr(args: [unit.name]),
+      SystemdUnitAction.start => 'systemdStartConfirm'.tr(args: [unit.name]),
     };
     if (!critical) return base;
     return '$base\n\n${'systemdCriticalWarning'.tr()}';
@@ -212,7 +212,9 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
               sudoPassword: await _sudoPassword(),
             );
       },
-      success: 'systemdSuccess'.tr(args: ['${action.trPastLabel} ${unit.name}']),
+      success: 'systemdSuccess'.tr(
+        args: ['${action.trPastLabel} ${unit.name}'],
+      ),
       unit: unit.name,
     );
   }
@@ -284,8 +286,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
     if (!widget.connected) {
       return _ServicesEmpty(
         icon: Symbols.link_off,
-        message:
-            widget.connectionError ?? 'systemdConnectToManage'.tr(),
+        message: widget.connectionError ?? 'systemdConnectToManage'.tr(),
         actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filled: true,
@@ -304,9 +305,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
         if (!snapshot.available) {
           return _ServicesEmpty(
             icon: Symbols.settings_applications,
-            message:
-                snapshot.error ??
-                'systemdNotAvailable'.tr(),
+            message: snapshot.error ?? 'systemdNotAvailable'.tr(),
             actionLabel: 'commonRefresh'.tr(),
             onAction: _load,
           );
@@ -332,7 +331,10 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                         color: scheme.primary,
                       ),
                       const SizedBox(width: 8),
-                      Text('systemdServices'.tr(), style: theme.textTheme.titleSmall),
+                      Text(
+                        'systemdServices'.tr(),
+                        style: theme.textTheme.titleSmall,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         '${snapshot.activeCount} active · '
@@ -375,10 +377,6 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
                               onPressed: () => _searchController.clear(),
                               icon: const Icon(Symbols.close, size: 18),
                             ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      disabledBorder: InputBorder.none,
                       filled: false,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
@@ -442,11 +440,20 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
 
   String _filterLabel(_ServiceFilter filter, SystemdUnitsSnapshot snapshot) {
     return switch (filter) {
-      _ServiceFilter.all => 'systemdFilterAll'.tr(args: ['${snapshot.units.length}']),
-      _ServiceFilter.active => 'systemdFilterActive'.tr(args: ['${snapshot.activeCount}']),
-      _ServiceFilter.failed => 'systemdFilterFailed'.tr(args: ['${snapshot.failedCount}']),
-      _ServiceFilter.inactive =>
-        'systemdFilterInactive'.tr(args: ['${snapshot.units.where((u) => !u.isActive && !u.isFailed).length}']),
+      _ServiceFilter.all => 'systemdFilterAll'.tr(
+        args: ['${snapshot.units.length}'],
+      ),
+      _ServiceFilter.active => 'systemdFilterActive'.tr(
+        args: ['${snapshot.activeCount}'],
+      ),
+      _ServiceFilter.failed => 'systemdFilterFailed'.tr(
+        args: ['${snapshot.failedCount}'],
+      ),
+      _ServiceFilter.inactive => 'systemdFilterInactive'.tr(
+        args: [
+          '${snapshot.units.where((u) => !u.isActive && !u.isFailed).length}',
+        ],
+      ),
     };
   }
 }
@@ -682,7 +689,10 @@ class _UnitTextSheetState extends State<_UnitTextSheet> {
     if (text == null || text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    showStyledSnackBar(message: 'commonCopiedToClipboard'.tr(), title: 'systemdServices'.tr());
+    showStyledSnackBar(
+      message: 'commonCopiedToClipboard'.tr(),
+      title: 'systemdServices'.tr(),
+    );
   }
 
   @override

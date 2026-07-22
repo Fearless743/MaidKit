@@ -620,7 +620,7 @@ class _PaneTabChip extends StatelessWidget {
               ),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -784,75 +784,234 @@ class _AnimatedTerminalStatusBar extends StatelessWidget {
   final SshSessionInfo? session;
 
   @override
-  Widget build(BuildContext context) => AnimatedSwitcher(
-    duration: const Duration(milliseconds: 180),
-    reverseDuration: const Duration(milliseconds: 140),
-    transitionBuilder: (child, animation) {
-      final curve = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-      return ClipRect(
-        child: SizeTransition(
-          sizeFactor: curve,
-          alignment: Alignment.bottomCenter,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.35),
-              end: Offset.zero,
-            ).animate(curve),
-            child: FadeTransition(opacity: curve, child: child),
+  Widget build(BuildContext context) {
+    final activeSession = session;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      reverseDuration: const Duration(milliseconds: 140),
+      transitionBuilder: (child, animation) {
+        final curve = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+        return ClipRect(
+          child: SizeTransition(
+            sizeFactor: curve,
+            alignment: Alignment.bottomCenter,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.35),
+                end: Offset.zero,
+              ).animate(curve),
+              child: FadeTransition(opacity: curve, child: child),
+            ),
           ),
-        ),
-      );
-    },
-    child: session == null
-        ? const SizedBox.shrink(key: ValueKey('no-session'))
-        : _TerminalStatusBar(
-            key: ValueKey(session!.serverId),
-            session: session!,
-          ),
-  );
+        );
+      },
+      child: activeSession == null
+          ? const SizedBox.shrink(key: ValueKey('no-session'))
+          : _TerminalStatusBar(
+              key: ValueKey(activeSession.serverId),
+              session: activeSession,
+            ),
+    );
+  }
 }
 
 class _TerminalStatusBar extends StatelessWidget {
   const _TerminalStatusBar({required this.session, super.key});
 
-  final SshSessionInfo? session;
+  final SshSessionInfo session;
 
   @override
   Widget build(BuildContext context) {
-    final stats = session?.stats;
-    final usedMemory =
-        stats?.memoryTotalKb == null || stats?.memoryAvailableKb == null
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final mutedStyle = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final valueStyle = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurface,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    final stats = session.stats;
+    final memoryTotalKb = stats?.memoryTotalKb;
+    final memoryAvailableKb = stats?.memoryAvailableKb;
+    final usedMemoryKb = memoryTotalKb == null || memoryAvailableKb == null
         ? null
-        : stats!.memoryTotalKb! - stats.memoryAvailableKb!;
-    final items = <String>[
-      if (session != null) 'commonConnected'.tr() else 'No session',
-      if (stats?.loadAverage != null)
-        'Load ${stats!.loadAverage!.toStringAsFixed(2)}',
-      if (usedMemory != null && stats?.memoryTotalKb != null)
-        'Memory ${_formatMemory(usedMemory, stats!.memoryTotalKb!)}',
-      if (stats?.uptime != null) 'Uptime ${_formatUptime(stats!.uptime!)}',
-      if (session?.systemInfo?.distribution != null)
-        session!.systemInfo!.distribution!,
-      if (session?.systemInfo?.kernel != null) session!.systemInfo!.kernel!,
+        : memoryTotalKb - memoryAvailableKb;
+    final memoryRatio =
+        usedMemoryKb == null || memoryTotalKb == null || memoryTotalKb == 0
+        ? null
+        : (usedMemoryKb / memoryTotalKb).clamp(0.0, 1.0);
+    final systemLabel = [
+      session.systemInfo?.distribution,
+      session.systemInfo?.kernel,
+    ].whereType<String>().join(' · ');
+
+    final segments = <Widget>[
+      _StatusBarIdentity(session: session),
+      if (stats?.loadAverage case final load?)
+        _StatusBarMetric(
+          icon: Symbols.speed,
+          tooltip: 'detailLoadAverage'.tr(),
+          value: load.toStringAsFixed(2),
+          valueColor: _statusBarLoadColor(load, scheme),
+          mutedStyle: mutedStyle,
+          valueStyle: valueStyle,
+        ),
+      if (usedMemoryKb != null && memoryTotalKb != null)
+        _StatusBarMetric(
+          icon: Symbols.memory_alt,
+          tooltip: 'detailMemory'.tr(),
+          value: _formatMemory(usedMemoryKb, memoryTotalKb),
+          valueColor: _statusBarMemoryColor(memoryRatio, scheme),
+          mutedStyle: mutedStyle,
+          valueStyle: valueStyle,
+        ),
+      if (stats?.uptime case final uptime?)
+        _StatusBarMetric(
+          icon: Symbols.schedule,
+          tooltip: 'detailUptime'.tr(),
+          value: _formatUptime(uptime),
+          mutedStyle: mutedStyle,
+          valueStyle: valueStyle,
+        ),
+      if (systemLabel.isNotEmpty)
+        Tooltip(
+          message: systemLabel,
+          waitDuration: const Duration(milliseconds: 400),
+          child: Text(systemLabel, style: mutedStyle),
+        ),
     ];
+
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      child: SizedBox(
-        height: 32,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          scrollDirection: Axis.horizontal,
-          itemCount: items.length,
-          separatorBuilder: (_, _) => const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Text('•'),
+      color: scheme.surfaceContainerLow,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
           ),
-          itemBuilder: (context, index) =>
-              Text(items[index], style: Theme.of(context).textTheme.labelSmall),
+        ),
+        child: SizedBox(
+          height: 28,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            scrollDirection: Axis.horizontal,
+            itemCount: segments.length,
+            separatorBuilder: (_, _) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Center(
+                child: Container(
+                  width: 1,
+                  height: 12,
+                  color: scheme.outlineVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+            itemBuilder: (context, index) => Center(child: segments[index]),
+          ),
         ),
       ),
     );
   }
+}
+
+class _StatusBarIdentity extends StatelessWidget {
+  const _StatusBarIdentity({required this.session});
+
+  final SshSessionInfo session;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final (label, color) = switch (session.status) {
+      SessionStatus.connected => ('commonConnected'.tr(), scheme.primary),
+      SessionStatus.connecting => ('commonConnecting'.tr(), scheme.tertiary),
+      SessionStatus.failed => ('commonFailed'.tr(), scheme.error),
+      SessionStatus.closed => (
+        'commonNotConnected'.tr(),
+        scheme.onSurfaceVariant,
+      ),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color)),
+        const SizedBox(width: 8),
+        Text(
+          session.serverName,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusBarMetric extends StatelessWidget {
+  const _StatusBarMetric({
+    required this.icon,
+    required this.tooltip,
+    required this.value,
+    required this.mutedStyle,
+    required this.valueStyle,
+    this.valueColor,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final String value;
+  final TextStyle? mutedStyle;
+  final TextStyle? valueStyle;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: (valueStyle ?? mutedStyle)?.copyWith(
+              color: valueColor ?? valueStyle?.color ?? mutedStyle?.color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Color? _statusBarLoadColor(double? load, ColorScheme scheme) {
+  if (load == null) return null;
+  if (load >= 4) return scheme.error;
+  if (load >= 2) return scheme.tertiary;
+  return null;
+}
+
+Color? _statusBarMemoryColor(double? ratio, ColorScheme scheme) {
+  if (ratio == null) return null;
+  if (ratio >= 0.9) return scheme.error;
+  if (ratio >= 0.75) return scheme.tertiary;
+  return null;
 }
 
 String _formatMemory(int usedKb, int totalKb) =>
@@ -861,7 +1020,10 @@ String _formatMemory(int usedKb, int totalKb) =>
 String _formatUptime(Duration uptime) {
   final days = uptime.inDays;
   final hours = uptime.inHours.remainder(24);
-  return days > 0 ? '${days}d ${hours}h' : '${hours}h';
+  final minutes = uptime.inMinutes.remainder(60);
+  if (days > 0) return '${days}d ${hours}h';
+  if (hours > 0) return '${hours}h ${minutes}m';
+  return '${minutes}m';
 }
 
 /// Empty-state server picker used for the full workspace and for empty panes.

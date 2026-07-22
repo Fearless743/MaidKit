@@ -183,6 +183,11 @@
   "detailPid": "PID",
   "detailRss": "RSS",
   "detailCommand": "Command",
+  "detailKillProcess": "Kill (SIGKILL)",
+  "detailKillProcessConfirm": "Kill process {}?",
+  "detailKillProcessMessage": "Sends SIGKILL immediately to {} (pid {}). The process cannot clean up.",
+  "detailKillProcessSuccess": "Sent SIGKILL to {}",
+  "detailKillProcessError": "Could not kill process: {}",
 
   "sessionsDropTabHere": "Drop tab here",
   "sessionsNewPane": "New pane",

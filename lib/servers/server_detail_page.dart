@@ -4,12 +4,16 @@ import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
+import 'package:super_context_menu/super_context_menu.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/containers/container_management_tab.dart';
 import 'package:maid_kit/containers/image_management_tab.dart';
+import 'package:maid_kit/shared/presentation/app_context_menu.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'activity_tab.dart';
 import 'crontab_tab.dart';
 import 'firewall_tab.dart';
@@ -41,17 +45,25 @@ class ServerDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
+  static const _processesTabIndex = 1;
+
   AsyncValue<List<ServerProcess>> _processes = const AsyncValue.data([]);
   Timer? _refreshTimer;
   late final FocusedServerNotifier _focusedServerNotifier;
   var _refreshing = false;
   var _hasLoadedProcesses = false;
+  late int _activeTabIndex;
 
   @override
   void initState() {
     super.initState();
+    _activeTabIndex = widget.initialTab.clamp(0, 9);
     _focusedServerNotifier = ref.read(focusedServerIdProvider.notifier);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProcesses());
+    // Lazy-load processes only when the Processes tab is open so a 3s metrics
+    // tick does not keep spawning remote `ps` while the user is elsewhere.
+    if (_activeTabIndex == _processesTabIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadProcesses());
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusedServerNotifier.focus(widget.server.id);
@@ -79,6 +91,15 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
   void _startRefreshTimer(Duration interval) {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(interval, (_) => _refresh());
+  }
+
+  void _onTabChanged(int index) {
+    final openedProcesses =
+        index == _processesTabIndex && _activeTabIndex != _processesTabIndex;
+    _activeTabIndex = index;
+    if (openedProcesses) {
+      unawaited(_loadProcesses());
+    }
   }
 
   Future<void> _loadProcesses() async {
@@ -109,7 +130,9 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
     _refreshing = true;
     try {
       await manager.refreshServerInfo(widget.server);
-      await _loadProcesses();
+      if (_activeTabIndex == _processesTabIndex) {
+        await _loadProcesses();
+      }
     } finally {
       _refreshing = false;
     }
@@ -137,6 +160,7 @@ class _ServerDetailPageState extends ConsumerState<ServerDetailPage> {
       refreshInterval: refreshInterval,
       onConnect: _connect,
       onRefreshProcesses: _loadProcesses,
+      onTabChanged: _onTabChanged,
       initialTab: widget.initialTab,
       initialComposeProject: widget.initialComposeProject,
     );
@@ -206,6 +230,7 @@ class _DetailWorkspace extends StatelessWidget {
     required this.refreshInterval,
     required this.onConnect,
     required this.onRefreshProcesses,
+    required this.onTabChanged,
     required this.initialTab,
     required this.initialComposeProject,
   });
@@ -217,6 +242,7 @@ class _DetailWorkspace extends StatelessWidget {
   final Duration refreshInterval;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshProcesses;
+  final ValueChanged<int> onTabChanged;
   final int initialTab;
   final String? initialComposeProject;
 
@@ -231,6 +257,7 @@ class _DetailWorkspace extends StatelessWidget {
       refreshInterval: refreshInterval,
       onConnect: onConnect,
       onRefreshProcesses: onRefreshProcesses,
+      onTabChanged: onTabChanged,
       initialTab: initialTab,
       initialComposeProject: initialComposeProject,
     );
@@ -417,7 +444,7 @@ class _SpecificationRow extends StatelessWidget {
   }
 }
 
-class _InspectorTabs extends StatelessWidget {
+class _InspectorTabs extends StatefulWidget {
   const _InspectorTabs({
     required this.connected,
     required this.connectionError,
@@ -426,6 +453,7 @@ class _InspectorTabs extends StatelessWidget {
     required this.refreshInterval,
     required this.onConnect,
     required this.onRefreshProcesses,
+    required this.onTabChanged,
     required this.initialTab,
     required this.initialComposeProject,
   });
@@ -437,136 +465,172 @@ class _InspectorTabs extends StatelessWidget {
   final Duration refreshInterval;
   final Future<void> Function() onConnect;
   final Future<void> Function() onRefreshProcesses;
+  final ValueChanged<int> onTabChanged;
   final int initialTab;
   final String? initialComposeProject;
 
   @override
+  State<_InspectorTabs> createState() => _InspectorTabsState();
+}
+
+class _InspectorTabsState extends State<_InspectorTabs>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: 10,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 9),
+    );
+    _tabController.addListener(_handleTabChange);
+  }
+
+  @override
+  void dispose() {
+    _tabController
+      ..removeListener(_handleTabChange)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleTabChange() {
+    if (_tabController.indexIsChanging) return;
+    widget.onTabChanged(_tabController.index);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return DefaultTabController(
-      length: 10,
-      initialIndex: initialTab.clamp(0, 9),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            dividerColor: scheme.outlineVariant,
-            tabs: [
-              Tab(
-                icon: Icon(Symbols.monitoring, size: 18),
-                text: 'detailActivity'.tr(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          dividerColor: scheme.outlineVariant,
+          tabs: [
+            Tab(
+              icon: Icon(Symbols.monitoring, size: 18),
+              text: 'detailActivity'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.terminal, size: 18),
+              text: 'detailProcesses'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.settings_applications, size: 18),
+              text: 'detailServices'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.language, size: 18),
+              text: 'detailWebServers'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.deployed_code, size: 18),
+              text: 'detailContainers'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.image, size: 18),
+              text: 'detailImages'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.schedule, size: 18),
+              text: 'detailCrontab'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.inventory_2, size: 18),
+              text: 'detailPackages'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.shield, size: 18),
+              text: 'detailFirewall'.tr(),
+            ),
+            Tab(
+              icon: Icon(Symbols.swap_horiz, size: 18),
+              text: 'detailPortForwarding'.tr(),
+            ),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              ActivityTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
+                refreshInterval: widget.refreshInterval,
               ),
-              Tab(
-                icon: Icon(Symbols.terminal, size: 18),
-                text: 'detailProcesses'.tr(),
+              widget.connected
+                  ? _ProcessTable(
+                      server: widget.server,
+                      processes: widget.processes,
+                      onRefresh: widget.onRefreshProcesses,
+                    )
+                  : _ConnectionPrompt(
+                      message:
+                          widget.connectionError ??
+                          'detailConnectToCollect'.tr(),
+                      onConnect: widget.onConnect,
+                    ),
+              SystemdTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
               ),
-              Tab(
-                icon: Icon(Symbols.settings_applications, size: 18),
-                text: 'detailServices'.tr(),
+              WebServerTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
               ),
-              Tab(
-                icon: Icon(Symbols.language, size: 18),
-                text: 'detailWebServers'.tr(),
+              ContainerManagementTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
+                refreshInterval: widget.refreshInterval,
+                focusComposeProject: widget.initialComposeProject,
               ),
-              Tab(
-                icon: Icon(Symbols.deployed_code, size: 18),
-                text: 'detailContainers'.tr(),
+              ImageManagementTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
+                refreshInterval: widget.refreshInterval,
               ),
-              Tab(
-                icon: Icon(Symbols.image, size: 18),
-                text: 'detailImages'.tr(),
+              CrontabTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
               ),
-              Tab(
-                icon: Icon(Symbols.schedule, size: 18),
-                text: 'detailCrontab'.tr(),
+              PackageManagementTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
               ),
-              Tab(
-                icon: Icon(Symbols.inventory_2, size: 18),
-                text: 'detailPackages'.tr(),
+              FirewallTab(
+                server: widget.server,
+                connected: widget.connected,
+                connectionError: widget.connectionError,
+                onConnect: widget.onConnect,
               ),
-              Tab(
-                icon: Icon(Symbols.shield, size: 18),
-                text: 'detailFirewall'.tr(),
-              ),
-              Tab(
-                icon: Icon(Symbols.swap_horiz, size: 18),
-                text: 'detailPortForwarding'.tr(),
+              PortForwardingTab(
+                server: widget.server,
+                connected: widget.connected,
               ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                ActivityTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                  refreshInterval: refreshInterval,
-                ),
-                connected
-                    ? _ProcessTable(
-                        processes: processes,
-                        onRefresh: onRefreshProcesses,
-                      )
-                    : _ConnectionPrompt(
-                        message:
-                            connectionError ?? 'detailConnectToCollect'.tr(),
-                        onConnect: onConnect,
-                      ),
-                SystemdTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                ),
-                WebServerTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                ),
-                ContainerManagementTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                  refreshInterval: refreshInterval,
-                  focusComposeProject: initialComposeProject,
-                ),
-                ImageManagementTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                  refreshInterval: refreshInterval,
-                ),
-                CrontabTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                ),
-                PackageManagementTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                ),
-                FirewallTab(
-                  server: server,
-                  connected: connected,
-                  connectionError: connectionError,
-                  onConnect: onConnect,
-                ),
-                PortForwardingTab(server: server, connected: connected),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -843,8 +907,13 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _ProcessTable extends StatelessWidget {
-  const _ProcessTable({required this.processes, required this.onRefresh});
+  const _ProcessTable({
+    required this.server,
+    required this.processes,
+    required this.onRefresh,
+  });
 
+  final Server server;
   final AsyncValue<List<ServerProcess>> processes;
   final Future<void> Function() onRefresh;
 
@@ -864,26 +933,32 @@ class _ProcessTable extends StatelessWidget {
             actionLabel: 'commonRefresh'.tr(),
             onAction: onRefresh,
           )
-        : _ProcessList(items: items, onRefresh: onRefresh),
+        : _ProcessList(server: server, items: items, onRefresh: onRefresh),
   );
 }
 
 enum _ProcessSort { pid, user, cpu, mem, rss, command }
 
-class _ProcessList extends StatefulWidget {
-  const _ProcessList({required this.items, required this.onRefresh});
+class _ProcessList extends ConsumerStatefulWidget {
+  const _ProcessList({
+    required this.server,
+    required this.items,
+    required this.onRefresh,
+  });
 
+  final Server server;
   final List<ServerProcess> items;
   final Future<void> Function() onRefresh;
 
   @override
-  State<_ProcessList> createState() => _ProcessListState();
+  ConsumerState<_ProcessList> createState() => _ProcessListState();
 }
 
-class _ProcessListState extends State<_ProcessList> {
+class _ProcessListState extends ConsumerState<_ProcessList> {
   // Default to highest CPU first so cost hotspots surface immediately.
   _ProcessSort _sort = _ProcessSort.cpu;
   var _ascending = false;
+  var _killingPid = false;
 
   void _toggleSort(_ProcessSort column) {
     setState(() {
@@ -920,6 +995,53 @@ class _ProcessListState extends State<_ProcessList> {
 
     items.sort(compare);
     return items;
+  }
+
+  Future<void> _killProcess(ServerProcess process) async {
+    if (_killingPid) return;
+    final approved = await showMaidKitConfirmAlert(
+      'detailKillProcessMessage'.tr(args: [process.command, '${process.pid}']),
+      'detailKillProcessConfirm'.tr(args: [process.command]),
+      icon: Symbols.dangerous,
+      isDanger: true,
+    );
+    if (!approved || !mounted) return;
+
+    setState(() => _killingPid = true);
+    try {
+      final credential = await ref
+          .read(serverRepositoryProvider)
+          .credentialFor(widget.server);
+      final sudoPassword = credential.type == CredentialType.password
+          ? credential.password
+          : null;
+      await ref
+          .read(connectionManagerProvider)
+          .killProcess(
+            widget.server.id,
+            pid: process.pid,
+            sshUserIsRoot: widget.server.username == 'root',
+            sudoPassword: sudoPassword,
+          );
+      if (!mounted) return;
+      showStyledSnackBar(
+        title: 'detailKillProcessSuccess'.tr(args: ['${process.pid}']),
+        message: process.command,
+        icon: Symbols.check_circle,
+        accentColor: Theme.of(context).colorScheme.primary,
+      );
+      await widget.onRefresh();
+    } catch (error) {
+      if (!mounted) return;
+      showStyledSnackBar(
+        title: 'detailKillProcessError'.tr(args: ['$error']),
+        message: '${process.command} (pid ${process.pid})',
+        icon: Symbols.error,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+    } finally {
+      if (mounted) setState(() => _killingPid = false);
+    }
   }
 
   @override
@@ -971,8 +1093,12 @@ class _ProcessListState extends State<_ProcessList> {
                         height: 1,
                         color: scheme.outlineVariant.withValues(alpha: 0.5),
                       ),
-                      itemBuilder: (context, index) =>
-                          _ProcessRow(process: items[index], wide: wide),
+                      itemBuilder: (context, index) => _ProcessRow(
+                        process: items[index],
+                        wide: wide,
+                        killEnabled: !_killingPid && items[index].pid > 1,
+                        onKill: () => _killProcess(items[index]),
+                      ),
                     ),
                   ),
                 ],
@@ -1126,10 +1252,31 @@ class _SortHeader extends StatelessWidget {
 }
 
 class _ProcessRow extends StatelessWidget {
-  const _ProcessRow({required this.process, required this.wide});
+  const _ProcessRow({
+    required this.process,
+    required this.wide,
+    required this.killEnabled,
+    required this.onKill,
+  });
 
   final ServerProcess process;
   final bool wide;
+  final bool killEnabled;
+  final VoidCallback onKill;
+
+  Menu _menu() => Menu(
+    children: [
+      MenuAction(
+        title: 'detailKillProcess'.tr(),
+        image: MenuImage.icon(Symbols.dangerous),
+        attributes: MenuActionAttributes(
+          destructive: true,
+          disabled: !killEnabled,
+        ),
+        callback: onKill,
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1138,74 +1285,77 @@ class _ProcessRow extends StatelessWidget {
     final mono = theme.textTheme.bodySmall?.copyWith(
       fontFeatures: const [FontFeature.tabularFigures()],
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          SizedBox(width: 64, child: Text('${process.pid}', style: mono)),
-          SizedBox(
-            width: 88,
-            child: Text(
-              process.user,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          if (wide) ...[
+    return AppContextMenuRegion(
+      menuBuilder: _menu,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            SizedBox(width: 64, child: Text('${process.pid}', style: mono)),
             SizedBox(
-              width: 64,
+              width: 88,
               child: Text(
-                '${process.cpuPercent.toStringAsFixed(1)}%',
-                textAlign: TextAlign.end,
-                style: mono,
+                process.user,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 64,
-              child: Text(
-                '${process.memoryPercent.toStringAsFixed(1)}%',
-                textAlign: TextAlign.end,
-                style: mono,
-              ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 72,
-              child: Text(
-                _formatKb(process.rssKb),
-                textAlign: TextAlign.end,
-                style: mono,
-              ),
-            ),
-            const SizedBox(width: 16),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  process.command,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium,
+            if (wide) ...[
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${process.cpuPercent.toStringAsFixed(1)}%',
+                  textAlign: TextAlign.end,
+                  style: mono,
                 ),
-                if (!wide) ...[
-                  const SizedBox(height: 2),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${process.memoryPercent.toStringAsFixed(1)}%',
+                  textAlign: TextAlign.end,
+                  style: mono,
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 72,
+                child: Text(
+                  _formatKb(process.rssKb),
+                  textAlign: TextAlign.end,
+                  style: mono,
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'CPU ${process.cpuPercent.toStringAsFixed(1)}% · '
-                    'Mem ${process.memoryPercent.toStringAsFixed(1)}% · '
-                    'RSS ${_formatKb(process.rssKb)}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    process.command,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
                   ),
+                  if (!wide) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'CPU ${process.cpuPercent.toStringAsFixed(1)}% · '
+                      'Mem ${process.memoryPercent.toStringAsFixed(1)}% · '
+                      'RSS ${_formatKb(process.rssKb)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

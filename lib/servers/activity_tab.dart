@@ -137,7 +137,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
           child: Row(
             children: [
               Text(
@@ -167,10 +167,10 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
         Divider(height: 1, color: scheme.outlineVariant),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
             children: [
               _SummaryRow(sample: latest),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _ChartCard(
                 title: 'detailCpu'.tr(),
                 subtitle: latest.cpuPercent == null
@@ -188,11 +188,14 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
                   maxY: 100,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _ChartCard(
                 title: 'detailMemory'.tr(),
                 subtitle: _memSubtitle(latest),
                 color: scheme.tertiary,
+                footer: _hasSwap(latest)
+                    ? _SwapFooter(sample: latest)
+                    : null,
                 child: _PercentLineChart(
                   history: _history,
                   color: scheme.tertiary,
@@ -200,24 +203,25 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
                   maxY: 100,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _ChartCard(
                 title: 'activityNetwork'.tr(),
-                subtitle: _netSubtitle(latest),
-                color: scheme.secondary,
+                // Cool teal for RX vs warm amber for TX — primary/secondary from
+                // the seed are too close in hue to read as separate series.
+                color: _netRxColor(scheme),
+                subtitleWidget: _NetSubtitle(
+                  sample: latest,
+                  rxColor: _netRxColor(scheme),
+                  txColor: _netTxColor(scheme),
+                ),
                 child: _NetworkLineChart(
                   history: _history,
-                  rxColor: scheme.secondary,
-                  txColor: scheme.error,
+                  rxColor: _netRxColor(scheme),
+                  txColor: _netTxColor(scheme),
                 ),
               ),
-              const SizedBox(height: 12),
-              _ChartCard(
-                title: 'detailRootDisk'.tr(),
-                subtitle: _diskSubtitle(latest),
-                color: scheme.outline,
-                child: _DiskBar(sample: latest),
-              ),
+              const SizedBox(height: 8),
+              _DiskCard(sample: latest),
             ],
           ),
         ),
@@ -225,23 +229,71 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
     );
   }
 
+  bool _hasSwap(ActivitySample s) =>
+      s.swapTotalKb != null && s.swapTotalKb! > 0;
+
   String _memSubtitle(ActivitySample s) {
     if (s.memoryUsedKb == null || s.memoryTotalKb == null) return '—';
     return '${_formatKb(s.memoryUsedKb!)} / ${_formatKb(s.memoryTotalKb!)}'
         '${s.memoryPercent == null ? '' : ' · ${s.memoryPercent!.toStringAsFixed(0)}%'}';
   }
 
-  String _diskSubtitle(ActivitySample s) {
-    if (s.diskUsedKb == null || s.diskTotalKb == null) return '—';
-    return '${_formatKb(s.diskUsedKb!)} / ${_formatKb(s.diskTotalKb!)}'
-        '${s.diskPercent == null ? '' : ' · ${s.diskPercent!.toStringAsFixed(0)}%'}';
-  }
+}
 
-  String _netSubtitle(ActivitySample s) {
-    if (s.netRxBps == null && s.netTxBps == null) {
-      return 'activityWaitingForRateSample'.tr();
+/// Download (RX) — cool teal, distinct from warm TX.
+Color _netRxColor(ColorScheme scheme) => scheme.brightness == Brightness.dark
+    ? const Color(0xFF2DD4BF)
+    : const Color(0xFF0F766E);
+
+/// Upload (TX) — warm amber, high hue contrast against RX teal.
+Color _netTxColor(ColorScheme scheme) => scheme.brightness == Brightness.dark
+    ? const Color(0xFFFBBF24)
+    : const Color(0xFFD97706);
+
+class _NetSubtitle extends StatelessWidget {
+  const _NetSubtitle({
+    required this.sample,
+    required this.rxColor,
+    required this.txColor,
+  });
+
+  final ActivitySample sample;
+  final Color rxColor;
+  final Color txColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    if (sample.netRxBps == null && sample.netTxBps == null) {
+      return Text(
+        'activityWaitingForRateSample'.tr(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.end,
+        style: theme.textTheme.labelSmall?.copyWith(color: muted),
+      );
     }
-    return '↓ ${_formatBps(s.netRxBps)}  ↑ ${_formatBps(s.netTxBps)}';
+    final base = theme.textTheme.labelSmall;
+    return Text.rich(
+      TextSpan(
+        style: base?.copyWith(color: muted),
+        children: [
+          TextSpan(
+            text: '↓ ${_formatBps(sample.netRxBps)}',
+            style: TextStyle(color: rxColor, fontWeight: FontWeight.w600),
+          ),
+          const TextSpan(text: '  '),
+          TextSpan(
+            text: '↑ ${_formatBps(sample.netTxBps)}',
+            style: TextStyle(color: txColor, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.end,
+    );
   }
 }
 
@@ -331,7 +383,7 @@ class _StatTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -341,7 +393,7 @@ class _StatTile extends StatelessWidget {
                 color: scheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(value, style: theme.textTheme.titleMedium),
             if (detail != null) ...[
               const SizedBox(height: 2),
@@ -364,27 +416,44 @@ class _StatTile extends StatelessWidget {
 class _ChartCard extends StatelessWidget {
   const _ChartCard({
     required this.title,
-    required this.subtitle,
     required this.color,
     required this.child,
-  });
+    this.subtitle,
+    this.subtitleWidget,
+    this.footer,
+  }) : assert(
+         subtitle != null || subtitleWidget != null,
+         'Provide subtitle or subtitleWidget',
+       );
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
+  final Widget? subtitleWidget;
   final Color color;
   final Widget child;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final trailing = subtitleWidget ??
+        Text(
+          subtitle!,
+          textAlign: TextAlign.end,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        );
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -401,6 +470,61 @@ class _ChartCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(title, style: theme.textTheme.titleSmall),
                 const Spacer(),
+                Flexible(child: trailing),
+              ],
+            ),
+            const SizedBox(height: 6),
+            SizedBox(height: 120, child: child),
+            if (footer != null) ...[
+              const SizedBox(height: 8),
+              footer!,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact root-disk usage — not a time-series chart, so no empty chart area.
+class _DiskCard extends StatelessWidget {
+  const _DiskCard({required this.sample});
+
+  final ActivitySample sample;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final progress = ((sample.diskPercent ?? 0) / 100).clamp(0.0, 1.0);
+    final subtitle = sample.diskUsedKb == null || sample.diskTotalKb == null
+        ? '—'
+        : '${_formatKb(sample.diskUsedKb!)} / ${_formatKb(sample.diskTotalKb!)}'
+              '${sample.diskPercent == null ? '' : ' · ${sample.diskPercent!.toStringAsFixed(0)}%'}';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: scheme.outline,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('detailRootDisk'.tr(), style: theme.textTheme.titleSmall),
+                const Spacer(),
                 Flexible(
                   child: Text(
                     subtitle,
@@ -414,11 +538,75 @@ class _ChartCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SizedBox(height: 140, child: child),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                backgroundColor: scheme.surfaceContainerHighest,
+                color: progress >= 0.9
+                    ? scheme.error
+                    : progress >= 0.75
+                        ? scheme.tertiary
+                        : scheme.primary,
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Swap belongs with memory, not root disk.
+class _SwapFooter extends StatelessWidget {
+  const _SwapFooter({required this.sample});
+
+  final ActivitySample sample;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final progress = ((sample.swapPercent ?? 0) / 100).clamp(0.0, 1.0);
+    final used = sample.swapUsedKb;
+    final total = sample.swapTotalKb;
+    final label = used == null || total == null
+        ? 'detailSwap'.tr(args: ['—', '—'])
+        : 'detailSwap'.tr(args: [_formatKb(used), _formatKb(total)]);
+    final percent = sample.swapPercent == null
+        ? ''
+        : ' · ${sample.swapPercent!.toStringAsFixed(0)}%';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$label$percent',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 4,
+            backgroundColor: scheme.surfaceContainerHighest,
+            color: scheme.tertiary.withValues(alpha: 0.85),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -498,6 +686,11 @@ class _PercentLineChart extends StatelessWidget {
         borderData: FlBorderData(show: false),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => scheme.inverseSurface,
+            tooltipPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 6,
+            ),
             getTooltipItems: (touched) => touched
                 .map(
                   (spot) => LineTooltipItem(
@@ -505,7 +698,7 @@ class _PercentLineChart extends StatelessWidget {
                     TextStyle(
                       color: scheme.onInverseSurface,
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 )
@@ -618,7 +811,34 @@ class _NetworkLineChart extends StatelessWidget {
           ),
         ),
         borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: true),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => scheme.inverseSurface,
+            maxContentWidth: 160,
+            tooltipPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 6,
+            ),
+            fitInsideHorizontally: true,
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final isTx = spot.bar.color == txColor;
+                // Chart y is KiB/s; convert back to B/s for shared formatter.
+                final bps = spot.y * 1024;
+                final prefix = isTx ? '↑' : '↓';
+                final seriesColor = isTx ? txColor : rxColor;
+                return LineTooltipItem(
+                  '$prefix ${_formatBps(bps)}',
+                  TextStyle(
+                    color: seriesColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
         lineBarsData: [
           if (rxSpots.isNotEmpty)
             LineChartBarData(
@@ -652,53 +872,6 @@ class _NetworkLineChart extends StatelessWidget {
     if (bps < 1024) return '${bps.toStringAsFixed(0)}B';
     if (bps < 1024 * 1024) return '${(bps / 1024).toStringAsFixed(0)}K';
     return '${(bps / (1024 * 1024)).toStringAsFixed(1)}M';
-  }
-}
-
-class _DiskBar extends StatelessWidget {
-  const _DiskBar({required this.sample});
-
-  final ActivitySample sample;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final progress = (sample.diskPercent ?? 0) / 100;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: progress.clamp(0, 1),
-            minHeight: 12,
-            backgroundColor: scheme.surfaceContainerHighest,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (sample.swapTotalKb != null && sample.swapTotalKb! > 0) ...[
-          Text(
-            'detailSwap'.tr(args: [
-              sample.swapPercent?.toStringAsFixed(0) ?? '—',
-              sample.swapUsedKb == null ? '' : '${_formatKb(sample.swapUsedKb!)} / ${_formatKb(sample.swapTotalKb!)}',
-            ]),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: ((sample.swapPercent ?? 0) / 100).clamp(0, 1),
-              minHeight: 4,
-              backgroundColor: scheme.surfaceContainerHighest,
-            ),
-          ),
-        ],
-      ],
-    );
   }
 }
 

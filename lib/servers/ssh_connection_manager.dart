@@ -257,10 +257,19 @@ class SshConnectionManager {
     if (server.collectStats) await _refreshStats(client, state);
   }
 
+  /// Process list for the detail page. Caps output so busy hosts (thousands of
+  /// threads) stay cheap over SSH; client-side table re-sorts within this set.
+  /// Prefer not calling this on a tight timer unless the Processes tab is open.
+  static const processListLimit = 250;
+
   Future<List<ServerProcess>> listProcesses(int serverId) async {
     return withClient(serverId, (client) async {
+      // Sort once on the host so head keeps top CPU/RSS-relevant rows without
+      // shipping the entire process table. Avoid polling this every few seconds
+      // when the Processes tab is not visible.
       final session = await client.execute(
-        'LC_ALL=C ps -eo pid=,user=,%cpu=,%mem=,rss=,comm= --sort=-%cpu | head -n 20',
+        'LC_ALL=C ps -eo pid=,user=,%cpu=,%mem=,rss=,comm= '
+        '--sort=-%cpu | head -n $processListLimit',
       );
       final output = await utf8.decoder.bind(session.stdout).join();
       await session.done;
@@ -269,6 +278,39 @@ class SshConnectionManager {
           .map(_parseProcess)
           .whereType<ServerProcess>()
           .toList();
+    });
+  }
+
+  /// Sends SIGKILL to [pid] on the remote host.
+  ///
+  /// Tries as the SSH user first; if that fails and elevation is available
+  /// (root session or sudo), retries with privileges so other users' processes
+  /// can be killed from a normal admin login.
+  Future<void> killProcess(
+    int serverId, {
+    required int pid,
+    bool sshUserIsRoot = false,
+    String? sudoPassword,
+  }) async {
+    if (pid <= 1) {
+      throw StateError('Refusing to send SIGKILL to pid $pid.');
+    }
+    await withClient(serverId, (client) async {
+      final command = 'kill -s KILL -- $pid';
+      var result = await _execute(client, command);
+      if (result.exitCode == 0) return;
+
+      if (!sshUserIsRoot) {
+        final elevated = await _execute(
+          client,
+          '${_rootPrefix(false, sudoPassword)}$command',
+          stdin: _rootStdin(false, sudoPassword),
+        );
+        if (elevated.exitCode == 0) return;
+        result = elevated;
+      }
+
+      throw Exception(_commandError(result));
     });
   }
 
