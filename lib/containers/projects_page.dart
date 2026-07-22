@@ -83,11 +83,13 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
         content: Text(
           resourceCount == 0
               ? 'deploymentDeleteConfirmEmpty'.tr(args: [project.name])
-              : 'deploymentDeleteConfirm'.tr(args: [
-                  project.name,
-                  '$resourceCount',
-                  resourceCount == 1 ? '' : 's',
-                ]),
+              : 'deploymentDeleteConfirm'.tr(
+                  args: [
+                    project.name,
+                    '$resourceCount',
+                    resourceCount == 1 ? '' : 's',
+                  ],
+                ),
         ),
         actions: [
           TextButton(
@@ -259,12 +261,14 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                           Text(
                             items.isEmpty
                                 ? 'deploymentProjectsSubtitleEmpty'.tr()
-                                : 'deploymentProjectsCount'.tr(args: [
-                                    '${items.length}',
-                                    items.length == 1 ? '' : 's',
-                                    '${allResources.length}',
-                                    allResources.length == 1 ? '' : 's',
-                                  ]),
+                                : 'deploymentProjectsCount'.tr(
+                                    args: [
+                                      '${items.length}',
+                                      items.length == 1 ? '' : 's',
+                                      '${allResources.length}',
+                                      allResources.length == 1 ? '' : 's',
+                                    ],
+                                  ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -696,8 +700,14 @@ class _ProjectCard extends StatelessWidget {
                       }
                     },
                     itemBuilder: (_) => [
-                      PopupMenuItem(value: 'edit', child: Text('deploymentContextMenuEdit'.tr())),
-                      PopupMenuItem(value: 'delete', child: Text('deploymentContextMenuDelete'.tr())),
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Text('deploymentContextMenuEdit'.tr()),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('deploymentContextMenuDelete'.tr()),
+                      ),
                     ],
                     icon: Icon(
                       Symbols.more_vert,
@@ -750,10 +760,12 @@ class _ProjectCard extends StatelessWidget {
                   Text(
                     resources.isEmpty
                         ? 'deploymentResourceCountZero'.tr()
-                        : 'deploymentResourceCount'.tr(args: [
-                            '${resources.length}',
-                            resources.length == 1 ? '' : 's',
-                          ]),
+                        : 'deploymentResourceCount'.tr(
+                            args: [
+                              '${resources.length}',
+                              resources.length == 1 ? '' : 's',
+                            ],
+                          ),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -839,7 +851,10 @@ class _EmptyState extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
-            Text('deploymentEmptyTitle'.tr(), style: theme.textTheme.titleMedium),
+            Text(
+              'deploymentEmptyTitle'.tr(),
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'deploymentEmptyHint'.tr(),

@@ -106,9 +106,24 @@ class ServerDashboardTab extends ConsumerWidget {
       onDelete: (server) => _delete(ref, server),
       onOpenDetail: (server) =>
           ref.read(terminalTabsProvider.notifier).openServerDetails(server),
+      onOpenTerminal: (server) => openTerminalSession(context, ref, server),
+      onOpenFiles: (server) => _openFiles(context, ref, server),
       onRefresh: (server) =>
           ref.read(connectionManagerProvider).refreshServerInfo(server),
     );
+  }
+
+  Future<void> _openFiles(
+    BuildContext context,
+    WidgetRef ref,
+    Server server,
+  ) async {
+    final manager = ref.read(connectionManagerProvider);
+    if (manager.clientFor(server.id) == null &&
+        !await connectForStatistics(context, ref, server)) {
+      return;
+    }
+    ref.read(terminalTabsProvider.notifier).openFileManagement(server);
   }
 }
 
@@ -129,6 +144,8 @@ class _ServersCatalog extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onOpenDetail,
+    required this.onOpenTerminal,
+    required this.onOpenFiles,
     required this.onRefresh,
   });
 
@@ -139,6 +156,8 @@ class _ServersCatalog extends StatelessWidget {
   final ValueChanged<Server> onEdit;
   final ValueChanged<Server> onDelete;
   final ValueChanged<Server> onOpenDetail;
+  final ValueChanged<Server> onOpenTerminal;
+  final ValueChanged<Server> onOpenFiles;
   final ValueChanged<Server> onRefresh;
 
   @override
@@ -155,6 +174,8 @@ class _ServersCatalog extends StatelessWidget {
                 onEdit: onEdit,
                 onDelete: onDelete,
                 onOpenDetail: onOpenDetail,
+                onOpenTerminal: onOpenTerminal,
+                onOpenFiles: onOpenFiles,
                 onRefresh: onRefresh,
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -163,6 +184,7 @@ class _ServersCatalog extends StatelessWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'servers-create-fab',
         onPressed: onAdd,
         icon: const Icon(Symbols.add),
         label: Text('serversAddServer'.tr()),
@@ -179,6 +201,8 @@ class _ServerGrid extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onOpenDetail,
+    required this.onOpenTerminal,
+    required this.onOpenFiles,
     required this.onRefresh,
   });
 
@@ -188,6 +212,8 @@ class _ServerGrid extends StatelessWidget {
   final ValueChanged<Server> onEdit;
   final ValueChanged<Server> onDelete;
   final ValueChanged<Server> onOpenDetail;
+  final ValueChanged<Server> onOpenTerminal;
+  final ValueChanged<Server> onOpenFiles;
   final ValueChanged<Server> onRefresh;
 
   @override
@@ -195,7 +221,7 @@ class _ServerGrid extends StatelessWidget {
     padding: const EdgeInsets.all(24),
     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
       maxCrossAxisExtent: 380,
-      mainAxisExtent: 268,
+      mainAxisExtent: 320,
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
     ),
@@ -225,6 +251,8 @@ class _ServerGrid extends StatelessWidget {
           session: session,
           onConnect: () => onConnect(server),
           onOpenDetail: () => onOpenDetail(server),
+          onOpenTerminal: () => onOpenTerminal(server),
+          onOpenFiles: () => onOpenFiles(server),
           onRefresh: () => onRefresh(server),
         ),
       );
@@ -238,6 +266,8 @@ class _ServerCard extends StatelessWidget {
     required this.session,
     required this.onConnect,
     required this.onOpenDetail,
+    required this.onOpenTerminal,
+    required this.onOpenFiles,
     required this.onRefresh,
   });
 
@@ -245,6 +275,8 @@ class _ServerCard extends StatelessWidget {
   final SshSessionInfo? session;
   final VoidCallback onConnect;
   final VoidCallback onOpenDetail;
+  final VoidCallback onOpenTerminal;
+  final VoidCallback onOpenFiles;
   final VoidCallback onRefresh;
 
   @override
@@ -330,34 +362,111 @@ class _ServerCard extends StatelessWidget {
               const SizedBox(height: 12),
               const Divider(height: 1),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  _ConnectionStatus(
-                    connected: connected,
-                    connecting: connecting,
-                    failed: failed,
-                  ),
-                  const Spacer(),
-                  if (!connected && !connecting)
-                    FilledButton.tonal(
-                      onPressed: onConnect,
-                      child: Text('serversConnect'.tr()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    _ConnectionStatus(
+                      connected: connected,
+                      connecting: connecting,
+                      failed: failed,
                     ),
-                  if (connecting)
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colorScheme.primary,
+                    const Spacer(),
+                    if (!connected && !connecting)
+                      TextButton(
+                        onPressed: onConnect,
+                        child: Text('serversConnect'.tr()),
                       ),
-                    ),
-                ],
-              ).padding(horizontal: 16),
+                    if (connecting)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _ServerQuickActions(
+                  onOpenTerminal: connecting ? null : onOpenTerminal,
+                  onOpenFiles: connecting ? null : onOpenFiles,
+                ),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ServerQuickActions extends StatelessWidget {
+  const _ServerQuickActions({this.onOpenTerminal, this.onOpenFiles});
+
+  final VoidCallback? onOpenTerminal;
+  final VoidCallback? onOpenFiles;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 340) {
+          return Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onOpenTerminal,
+                  icon: const Icon(Symbols.terminal, size: 18),
+                  label: Text('sessionsNewTerminal'.tr()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'sessionsOpenFileManagement'.tr(),
+                child: IconButton.outlined(
+                  onPressed: onOpenFiles,
+                  icon: const Icon(Symbols.folder, size: 18),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: onOpenTerminal,
+                style: const ButtonStyle(
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+                icon: const Icon(Symbols.terminal, size: 18),
+                label: Text('sessionsNewTerminal'.tr()),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onOpenFiles,
+                style: const ButtonStyle(
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+                icon: const Icon(Symbols.folder, size: 18),
+                label: Text('sessionsOpenFileManagement'.tr()),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

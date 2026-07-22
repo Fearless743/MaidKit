@@ -190,7 +190,7 @@ void showMaidKitErrorAlert(dynamic err, {IconData? icon, String? title}) {
                 color: Theme.of(context).colorScheme.error,
               ),
               const SizedBox(height: 16),
-                Text(
+              Text(
                 title ?? 'commonSomethingWentWrong'.tr(),
                 style: Theme.of(context).textTheme.titleLarge,
               ),

@@ -38,8 +38,11 @@ class ProjectDetailPage extends ConsumerWidget {
     return projects.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) =>
-          Scaffold(body: Center(child: Text('deploymentDetailLoadError'.tr(args: ['$error'])))),
+      error: (error, _) => Scaffold(
+        body: Center(
+          child: Text('deploymentDetailLoadError'.tr(args: ['$error'])),
+        ),
+      ),
       data: (allProjects) {
         final allResources =
             resources.asData?.value ?? const <DeploymentResource>[];
@@ -51,9 +54,7 @@ class ProjectDetailPage extends ConsumerWidget {
         if (project == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: Center(
-              child: Text('deploymentDetailUnavailable'.tr()),
-            ),
+            body: Center(child: Text('deploymentDetailUnavailable'.tr())),
           );
         }
         return _ProjectDetail(
@@ -150,11 +151,9 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
         content: Text(
           count == 0
               ? 'deploymentDeleteConfirmEmpty'.tr(args: [widget.project.name])
-              : 'deploymentDeleteConfirm'.tr(args: [
-                  widget.project.name,
-                  '$count',
-                  count == 1 ? '' : 's',
-                ]),
+              : 'deploymentDeleteConfirm'.tr(
+                  args: [widget.project.name, '$count', count == 1 ? '' : 's'],
+                ),
         ),
         actions: [
           TextButton(
@@ -182,9 +181,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('deploymentRemoveTitle'.tr()),
-        content: Text(
-          'deploymentRemoveConfirm'.tr(args: [resource.name]),
-        ),
+        content: Text('deploymentRemoveConfirm'.tr(args: [resource.name])),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -377,16 +374,23 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Text('deploymentResourcesTitle'.tr(), style: theme.textTheme.titleMedium),
+                      Text(
+                        'deploymentResourcesTitle'.tr(),
+                        style: theme.textTheme.titleMedium,
+                      ),
                       const Spacer(),
                       if (widget.resources.isNotEmpty)
                         Text(
                           _filteredResources.length == widget.resources.length
-                              ? 'deploymentResourcesTotal'.tr(args: ['${widget.resources.length}'])
-                              : 'deploymentResourcesFiltered'.tr(args: [
-                                  '${_filteredResources.length}',
-                                  '${widget.resources.length}',
-                                ]),
+                              ? 'deploymentResourcesTotal'.tr(
+                                  args: ['${widget.resources.length}'],
+                                )
+                              : 'deploymentResourcesFiltered'.tr(
+                                  args: [
+                                    '${_filteredResources.length}',
+                                    '${widget.resources.length}',
+                                  ],
+                                ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -412,9 +416,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
               sliver: SliverToBoxAdapter(
-                child: Center(
-                  child: Text('deploymentNoFilterMatch'.tr()),
-                ),
+                child: Center(child: Text('deploymentNoFilterMatch'.tr())),
               ),
             )
           else
@@ -565,7 +567,9 @@ class _ProjectEditDialogState extends State<_ProjectEditDialog> {
           TextField(
             controller: _nameController,
             autofocus: true,
-            decoration: InputDecoration(labelText: 'deploymentEditNameLabel'.tr()),
+            decoration: InputDecoration(
+              labelText: 'deploymentEditNameLabel'.tr(),
+            ),
             onSubmitted: (_) => _submit(),
           ),
           const SizedBox(height: 12),
@@ -834,9 +838,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
   Future<void> _runCompose(ComposeProjectAction action) async {
     final host = server!;
     if (!_composeReady) {
-      throw StateError(
-        'deploymentComposeMissing'.tr(),
-      );
+      throw StateError('deploymentComposeMissing'.tr());
     }
     await runComposeProjectActionWithTerminal(
       ref: ref,
@@ -910,9 +912,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
   Future<void> _showComposeLogs() async {
     final host = server!;
     if (!_composeReady) {
-      throw StateError(
-        'deploymentComposeMissing'.tr(),
-      );
+      throw StateError('deploymentComposeMissing'.tr());
     }
     await _showRemoteText(
       title: 'deploymentLogsTitle'.tr(args: [_composeName]),
@@ -1148,7 +1148,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                               color: scheme.onSurfaceVariant,
                             ),
                             const SizedBox(width: 4),
-                             Text(
+                            Text(
                               'deploymentMoreActions'.tr(),
                               style: theme.textTheme.labelLarge?.copyWith(
                                 color: scheme.onSurfaceVariant,
@@ -1175,7 +1175,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                       resource: resource,
                       configuration: effectiveConfig,
                     ),
-                   if (!_composeReady && kind == DeploymentResourceKind.compose)
+                  if (!_composeReady && kind == DeploymentResourceKind.compose)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
@@ -1185,8 +1185,11 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                         ),
                       ),
                     ),
-                   if (effectiveConfig.isNotEmpty) ...[
-                     Text('deploymentConfigTitle'.tr(), style: theme.textTheme.labelMedium),
+                  if (effectiveConfig.isNotEmpty) ...[
+                    Text(
+                      'deploymentConfigTitle'.tr(),
+                      style: theme.textTheme.labelMedium,
+                    ),
                     const SizedBox(height: 6),
                     ...effectiveConfig.entries.map(
                       (entry) => Padding(
@@ -1214,12 +1217,12 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                  ]                    else
+                  ] else
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text('deploymentConfigEmpty'.tr()),
                     ),
-                   if (server != null)
+                  if (server != null)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: OutlinedButton.icon(
@@ -1227,8 +1230,12 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                         icon: const Icon(Symbols.open_in_new, size: 18),
                         label: Text(
                           kind == DeploymentResourceKind.serverFolder
-                              ? 'deploymentBrowseServer'.tr(args: [server!.name])
-                              : 'deploymentOpenOnServer'.tr(args: [server!.name]),
+                              ? 'deploymentBrowseServer'.tr(
+                                  args: [server!.name],
+                                )
+                              : 'deploymentOpenOnServer'.tr(
+                                  args: [server!.name],
+                                ),
                         ),
                       ),
                     ),
@@ -1570,20 +1577,23 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
         children: [
           Row(
             children: [
-              Text('deploymentLiveStack'.tr(), style: Theme.of(context).textTheme.titleSmall),
-               const Spacer(),
-               if (_directory.isNotEmpty)
-                 IconButton(
-                   tooltip: 'deploymentStackLogs'.tr(),
-                   icon: const Icon(Symbols.terminal, size: 18),
-                   onPressed: _showStackLogs,
-                 ),
-               if (snapshot.connectionState == ConnectionState.done)
-                 IconButton(
-                   tooltip: 'deploymentRefreshContainers'.tr(),
-                   icon: const Icon(Symbols.refresh, size: 18),
-                   onPressed: () => setState(() => _containers = _load()),
-                 ),
+              Text(
+                'deploymentLiveStack'.tr(),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Spacer(),
+              if (_directory.isNotEmpty)
+                IconButton(
+                  tooltip: 'deploymentStackLogs'.tr(),
+                  icon: const Icon(Symbols.terminal, size: 18),
+                  onPressed: _showStackLogs,
+                ),
+              if (snapshot.connectionState == ConnectionState.done)
+                IconButton(
+                  tooltip: 'deploymentRefreshContainers'.tr(),
+                  icon: const Icon(Symbols.refresh, size: 18),
+                  onPressed: () => setState(() => _containers = _load()),
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -1627,10 +1637,19 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                         child: Text('deploymentQuickActionRestart'.tr()),
                       ),
                     if (running)
-                      PopupMenuItem(value: 'stop', child: Text('deploymentQuickActionStop'.tr()))
+                      PopupMenuItem(
+                        value: 'stop',
+                        child: Text('deploymentQuickActionStop'.tr()),
+                      )
                     else
-                      PopupMenuItem(value: 'start', child: Text('deploymentQuickActionStart'.tr())),
-                    PopupMenuItem(value: 'logs', child: Text('deploymentQuickActionLogs'.tr())),
+                      PopupMenuItem(
+                        value: 'start',
+                        child: Text('deploymentQuickActionStart'.tr()),
+                      ),
+                    PopupMenuItem(
+                      value: 'logs',
+                      child: Text('deploymentQuickActionLogs'.tr()),
+                    ),
                   ],
                 ),
               );
@@ -1651,7 +1670,7 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                     onPressed: () => _run(action),
                     child: Text(action.label),
                   ),
-                 OutlinedButton.icon(
+                OutlinedButton.icon(
                   onPressed: _showStackLogs,
                   icon: const Icon(Symbols.terminal, size: 16),
                   label: Text('deploymentQuickActionLogs'.tr()),
@@ -1931,7 +1950,9 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           const SizedBox(height: 12),
           DropdownButtonFormField<DeploymentResourceKind>(
             initialValue: _kind,
-            decoration: InputDecoration(labelText: 'deploymentResourceType'.tr()),
+            decoration: InputDecoration(
+              labelText: 'deploymentResourceType'.tr(),
+            ),
             items: [
               for (final kind in _linkableKinds)
                 DropdownMenuItem(
@@ -1964,7 +1985,9 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           else
             DropdownButtonFormField<int>(
               initialValue: _serverId,
-              decoration: InputDecoration(labelText: 'deploymentServerLabel'.tr()),
+              decoration: InputDecoration(
+                labelText: 'deploymentServerLabel'.tr(),
+              ),
               items: [
                 for (final server in widget.servers)
                   DropdownMenuItem(value: server.id, child: Text(server.name)),
@@ -2018,11 +2041,11 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           )
-                         : IconButton(
-                             tooltip: 'deploymentRefreshSuggestions'.tr(),
-                             icon: const Icon(Symbols.refresh),
-                             onPressed: _loadSuggestions,
-                           ),
+                        : IconButton(
+                            tooltip: 'deploymentRefreshSuggestions'.tr(),
+                            icon: const Icon(Symbols.refresh),
+                            onPressed: _loadSuggestions,
+                          ),
                   ),
                   onChanged: (value) => setState(() => _location = value),
                   onFieldSubmitted: (_) {
@@ -2069,7 +2092,9 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
               const SizedBox(height: 12),
               DropdownButtonFormField<ContainerRuntime>(
                 initialValue: _runtime,
-                decoration: InputDecoration(labelText: 'deploymentRuntime'.tr()),
+                decoration: InputDecoration(
+                  labelText: 'deploymentRuntime'.tr(),
+                ),
                 items: [
                   for (final runtime in ContainerRuntime.values)
                     DropdownMenuItem(value: runtime, child: Text(runtime.name)),

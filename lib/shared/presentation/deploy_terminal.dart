@@ -10,7 +10,7 @@ import 'package:maid_kit/theme.dart';
 import 'ansi_log_view.dart';
 import 'cli_output_progress.dart';
 
-enum DeploySessionStatus { running, succeeded, failed }
+enum DeploySessionStatus { running, succeeded, failed, cancelled }
 
 class DeploySession {
   const DeploySession({
@@ -21,6 +21,7 @@ class DeploySession {
     required this.log,
     required this.status,
     required this.modalVisible,
+    required this.canTerminate,
     this.error,
     this.progress,
     this.progressDetail,
@@ -33,6 +34,7 @@ class DeploySession {
   final String log;
   final DeploySessionStatus status;
   final bool modalVisible;
+  final bool canTerminate;
   final String? error;
 
   /// Parsed CLI progress in `0..1` when available (e.g. docker pull layers).
@@ -47,6 +49,7 @@ class DeploySession {
     String? log,
     DeploySessionStatus? status,
     bool? modalVisible,
+    bool? canTerminate,
     String? error,
     double? progress,
     String? progressDetail,
@@ -59,6 +62,7 @@ class DeploySession {
     log: log ?? this.log,
     status: status ?? this.status,
     modalVisible: modalVisible ?? this.modalVisible,
+    canTerminate: canTerminate ?? this.canTerminate,
     error: error ?? this.error,
     progress: clearProgress ? progress : (progress ?? this.progress),
     progressDetail: clearProgress
@@ -74,6 +78,7 @@ final deploySessionsProvider =
 
 class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
   final Map<String, CliOutputProgressTracker> _progressTrackers = {};
+  final Map<String, FutureOr<void> Function()> _cancelHandlers = {};
 
   @override
   List<DeploySession> build() => const [];
@@ -82,9 +87,11 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
     required String title,
     required String subtitle,
     required String command,
+    FutureOr<void> Function()? onCancel,
   }) {
     final id = 'deploy-${DateTime.now().microsecondsSinceEpoch}';
     _progressTrackers[id] = CliOutputProgressTracker();
+    if (onCancel != null) _cancelHandlers[id] = onCancel;
     state = [
       ...state,
       DeploySession(
@@ -95,6 +102,7 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
         log: '',
         status: DeploySessionStatus.running,
         modalVisible: true,
+        canTerminate: onCancel != null,
       ),
     ];
     return id;
@@ -122,6 +130,7 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
   }
 
   void complete(String id, {required bool success, String? error}) {
+    if (isCancelled(id)) return;
     // Command has exited — treat progress as complete regardless of how much
     // of the CLI stream we managed to parse (layers may still show <100%).
     _progressTrackers[id]?.markFinished();
@@ -142,6 +151,29 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
     ];
   }
 
+  bool isCancelled(String id) => state.any(
+    (session) =>
+        session.id == id && session.status == DeploySessionStatus.cancelled,
+  );
+
+  Future<void> terminate(String id) async {
+    final session = state.where((item) => item.id == id).firstOrNull;
+    if (session == null || !session.isRunning) return;
+    append(id, '\nTask terminated by user.\n');
+    state = [
+      for (final item in state)
+        if (item.id == id)
+          item.copyWith(
+            status: DeploySessionStatus.cancelled,
+            error: 'Task terminated by user.',
+            clearProgress: true,
+          )
+        else
+          item,
+    ];
+    await _cancelHandlers[id]?.call();
+  }
+
   void setModalVisible(String id, bool visible) {
     state = [
       for (final session in state)
@@ -152,22 +184,29 @@ class DeploySessionsNotifier extends Notifier<List<DeploySession>> {
     ];
   }
 
+  void setAllModalVisible(bool visible) {
+    state = [
+      for (final session in state) session.copyWith(modalVisible: visible),
+    ];
+  }
+
   void remove(String id) {
     _progressTrackers.remove(id);
+    _cancelHandlers.remove(id);
     state = state.where((session) => session.id != id).toList();
   }
 }
 
-/// Opens (or re-opens) the deploy progress terminal for [sessionId].
+/// Opens the shared task terminal and selects [sessionId]'s tab.
 void showDeployTerminal(WidgetRef ref, String sessionId) {
-  ref.read(deploySessionsProvider.notifier).setModalVisible(sessionId, true);
+  ref.read(deploySessionsProvider.notifier).setAllModalVisible(true);
   unawaited(
     showAttentionModal(
-      id: 'deploy-terminal-$sessionId',
+      id: 'deploy-terminal',
       replaceIfExists: true,
       barrierDismissible: false,
       builder: (context, dismiss) =>
-          _DeployTerminalModal(sessionId: sessionId, dismiss: dismiss),
+          _DeployTerminalModal(initialSessionId: sessionId, dismiss: dismiss),
     ),
   );
 }
@@ -179,15 +218,22 @@ Future<void> runWithDeployTerminal({
   required String subtitle,
   required String command,
   required Future<void> Function(void Function(String chunk) onOutput) run,
+  FutureOr<void> Function()? onCancel,
 }) async {
   final sessions = ref.read(deploySessionsProvider.notifier);
-  final id = sessions.start(title: title, subtitle: subtitle, command: command);
+  final id = sessions.start(
+    title: title,
+    subtitle: subtitle,
+    command: command,
+    onCancel: onCancel,
+  );
   showDeployTerminal(ref, id);
   try {
     await run((chunk) => sessions.append(id, chunk));
     sessions.append(id, '\nCompleted successfully.\n');
     sessions.complete(id, success: true);
   } catch (error) {
+    if (sessions.isCancelled(id)) return;
     sessions.append(id, '\n$error\n');
     sessions.complete(id, success: false, error: error.toString());
     rethrow;
@@ -195,9 +241,12 @@ Future<void> runWithDeployTerminal({
 }
 
 class _DeployTerminalModal extends ConsumerStatefulWidget {
-  const _DeployTerminalModal({required this.sessionId, required this.dismiss});
+  const _DeployTerminalModal({
+    required this.initialSessionId,
+    required this.dismiss,
+  });
 
-  final String sessionId;
+  final String initialSessionId;
   final VoidCallback dismiss;
 
   @override
@@ -206,45 +255,46 @@ class _DeployTerminalModal extends ConsumerStatefulWidget {
 }
 
 class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
+  late String _selectedSessionId = widget.initialSessionId;
+
   void _hide() {
-    ref
-        .read(deploySessionsProvider.notifier)
-        .setModalVisible(widget.sessionId, false);
+    ref.read(deploySessionsProvider.notifier).setAllModalVisible(false);
     widget.dismiss();
   }
 
   void _close() {
-    ref.read(deploySessionsProvider.notifier).remove(widget.sessionId);
-    widget.dismiss();
+    final sessions = ref.read(deploySessionsProvider);
+    ref.read(deploySessionsProvider.notifier).remove(_selectedSessionId);
+    if (sessions.length <= 1) widget.dismiss();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final session = ref.watch(
-      deploySessionsProvider.select((sessions) {
-        for (final item in sessions) {
-          if (item.id == widget.sessionId) return item;
-        }
-        return null;
-      }),
-    );
+    final sessions = ref.watch(deploySessionsProvider);
 
-    if (session == null) {
+    if (sessions.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => widget.dismiss());
       return const SizedBox.shrink();
     }
+    final selectedIndex = sessions.indexWhere(
+      (item) => item.id == _selectedSessionId,
+    );
+    final session =
+        sessions[selectedIndex < 0 ? sessions.length - 1 : selectedIndex];
 
     final statusColor = switch (session.status) {
       DeploySessionStatus.running => scheme.primary,
       DeploySessionStatus.succeeded => scheme.primary,
       DeploySessionStatus.failed => scheme.error,
+      DeploySessionStatus.cancelled => scheme.onSurfaceVariant,
     };
     final statusLabel = switch (session.status) {
       DeploySessionStatus.running => 'deployRunning'.tr(),
       DeploySessionStatus.succeeded => 'deploySucceeded'.tr(),
       DeploySessionStatus.failed => 'deployFailed'.tr(),
+      DeploySessionStatus.cancelled => 'deployCancelled'.tr(),
     };
 
     return AttentionModalScaffold(
@@ -263,6 +313,40 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (sessions.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: DefaultTabController(
+                key: ValueKey(sessions.map((item) => item.id).join()),
+                length: sessions.length,
+                initialIndex: selectedIndex < 0
+                    ? sessions.length - 1
+                    : selectedIndex,
+                child: TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  onTap: (index) =>
+                      setState(() => _selectedSessionId = sessions[index].id),
+                  tabs: [
+                    for (final item in sessions)
+                      Tab(
+                        iconMargin: const EdgeInsets.only(right: 6),
+                        icon: Icon(
+                          item.status == DeploySessionStatus.running
+                              ? Symbols.progress_activity
+                              : item.status == DeploySessionStatus.succeeded
+                              ? Symbols.check_circle
+                              : item.status == DeploySessionStatus.cancelled
+                              ? Symbols.cancel
+                              : Symbols.error,
+                          size: 16,
+                        ),
+                        text: item.subtitle,
+                      ),
+                  ],
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
             child: Row(
@@ -280,6 +364,8 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
                   Icon(
                     session.status == DeploySessionStatus.succeeded
                         ? Symbols.check_circle
+                        : session.status == DeploySessionStatus.cancelled
+                        ? Symbols.cancel
                         : Symbols.error,
                     size: 16,
                     color: statusColor,
@@ -368,6 +454,8 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
                               : session.progressDetail!)
                         : session.status == DeploySessionStatus.succeeded
                         ? 'Finished successfully.'
+                        : session.status == DeploySessionStatus.cancelled
+                        ? 'Task terminated.'
                         : 'Finished with an error.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
@@ -376,13 +464,28 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
                 ),
                 const SizedBox(width: 12),
                 if (session.isRunning)
+                  if (session.canTerminate)
+                    OutlinedButton.icon(
+                      onPressed: () => unawaited(
+                        ref
+                            .read(deploySessionsProvider.notifier)
+                            .terminate(session.id),
+                      ),
+                      icon: const Icon(Symbols.stop_circle, size: 18),
+                      label: Text('deployTerminate'.tr()),
+                    ),
+                if (session.isRunning) const SizedBox(width: 8),
+                if (session.isRunning)
                   OutlinedButton.icon(
                     onPressed: _hide,
                     icon: const Icon(Symbols.keyboard_arrow_down, size: 18),
                     label: Text('deployHide'.tr()),
                   )
                 else
-                  FilledButton(onPressed: _close, child: Text('commonDone'.tr())),
+                  FilledButton(
+                    onPressed: _close,
+                    child: Text('commonDone'.tr()),
+                  ),
               ],
             ),
           ),
@@ -500,8 +603,10 @@ class DeploySessionsRailButton extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                    Text(
-                    running ? (progressLabel ?? 'deployTaskLabel'.tr()) : 'deployLogLabel'.tr(),
+                  Text(
+                    running
+                        ? (progressLabel ?? 'deployTaskLabel'.tr())
+                        : 'deployLogLabel'.tr(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(

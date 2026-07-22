@@ -55,10 +55,7 @@ Future<void> main() async {
         ),
       ],
       child: EasyLocalization(
-        supportedLocales: const [
-          Locale('en', 'US'),
-          Locale('zh', 'CN'),
-        ],
+        supportedLocales: const [Locale('en', 'US'), Locale('zh', 'CN')],
         path: 'assets/translations',
         fallbackLocale: const Locale('en', 'US'),
         useFallbackTranslations: true,

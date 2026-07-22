@@ -426,6 +426,48 @@ class SshConnectionManager {
         stdin: sshUserIsRoot ? null : sudoPassword,
         onOutput: onOutput,
       );
+      if (result.exitCode != 0) {
+        throw StateError(_commandError(result));
+      }
+    });
+  }
+
+  /// Runs a user-authored POSIX shell script through an existing SSH session.
+  /// Output is streamed so callers can show the operation in the shared task
+  /// terminal. The script is supplied on stdin, avoiding interpolation into a
+  /// remote command string.
+  Future<void> runScriptSnippet(
+    int serverId, {
+    required String script,
+    void Function(String chunk)? onOutput,
+    void Function(void Function())? onCancelReady,
+  }) async {
+    if (script.trim().isEmpty) {
+      throw ArgumentError.value(
+        script,
+        'script',
+        'The script cannot be empty.',
+      );
+    }
+    await withClient(serverId, (client) async {
+      onOutput?.call(
+        r'$ sh -s'
+        '\n',
+      );
+      final result = await _executeStreaming(
+        client,
+        'sh -s',
+        stdin: script,
+        onOutput: onOutput,
+        onSession: (session) => onCancelReady?.call(() {
+          session.kill(SSHSignal.TERM);
+          session.close();
+        }),
+        // A PTY is useful for interactive CLI progress, but it can keep a
+        // shell open after its script input reaches EOF. Snippets need the
+        // remote exit status to complete their task deterministically.
+        usePty: false,
+      );
       if (result.exitCode != 0) throw StateError(_commandError(result));
     });
   }
@@ -1871,6 +1913,7 @@ done
     String command, {
     String? stdin,
     void Function(String chunk)? onOutput,
+    void Function(SSHSession session)? onSession,
     bool usePty = true,
   }) async {
     final session = await client.execute(
@@ -1879,6 +1922,7 @@ done
           ? const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 40)
           : null,
     );
+    onSession?.call(session);
     final stdoutBuffer = StringBuffer();
     final stderrBuffer = StringBuffer();
     final stdoutDone = utf8.decoder.bind(session.stdout).listen((chunk) {

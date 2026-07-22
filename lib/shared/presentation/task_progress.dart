@@ -122,7 +122,9 @@ class _TaskProgressBarContent extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final label = switch (task.status) {
       TaskProgressStatus.inProgress => task.title,
-      TaskProgressStatus.completed => 'taskProgressComplete'.tr(args: [task.title]),
+      TaskProgressStatus.completed => 'taskProgressComplete'.tr(
+        args: [task.title],
+      ),
       TaskProgressStatus.failed => 'taskProgressFailed'.tr(args: [task.title]),
     };
     final color = switch (task.status) {

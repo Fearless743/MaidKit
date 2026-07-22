@@ -19,10 +19,7 @@ void main() {
     EasyLocalization.logger.enableBuildModes = [];
   });
 
-  Future<void> pumpApp(
-    WidgetTester tester, {
-    PackageInfo? packageInfo,
-  }) async {
+  Future<void> pumpApp(WidgetTester tester, {PackageInfo? packageInfo}) async {
     final router = AppRouter();
     addTearDown(router.dispose);
 

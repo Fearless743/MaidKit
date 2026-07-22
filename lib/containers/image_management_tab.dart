@@ -308,10 +308,9 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
 
   String get _runtimeName => widget.runtime.name;
 
-  String get _scopeLabel =>
-      widget.scope == ContainerScope.root
-          ? 'commonRoot'.tr()
-          : 'commonUser'.tr();
+  String get _scopeLabel => widget.scope == ContainerScope.root
+      ? 'commonRoot'.tr()
+      : 'commonUser'.tr();
 
   String get _commandPreview {
     final flags = [if (_allUnused) '-a', if (_force) '-f'].join(' ');
@@ -368,18 +367,14 @@ class _PruneImagesSheetState extends State<_PruneImagesSheet> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: Text('imagesPruneAllUnused'.tr()),
-            subtitle: Text(
-              'imagesPruneAllUnusedHint'.tr(),
-            ),
+            subtitle: Text('imagesPruneAllUnusedHint'.tr()),
             value: _allUnused,
             onChanged: (value) => setState(() => _allUnused = value),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: Text('imagesPruneForce'.tr()),
-            subtitle: Text(
-              'imagesPruneForceHint'.tr(),
-            ),
+            subtitle: Text('imagesPruneForceHint'.tr()),
             value: _force,
             onChanged: (value) => setState(() => _force = value),
           ),
@@ -509,17 +504,17 @@ class _ImageEnvironments extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                    [
-                      totalImages == 1
-                          ? 'imagesCountOne'.tr()
-                          : 'imagesCountOther'.tr(args: [totalImages.toString()]),
-                      if (totalUnused > 0)
-                        totalUnused == 1
-                            ? 'imagesUnusedOne'.tr()
-                            : 'imagesUnusedOther'.tr(
-                                args: [totalUnused.toString()],
-                              ),
-                    ].join(' · '),
+                  [
+                    totalImages == 1
+                        ? 'imagesCountOne'.tr()
+                        : 'imagesCountOther'.tr(args: [totalImages.toString()]),
+                    if (totalUnused > 0)
+                      totalUnused == 1
+                          ? 'imagesUnusedOne'.tr()
+                          : 'imagesUnusedOther'.tr(
+                              args: [totalUnused.toString()],
+                            ),
+                  ].join(' · '),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -577,10 +572,9 @@ class _ImageEnvironmentSection extends StatelessWidget {
     return '${name[0].toUpperCase()}${name.substring(1)}';
   }
 
-  String get _scopeLabel =>
-      environment.scope == ContainerScope.root
-          ? 'commonRoot'.tr()
-          : 'commonUser'.tr();
+  String get _scopeLabel => environment.scope == ContainerScope.root
+      ? 'commonRoot'.tr()
+      : 'commonUser'.tr();
 
   IconData get _runtimeIcon => switch (environment.runtime) {
     ContainerRuntime.docker => Symbols.deployed_code,

@@ -193,9 +193,7 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
                 title: 'detailMemory'.tr(),
                 subtitle: _memSubtitle(latest),
                 color: scheme.tertiary,
-                footer: _hasSwap(latest)
-                    ? _SwapFooter(sample: latest)
-                    : null,
+                footer: _hasSwap(latest) ? _SwapFooter(sample: latest) : null,
                 child: _PercentLineChart(
                   history: _history,
                   color: scheme.tertiary,
@@ -237,7 +235,6 @@ class _ActivityTabState extends ConsumerState<ActivityTab> {
     return '${_formatKb(s.memoryUsedKb!)} / ${_formatKb(s.memoryTotalKb!)}'
         '${s.memoryPercent == null ? '' : ' · ${s.memoryPercent!.toStringAsFixed(0)}%'}';
   }
-
 }
 
 /// Download (RX) — cool teal, distinct from warm TX.
@@ -437,7 +434,8 @@ class _ChartCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final trailing = subtitleWidget ??
+    final trailing =
+        subtitleWidget ??
         Text(
           subtitle!,
           textAlign: TextAlign.end,
@@ -475,10 +473,7 @@ class _ChartCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             SizedBox(height: 120, child: child),
-            if (footer != null) ...[
-              const SizedBox(height: 8),
-              footer!,
-            ],
+            if (footer != null) ...[const SizedBox(height: 8), footer!],
           ],
         ),
       ),
@@ -548,8 +543,8 @@ class _DiskCard extends StatelessWidget {
                 color: progress >= 0.9
                     ? scheme.error
                     : progress >= 0.75
-                        ? scheme.tertiary
-                        : scheme.primary,
+                    ? scheme.tertiary
+                    : scheme.primary,
               ),
             ),
           ],

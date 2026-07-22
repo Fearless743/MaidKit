@@ -123,10 +123,14 @@ class _CloudFilePickerSheetState extends State<_CloudFilePickerSheet> {
     if (widget.title != null) return widget.title!;
     return switch (widget.selection) {
       CloudFilePickerSelection.file =>
-        widget.allowMultiple ? 'filePickerChooseFiles'.tr() : 'filePickerChooseFile'.tr(),
+        widget.allowMultiple
+            ? 'filePickerChooseFiles'.tr()
+            : 'filePickerChooseFile'.tr(),
       CloudFilePickerSelection.folder => 'filePickerChooseFolders'.tr(),
       CloudFilePickerSelection.fileOrFolder =>
-        widget.allowMultiple ? 'filePickerChooseItems'.tr() : 'filePickerChooseItem'.tr(),
+        widget.allowMultiple
+            ? 'filePickerChooseItems'.tr()
+            : 'filePickerChooseItem'.tr(),
     };
   }
 

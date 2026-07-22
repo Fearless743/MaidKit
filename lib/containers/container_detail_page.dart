@@ -556,7 +556,7 @@ class _ContainerDetailPageState extends ConsumerState<ContainerDetailPage> {
             itemBuilder: (context) {
               final scheme = Theme.of(context).colorScheme;
               final paused = inspect?.isPaused ?? false;
-               return [
+              return [
                 PopupMenuItem(
                   value: 'start',
                   enabled: !running,
@@ -809,9 +809,9 @@ class _OverviewPanel extends StatelessWidget {
           )
         else if (inspect == null)
           Text(
-             connected
-                 ? 'containerNoInspectData'.tr()
-                 : (session?.error ?? 'commonNotConnected'.tr()),
+            connected
+                ? 'containerNoInspectData'.tr()
+                : (session?.error ?? 'commonNotConnected'.tr()),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -834,24 +834,35 @@ class _OverviewPanel extends StatelessWidget {
           _KeyValue(label: 'containerFieldRuntime'.tr(), value: runtime.name),
           _KeyValue(
             label: 'containerFieldScope'.tr(),
-            value: scope == ContainerScope.root ? 'commonSystem'.tr() : 'commonUser'.tr(),
+            value: scope == ContainerScope.root
+                ? 'commonSystem'.tr()
+                : 'commonUser'.tr(),
           ),
-           if (inspect!.restartPolicy.isNotEmpty)
-             _KeyValue(label: 'containerFieldRestart'.tr(), value: inspect!.restartPolicy),
-           if (inspect!.networkMode.isNotEmpty)
-             _KeyValue(label: 'containerFieldNetwork'.tr(), value: inspect!.networkMode),
-           if (inspect!.created != null)
-             _KeyValue(
-               label: 'containerFieldCreated'.tr(),
-               value: _formatTimestamp(inspect!.created!),
-             ),
-           if (inspect!.startedAt != null)
-             _KeyValue(
-               label: 'containerFieldStarted'.tr(),
-               value: _formatTimestamp(inspect!.startedAt!),
-             ),
-           if (inspect!.exitCode != null && !inspect!.isRunning)
-             _KeyValue(label: 'containerFieldExitCode'.tr(), value: '${inspect!.exitCode}'),
+          if (inspect!.restartPolicy.isNotEmpty)
+            _KeyValue(
+              label: 'containerFieldRestart'.tr(),
+              value: inspect!.restartPolicy,
+            ),
+          if (inspect!.networkMode.isNotEmpty)
+            _KeyValue(
+              label: 'containerFieldNetwork'.tr(),
+              value: inspect!.networkMode,
+            ),
+          if (inspect!.created != null)
+            _KeyValue(
+              label: 'containerFieldCreated'.tr(),
+              value: _formatTimestamp(inspect!.created!),
+            ),
+          if (inspect!.startedAt != null)
+            _KeyValue(
+              label: 'containerFieldStarted'.tr(),
+              value: _formatTimestamp(inspect!.startedAt!),
+            ),
+          if (inspect!.exitCode != null && !inspect!.isRunning)
+            _KeyValue(
+              label: 'containerFieldExitCode'.tr(),
+              value: '${inspect!.exitCode}',
+            ),
         ],
         if (!connected) ...[
           const SizedBox(height: 16),
@@ -1132,9 +1143,18 @@ class _InspectorTabs extends StatelessWidget {
             tabAlignment: TabAlignment.start,
             dividerColor: scheme.outlineVariant,
             tabs: [
-              Tab(icon: const Icon(Symbols.terminal, size: 18), text: 'containerLogs'.tr()),
-              Tab(icon: const Icon(Symbols.replay, size: 18), text: 'containerReRunCommand'.tr()),
-              Tab(icon: const Icon(Symbols.info, size: 18), text: 'containerDetails'.tr()),
+              Tab(
+                icon: const Icon(Symbols.terminal, size: 18),
+                text: 'containerLogs'.tr(),
+              ),
+              Tab(
+                icon: const Icon(Symbols.replay, size: 18),
+                text: 'containerReRunCommand'.tr(),
+              ),
+              Tab(
+                icon: const Icon(Symbols.info, size: 18),
+                text: 'containerDetails'.tr(),
+              ),
             ],
           ),
           Expanded(
@@ -1215,7 +1235,7 @@ class _LogsPane extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
             children: [
-               Text('containerLast'.tr(), style: theme.textTheme.labelLarge),
+              Text('containerLast'.tr(), style: theme.textTheme.labelLarge),
               const SizedBox(width: 8),
               DropdownButton<int>(
                 value: tail,
@@ -1260,7 +1280,9 @@ class _LogsPane extends StatelessWidget {
                 icon: const Icon(Symbols.content_copy),
               ),
               IconButton(
-                tooltip: following ? 'containerRestartLiveStream'.tr() : 'containerFollowLogs'.tr(),
+                tooltip: following
+                    ? 'containerRestartLiveStream'.tr()
+                    : 'containerFollowLogs'.tr(),
                 onPressed: onRefresh,
                 icon: loading
                     ? const SizedBox(
@@ -1316,10 +1338,10 @@ class _RerunPane extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     if (inspect == null) {
-    return _EmptyBody(
-      icon: Symbols.replay,
-      message: 'containerInspectToGenerate'.tr(),
-    );
+      return _EmptyBody(
+        icon: Symbols.replay,
+        message: 'containerInspectToGenerate'.tr(),
+      );
     }
     final command = inspect!.rerunCommand(runtime);
     return ListView(
@@ -1353,7 +1375,8 @@ class _RerunPane extends StatelessWidget {
         Row(
           children: [
             FilledButton.icon(
-              onPressed: () => onCopy(command, title: 'containerCommandCopied'.tr()),
+              onPressed: () =>
+                  onCopy(command, title: 'containerCommandCopied'.tr()),
               icon: const Icon(Symbols.content_copy, size: 18),
               label: const Text('containerCopyCommand').tr(),
             ),
@@ -1381,10 +1404,19 @@ class _RerunPane extends StatelessWidget {
           label: 'containerEnvVarsCount'.tr(),
           value: '${inspect!.env.where((e) => !e.startsWith('PATH=')).length}',
         ),
-        _SummaryLine(label: 'containerFieldRestart'.tr(), value: inspect!.restartPolicy),
-        _SummaryLine(label: 'containerFieldNetwork'.tr(), value: inspect!.networkMode),
+        _SummaryLine(
+          label: 'containerFieldRestart'.tr(),
+          value: inspect!.restartPolicy,
+        ),
+        _SummaryLine(
+          label: 'containerFieldNetwork'.tr(),
+          value: inspect!.networkMode,
+        ),
         if (inspect!.command.isNotEmpty)
-          _SummaryLine(label: 'detailCommand'.tr(), value: inspect!.command.join(' ')),
+          _SummaryLine(
+            label: 'detailCommand'.tr(),
+            value: inspect!.command.join(' '),
+          ),
       ],
     );
   }
@@ -1453,9 +1485,9 @@ class _DetailsPane extends StatelessWidget {
     if (inspect == null) {
       return _EmptyBody(
         icon: Symbols.error_outline,
-             message: error == null
-             ? 'containerNoDetailsAvailable'.tr()
-             : 'containerCouldNotInspect'.tr(args: [error.toString()]),
+        message: error == null
+            ? 'containerNoDetailsAvailable'.tr()
+            : 'containerCouldNotInspect'.tr(args: [error.toString()]),
         actionLabel: 'commonRetry'.tr(),
         onAction: () async => onRefresh(),
       );
@@ -1473,13 +1505,17 @@ class _DetailsPane extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-             Row(
-           children: [
-              Text('containerEnvironment'.tr(), style: theme.textTheme.titleSmall),
-             const Spacer(),
-             IconButton(
-               tooltip: 'containerCopyJson'.tr(),
-              onPressed: () => onCopy(prettyJson, title: 'containerInspectJsonCopied'.tr()),
+        Row(
+          children: [
+            Text(
+              'containerEnvironment'.tr(),
+              style: theme.textTheme.titleSmall,
+            ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'containerCopyJson'.tr(),
+              onPressed: () =>
+                  onCopy(prettyJson, title: 'containerInspectJsonCopied'.tr()),
               icon: const Icon(Symbols.content_copy, size: 18),
             ),
             IconButton(
@@ -1555,7 +1591,7 @@ class _DetailsPane extends StatelessWidget {
             ),
         if (inspect!.networks.isNotEmpty) ...[
           const SizedBox(height: 20),
-           Text('containerNetworks'.tr(), style: theme.textTheme.titleSmall),
+          Text('containerNetworks'.tr(), style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           Text(
             inspect!.networks.join(', '),

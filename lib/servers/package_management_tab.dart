@@ -178,7 +178,9 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
                   Text(
                     action.isDestructive
                         ? 'packageRemoveConfirm'.tr(args: [object])
-                        : 'packageActionGenericConfirm'.tr(args: [action.label, object]),
+                        : 'packageActionGenericConfirm'.tr(
+                            args: [action.label, object],
+                          ),
                   ),
                   const Spacer(),
                   Row(

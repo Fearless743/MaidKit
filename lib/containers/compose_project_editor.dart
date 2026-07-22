@@ -261,7 +261,11 @@ class _ComposeProjectEditorState extends State<ComposeProjectEditor> {
             const SizedBox(height: 8),
             _field(service.name, 'editorServiceName'.tr()),
             const SizedBox(height: 12),
-            _field(service.image, 'editorImage'.tr(), hint: 'editorImageHint'.tr()),
+            _field(
+              service.image,
+              'editorImage'.tr(),
+              hint: 'editorImageHint'.tr(),
+            ),
             const SizedBox(height: 12),
             _field(
               service.ports,

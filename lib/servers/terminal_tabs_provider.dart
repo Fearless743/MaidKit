@@ -27,7 +27,16 @@ void _releaseSessionTabViewKey(String tabId) {
   _sessionTabViewKeys.remove(tabId);
 }
 
-enum SessionTabType { dashboard, serverDetail, terminal, fileManagement }
+enum SessionTabType {
+  dashboard,
+  serverDetail,
+  terminal,
+  fileManagement,
+  fileEditor,
+}
+
+/// Optional close confirmation for dirty file-editor tabs.
+final Map<String, Future<bool> Function()> fileEditorCloseGuards = {};
 
 sealed class SessionTab {
   const SessionTab({
@@ -65,6 +74,25 @@ class FileManagementTab extends SessionTab {
 
   @override
   SessionTabType get type => SessionTabType.fileManagement;
+}
+
+/// In-pane text editor for a local or remote file.
+class FileEditorTab extends SessionTab {
+  const FileEditorTab({
+    required super.id,
+    required super.serverId,
+    required super.serverName,
+    required this.fileName,
+    required this.path,
+    required this.isRemote,
+  });
+
+  final String fileName;
+  final String path;
+  final bool isRemote;
+
+  @override
+  SessionTabType get type => SessionTabType.fileEditor;
 }
 
 /// The persistent server overview, shown in the same pane tab system as live
@@ -263,6 +291,39 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     _insertTab(tab, targetPaneId: paneId);
   }
 
+  /// Opens [path] in a session editor tab. Reuses an existing tab for the same
+  /// server + path + local/remote side.
+  void openFileEditor({
+    required Server server,
+    required String path,
+    required String fileName,
+    required bool isRemote,
+    String? paneId,
+  }) {
+    final existing = state.tabs.whereType<FileEditorTab>().where((tab) {
+      return tab.serverId == server.id &&
+          tab.path == path &&
+          tab.isRemote == isRemote;
+    }).firstOrNull;
+    if (existing != null) {
+      select(existing.id);
+      return;
+    }
+    if (paneId != null) focusPane(paneId);
+    final side = isRemote ? 'remote' : 'local';
+    _insertTab(
+      FileEditorTab(
+        id: 'editor-$side-${server.id}-$path',
+        serverId: server.id,
+        serverName: server.name,
+        fileName: fileName,
+        path: path,
+        isRemote: isRemote,
+      ),
+      targetPaneId: paneId,
+    );
+  }
+
   void openServerDetails(
     Server server, {
     int initialTab = 0,
@@ -428,9 +489,14 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
   Future<void> close(String tabId) async {
     final tab = state.tabs.where((tab) => tab.id == tabId).firstOrNull;
     if (tab is DashboardTab) return;
+    if (tab is FileEditorTab) {
+      final guard = fileEditorCloseGuards[tabId];
+      if (guard != null && !await guard()) return;
+    }
     if (tab is TerminalTab) {
       await ref.read(connectionManagerProvider).closeTerminal(tabId);
     }
+    fileEditorCloseGuards.remove(tabId);
     _removeTab(tabId);
   }
 
@@ -441,12 +507,14 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     if (pane.tabIds.contains(DashboardTab().id)) return;
     final tabIds = [...pane.tabIds];
     for (final tabId in tabIds) {
-      final tab = state.tabs.where((t) => t.id == tabId).firstOrNull;
-      if (tab is TerminalTab) {
-        await ref.read(connectionManagerProvider).closeTerminal(tabId);
-      }
+      // Route through [close] so dirty file editors can confirm discard.
+      await close(tabId);
+      // User cancelled closing a dirty editor — keep the pane.
+      if (state.tabs.any((tab) => tab.id == tabId)) return;
     }
-    _removePane(paneId, alsoRemoveTabs: tabIds);
+    if (state.panes.containsKey(paneId)) {
+      _removePane(paneId, alsoRemoveTabs: const []);
+    }
   }
 
   Future<void> closeForServer(int serverId) async {

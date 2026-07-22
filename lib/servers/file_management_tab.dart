@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -8,26 +7,17 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter/services.dart';
-import 'package:highlight/highlight_core.dart' show Mode;
-import 'package:highlight/languages/bash.dart' as bash;
-import 'package:highlight/languages/css.dart' as css;
-import 'package:highlight/languages/dart.dart' as dart;
-import 'package:highlight/languages/javascript.dart' as javascript;
-import 'package:highlight/languages/json.dart' as json;
-import 'package:highlight/languages/python.dart' as python;
-import 'package:highlight/languages/typescript.dart' as typescript;
-import 'package:highlight/languages/xml.dart' as xml;
-import 'package:highlight/languages/yaml.dart' as yaml;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
+import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/shared/presentation/task_progress.dart';
 import 'package:maid_kit/theme.dart';
+import 'file_editor_tab.dart';
 import 'server_connection_actions.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';
@@ -1137,82 +1127,68 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       .read(connectionManagerProvider)
       .withClient(widget.tab.serverId, (client) => client.sftp());
 
-  Future<void> _editLocal(File file) => _showFileEditor(
-    name: _entityName(file),
-    location: file.path,
-    load: () async {
-      final bytes = await file.readAsBytes();
-      _validateEditableText(bytes.length, file.path);
-      return utf8.decode(bytes);
-    },
-    save: (text) async {
-      await file.writeAsBytes(utf8.encode(text), flush: true);
-      await _refreshLocal();
-    },
-  );
-
-  Future<void> _editRemote(SftpName entry) {
-    final path = _joinRemotePath(_remotePath, entry.filename);
-    return _showFileEditor(
-      name: entry.filename,
-      location: path,
-      load: () async {
-        _validateEditableText(entry.attr.size, path);
-        final sftp = await _sftp();
-        final file = await sftp.open(path, mode: SftpFileOpenMode.read);
-        try {
-          final bytes = await file.readBytes();
-          _validateEditableText(bytes.length, path);
-          return utf8.decode(bytes);
-        } finally {
-          await file.close();
-        }
-      },
-      save: (text) async {
-        final sftp = await _sftp();
-        final file = await sftp.open(
-          path,
-          mode:
-              SftpFileOpenMode.write |
-              SftpFileOpenMode.create |
-              SftpFileOpenMode.truncate,
+  Future<void> _editLocal(File file) async {
+    final server = _serverForTab();
+    if (server == null) return;
+    try {
+      final length = await file.length();
+      validateEditableText(length, file.path);
+    } catch (error) {
+      if (!mounted) return;
+      showMaidKitErrorAlert(
+        error,
+        title: 'fileManagerCouldNotOpen'.tr(args: [_entityName(file)]),
+      );
+      return;
+    }
+    ref
+        .read(terminalTabsProvider.notifier)
+        .openFileEditor(
+          server: server,
+          path: file.path,
+          fileName: _entityName(file),
+          isRemote: false,
         );
-        try {
-          await file.writeBytes(Uint8List.fromList(utf8.encode(text)));
-        } finally {
-          await file.close();
-        }
-        await _refreshRemote();
-      },
-    );
   }
 
-  Future<void> _showFileEditor({
-    required String name,
-    required String location,
-    required Future<String> Function() load,
-    required Future<void> Function(String text) save,
-  }) => showAttentionModal(
-    id: 'file-editor-${widget.tab.id}-$location',
-    replaceIfExists: true,
-    barrierDismissible: false,
-    builder: (context, dismiss) => _FileEditorModal(
-      name: name,
-      location: location,
-      load: load,
-      save: save,
-      dismiss: dismiss,
-    ),
-  );
+  Future<void> _editRemote(SftpName entry) async {
+    final server = _serverForTab();
+    if (server == null) return;
+    final path = _joinRemotePath(_remotePath, entry.filename);
+    try {
+      validateEditableText(entry.attr.size, path);
+    } catch (error) {
+      if (!mounted) return;
+      showMaidKitErrorAlert(
+        error,
+        title: 'fileManagerCouldNotOpen'.tr(args: [entry.filename]),
+      );
+      return;
+    }
+    ref
+        .read(terminalTabsProvider.notifier)
+        .openFileEditor(
+          server: server,
+          path: path,
+          fileName: entry.filename,
+          isRemote: true,
+        );
+  }
 
-  void _validateEditableText(int? size, String path) {
-    const maximumEditableBytes = 1024 * 1024;
-    if (size != null && size > maximumEditableBytes) {
-      throw FileSystemException(
-        'Files larger than 1 MB cannot be edited directly.',
-        path,
+  Server? _serverForTab() {
+    final servers = ref.read(serversProvider).asData?.value ?? const [];
+    final server = servers
+        .where((item) => item.id == widget.tab.serverId)
+        .firstOrNull;
+    if (server == null && mounted) {
+      showStyledSnackBar(
+        message: 'The server for this file session is no longer available.',
+        title: 'fileManagerCouldNotOpen'.tr(args: ['']),
+        icon: Symbols.error,
+        accentColor: Theme.of(context).colorScheme.error,
       );
     }
+    return server;
   }
 
   Menu _localEntryMenu(FileSystemEntity entry, int index) {
@@ -1394,8 +1370,21 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     );
   }
 
+  /// True when a text field (path bar, etc.) should own typing shortcuts.
+  bool get _isTextInputFocused {
+    if (_remotePathFocusNode.hasFocus) return true;
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null || primary.context == null) return false;
+    // TextField / EditableText own the primary focus while editing.
+    return primary.context!.widget is EditableText ||
+        primary.context!.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Let path bar and other text fields handle select-all, delete, paste, etc.
+    if (_isTextInputFocused) return KeyEventResult.ignored;
+
     final isMeta =
         HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed;
@@ -1485,6 +1474,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           );
         },
         onOpen: _openLocal,
+        onEdit: (entry) {
+          if (entry is File) unawaited(_editLocal(entry));
+        },
         dragDataFor: _dragDataForLocal,
         onContextPrepare: _ensureLocalContextSelection,
         menuProvider: _localEntryMenu,
@@ -1560,6 +1552,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           );
         },
         onOpen: _openRemote,
+        onEdit: (entry) {
+          if (entry.attr.isFile) unawaited(_editRemote(entry));
+        },
         dragDataFor: _dragDataForRemote,
         onContextPrepare: _ensureRemoteContextSelection,
         menuProvider: _remoteEntryMenu,
@@ -1905,6 +1900,7 @@ class _LocalFileList extends StatelessWidget {
     required this.cutPaths,
     required this.onTapEntry,
     required this.onOpen,
+    required this.onEdit,
     required this.dragDataFor,
     required this.onContextPrepare,
     required this.menuProvider,
@@ -1915,6 +1911,7 @@ class _LocalFileList extends StatelessWidget {
   final Set<String> cutPaths;
   final void Function(FileSystemEntity entry, int index) onTapEntry;
   final ValueChanged<FileSystemEntity> onOpen;
+  final ValueChanged<FileSystemEntity> onEdit;
   final _FileDragData Function(FileSystemEntity entry) dragDataFor;
   final void Function(FileSystemEntity entry, int index) onContextPrepare;
   final Menu Function(FileSystemEntity entry, int index) menuProvider;
@@ -1947,7 +1944,9 @@ class _LocalFileList extends StatelessWidget {
             selected: selected,
             dimmed: dimmed,
             onTap: () => onTapEntry(entry, index),
-            onDoubleTap: isDirectory ? () => onOpen(entry) : null,
+            onDoubleTap: isDirectory
+                ? () => onOpen(entry)
+                : () => onEdit(entry),
           ),
         );
       },
@@ -1963,6 +1962,7 @@ class _RemoteFileList extends StatelessWidget {
     required this.cutPaths,
     required this.onTapEntry,
     required this.onOpen,
+    required this.onEdit,
     required this.dragDataFor,
     required this.onContextPrepare,
     required this.menuProvider,
@@ -1974,6 +1974,7 @@ class _RemoteFileList extends StatelessWidget {
   final Set<String> cutPaths;
   final void Function(SftpName entry, int index) onTapEntry;
   final ValueChanged<SftpName> onOpen;
+  final ValueChanged<SftpName> onEdit;
   final _FileDragData Function(SftpName entry) dragDataFor;
   final void Function(SftpName entry, int index) onContextPrepare;
   final Menu Function(SftpName entry, int index) menuProvider;
@@ -2008,7 +2009,9 @@ class _RemoteFileList extends StatelessWidget {
             selected: selected,
             dimmed: dimmed,
             onTap: () => onTapEntry(entry, index),
-            onDoubleTap: isDirectory ? () => onOpen(entry) : null,
+            onDoubleTap: isDirectory
+                ? () => onOpen(entry)
+                : () => onEdit(entry),
           ),
         );
       },
@@ -2176,226 +2179,6 @@ class _EmptyPane extends StatelessWidget {
       ),
     );
   }
-}
-
-class _FileEditorModal extends StatefulWidget {
-  const _FileEditorModal({
-    required this.name,
-    required this.location,
-    required this.load,
-    required this.save,
-    required this.dismiss,
-  });
-
-  final String name;
-  final String location;
-  final Future<String> Function() load;
-  final Future<void> Function(String text) save;
-  final VoidCallback dismiss;
-
-  @override
-  State<_FileEditorModal> createState() => _FileEditorModalState();
-}
-
-class _FileEditorModalState extends State<_FileEditorModal> {
-  late final CodeController _controller;
-  var _loading = true;
-  var _saving = false;
-  String _savedText = '';
-
-  bool get _isDirty => !_loading && _controller.text != _savedText;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = CodeController(language: _languageForFileName(widget.name));
-    unawaited(_load());
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    try {
-      final text = await widget.load();
-      if (!mounted) return;
-      setState(() {
-        _controller.text = text;
-        _savedText = text;
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      showMaidKitErrorAlert(error, title: 'Could not open ${widget.name}');
-      widget.dismiss();
-    }
-  }
-
-  Future<void> _save() async {
-    if (_loading || _saving || !_isDirty) return;
-    setState(() => _saving = true);
-    try {
-      await widget.save(_controller.text);
-      if (!mounted) return;
-      setState(() {
-        _savedText = _controller.text;
-        _saving = false;
-      });
-      showStyledSnackBar(
-        message: widget.name,
-        title: 'fileManagerSaved'.tr(),
-        icon: Symbols.check_circle,
-        accentColor: Theme.of(context).colorScheme.primary,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      showMaidKitErrorAlert(error, title: 'Could not save ${widget.name}');
-    }
-  }
-
-  Future<void> _requestDismiss() async {
-    if (_saving) return;
-    if (_isDirty) {
-      final discard = await showMaidKitConfirmAlert(
-        'Changes to ${widget.name} have not been saved.',
-        'Discard changes?',
-        isDanger: true,
-      );
-      if (!discard || !mounted) return;
-    }
-    widget.dismiss();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return AttentionModalScaffold(
-      titleText: 'Edit ${widget.name}',
-      onDismiss: () => unawaited(_requestDismiss()),
-      maxWidth: 1080,
-      maxHeightFactor: 0.9,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.location,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontFamily: MaidKitFonts.mono,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(child: _buildEditor(context)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _saving
-                        ? 'Saving…'
-                        : _isDirty
-                        ? 'Unsaved changes'
-                        : 'fileManagerSaved'.tr(),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: _saving
-                      ? null
-                      : () => unawaited(_requestDismiss()),
-                  child: Text('commonClose'.tr()),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: _loading || _saving || !_isDirty
-                      ? null
-                      : () => unawaited(_save()),
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Symbols.save, size: 18),
-                  label: Text('commonSave'.tr()),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEditor(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CodeTheme(
-          data: CodeThemeData(
-            styles: {
-              'root': TextStyle(
-                color: scheme.onSurface,
-                backgroundColor: scheme.surfaceContainerLowest,
-                fontFamily: MaidKitFonts.mono,
-              ),
-              'comment': TextStyle(color: scheme.onSurfaceVariant),
-              'keyword': TextStyle(color: scheme.primary),
-              'string': TextStyle(color: scheme.tertiary),
-              'number': TextStyle(color: scheme.secondary),
-            },
-          ),
-          child: CodeField(
-            controller: _controller,
-            expands: true,
-            wrap: false,
-            padding: const EdgeInsets.all(12),
-            textStyle: const TextStyle(fontFamily: MaidKitFonts.mono),
-            gutterStyle: GutterStyle(
-              textStyle: TextStyle(color: scheme.onSurfaceVariant),
-              showErrors: false,
-              showFoldingHandles: false,
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-Mode? _languageForFileName(String name) {
-  final dot = name.lastIndexOf('.');
-  final extension = dot == -1 ? '' : name.substring(dot + 1).toLowerCase();
-  return switch (extension) {
-    'dart' => dart.dart,
-    'html' || 'htm' || 'xml' || 'svg' => xml.xml,
-    'css' || 'scss' => css.css,
-    'js' || 'mjs' || 'cjs' => javascript.javascript,
-    'ts' => typescript.typescript,
-    'json' => json.json,
-    'py' => python.python,
-    'yaml' || 'yml' => yaml.yaml,
-    'sh' || 'bash' || 'zsh' || 'fish' || 'env' => bash.bash,
-    _ => null,
-  };
 }
 
 String _entityName(FileSystemEntity entry) =>

@@ -54,14 +54,16 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
             targetPort: int.parse(_targetPort.text),
           );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('portForwardingStarted').tr()),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('portForwardingStarted').tr()));
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('portForwardingStartError').tr(args: ['$error'])),
+          SnackBar(
+            content: Text('portForwardingStartError').tr(args: ['$error']),
+          ),
         );
       }
     } finally {
@@ -77,16 +79,17 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
             .where((forward) => forward.serverId == widget.server.id);
     final scheme = Theme.of(context).colorScheme;
     final directionDescription = switch (_direction) {
-      PortForwardDirection.local =>
-        'portForwardingLocalDesc',
-      PortForwardDirection.remote =>
-        'portForwardingRemoteDesc',
+      PortForwardDirection.local => 'portForwardingLocalDesc',
+      PortForwardDirection.remote => 'portForwardingRemoteDesc',
     }.tr();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('portForwarding', style: Theme.of(context).textTheme.titleMedium).tr(),
+        Text(
+          'portForwarding',
+          style: Theme.of(context).textTheme.titleMedium,
+        ).tr(),
         const SizedBox(height: 8),
         Text(
           directionDescription,
@@ -144,7 +147,10 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
             ),
           ),
         const SizedBox(height: 24),
-        Text('portForwardingActive', style: Theme.of(context).textTheme.titleSmall).tr(),
+        Text(
+          'portForwardingActive',
+          style: Theme.of(context).textTheme.titleSmall,
+        ).tr(),
         const SizedBox(height: 8),
         if (forwards.isEmpty)
           Text(
@@ -225,13 +231,17 @@ class _HostPortFields extends StatelessWidget {
         const SizedBox(height: 8),
         TextFormField(
           controller: host,
-          decoration: InputDecoration(labelText: 'portForwardingHostLabel'.tr()),
+          decoration: InputDecoration(
+            labelText: 'portForwardingHostLabel'.tr(),
+          ),
           validator: _hostValidator,
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: port,
-          decoration: InputDecoration(labelText: 'portForwardingPortLabel'.tr()),
+          decoration: InputDecoration(
+            labelText: 'portForwardingPortLabel'.tr(),
+          ),
           keyboardType: TextInputType.number,
           validator: _portValidator,
         ),
@@ -254,9 +264,13 @@ class _ForwardTile extends ConsumerWidget {
           : Symbols.dns,
     ),
     title: Text('${forward.directionLabel} · ${forward.summary}'),
-    subtitle: Text(
-      'portForwardingRunningOn',
-    ).tr(args: [forward.direction == PortForwardDirection.local ? 'this computer' : forward.serverName]),
+    subtitle: Text('portForwardingRunningOn').tr(
+      args: [
+        forward.direction == PortForwardDirection.local
+            ? 'this computer'
+            : forward.serverName,
+      ],
+    ),
     trailing: IconButton(
       tooltip: 'portForwardingStop'.tr(),
       onPressed: () =>
@@ -266,8 +280,9 @@ class _ForwardTile extends ConsumerWidget {
   );
 }
 
-String? _hostValidator(String? value) =>
-    value == null || value.trim().isEmpty ? 'portForwardingHostRequired'.tr() : null;
+String? _hostValidator(String? value) => value == null || value.trim().isEmpty
+    ? 'portForwardingHostRequired'.tr()
+    : null;
 
 String? _portValidator(String? value) {
   final port = int.tryParse(value ?? '');

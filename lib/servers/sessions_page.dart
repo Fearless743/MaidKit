@@ -9,6 +9,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'server_connection_actions.dart';
 import 'server_detail_page.dart';
 import 'servers_page.dart';
+import 'file_editor_tab.dart';
 import 'file_management_tab.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -754,6 +755,9 @@ class _SessionTabBody extends StatelessWidget {
     if (tab is FileManagementTab) {
       return FileManagementTabView(key: key, tab: tab as FileManagementTab);
     }
+    if (tab is FileEditorTab) {
+      return FileEditorTabView(key: key, tab: tab as FileEditorTab);
+    }
     final terminalTab = tab as TerminalTab;
     return ColoredBox(
       color: const Color(0xFF111315),
@@ -773,10 +777,19 @@ IconData _tabIcon(SessionTab tab) => switch (tab.type) {
   SessionTabType.serverDetail => Symbols.dns,
   SessionTabType.terminal => Symbols.terminal,
   SessionTabType.fileManagement => Symbols.folder,
+  SessionTabType.fileEditor => Symbols.edit_document,
 };
 
-String _tabLabel(SessionTab tab) =>
-    tab is DashboardTab ? 'tabDashboard'.tr() : tab.serverName;
+String _tabLabel(SessionTab tab) {
+  if (tab is DashboardTab) return 'tabDashboard'.tr();
+  if (tab is FileEditorTab) {
+    return tab.isRemote ? '${tab.fileName} · ${tab.serverName}' : tab.fileName;
+  }
+  if (tab is FileManagementTab) {
+    return 'tabFiles'.tr(args: [tab.serverName]);
+  }
+  return tab.serverName;
+}
 
 class _AnimatedTerminalStatusBar extends StatelessWidget {
   const _AnimatedTerminalStatusBar({required this.session});

@@ -206,7 +206,10 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
       },
     );
     if (approved != true || !mounted) return;
-    await _persist(current.removingJob(jobIndex), success: 'crontabJobRemoved'.tr());
+    await _persist(
+      current.removingJob(jobIndex),
+      success: 'crontabJobRemoved'.tr(),
+    );
   }
 
   @override
@@ -243,8 +246,9 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
                   Expanded(
                     child: Text(
                       jobs.isEmpty
-                          ? 'crontabNoJobsForUser'
-                              .tr(args: [widget.server.username])
+                          ? 'crontabNoJobsForUser'.tr(
+                              args: [widget.server.username],
+                            )
                           : '${'detailProcessCount'.tr(args: ['${jobs.length}'])} · ${widget.server.username}',
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -454,7 +458,7 @@ class _CronJobSheetState extends State<_CronJobSheet> {
             Row(
               children: [
                 Expanded(
-                    child: _CronField(
+                  child: _CronField(
                     controller: _minute,
                     label: 'crontabMinute'.tr(),
                     hint: 'crontabMinuteHint'.tr(),
@@ -510,13 +514,13 @@ class _CronJobSheetState extends State<_CronJobSheet> {
               maxLines: 4,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                   return 'crontabCommandRequired'.tr();
+                  return 'crontabCommandRequired'.tr();
                 }
                 return null;
               },
             ),
             const SizedBox(height: 8),
-              Text(
+            Text(
               'crontabExamples'.tr(),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
@@ -533,7 +537,9 @@ class _CronJobSheetState extends State<_CronJobSheet> {
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _submit,
-                  child: Text(isEdit ? 'commonSave'.tr() : 'crontabAddJob'.tr()),
+                  child: Text(
+                    isEdit ? 'commonSave'.tr() : 'crontabAddJob'.tr(),
+                  ),
                 ),
               ],
             ),

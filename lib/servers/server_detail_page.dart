@@ -533,10 +533,7 @@ class _InspectorTabsState extends State<_InspectorTabs>
               icon: Icon(Symbols.deployed_code, size: 18),
               text: 'detailContainers'.tr(),
             ),
-            Tab(
-              icon: Icon(Symbols.image, size: 18),
-              text: 'detailImages'.tr(),
-            ),
+            Tab(icon: Icon(Symbols.image, size: 18), text: 'detailImages'.tr()),
             Tab(
               icon: Icon(Symbols.schedule, size: 18),
               text: 'detailCrontab'.tr(),

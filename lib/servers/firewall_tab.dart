@@ -142,9 +142,9 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () => Navigator.pop(sheetContext, true),
-                  child: Text(enabled
-                      ? 'firewallEnable'.tr()
-                      : 'firewallDisable'.tr()),
+                  child: Text(
+                    enabled ? 'firewallEnable'.tr() : 'firewallDisable'.tr(),
+                  ),
                 ),
               ],
             ),
@@ -162,9 +162,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
             sshUserIsRoot: _isRoot,
             sudoPassword: await _sudoPassword(),
           );
-    }, success: enabled
-        ? 'firewallEnabled'.tr()
-        : 'firewallDisabled'.tr());
+    }, success: enabled ? 'firewallEnabled'.tr() : 'firewallDisabled'.tr());
   }
 
   Future<void> _addRule() async {
@@ -242,8 +240,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
     if (!widget.connected) {
       return _FirewallEmpty(
         icon: Symbols.link_off,
-        message: widget.connectionError ??
-            'firewallConnectToManage'.tr(),
+        message: widget.connectionError ?? 'firewallConnectToManage'.tr(),
         actionLabel: 'commonConnect'.tr(),
         onAction: widget.onConnect,
         filled: true,
@@ -324,9 +321,13 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
                     Text(
                       <String>[
                         if (status.defaultIncoming != null)
-                          'firewallDefaultIncoming'.tr(args: [status.defaultIncoming!]),
+                          'firewallDefaultIncoming'.tr(
+                            args: [status.defaultIncoming!],
+                          ),
                         if (status.defaultOutgoing != null)
-                          'firewallDefaultOutgoing'.tr(args: [status.defaultOutgoing!]),
+                          'firewallDefaultOutgoing'.tr(
+                            args: [status.defaultOutgoing!],
+                          ),
                         if (status.zones.isNotEmpty)
                           'firewallZone'.tr(args: [status.zones.join(', ')]),
                       ].join(' · '),
@@ -576,11 +577,17 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
               ),
               items: [
                 DropdownMenuItem(
-                    value: 'tcp', child: Text('firewallProtocolTcp'.tr())),
+                  value: 'tcp',
+                  child: Text('firewallProtocolTcp'.tr()),
+                ),
                 DropdownMenuItem(
-                    value: 'udp', child: Text('firewallProtocolUdp'.tr())),
+                  value: 'udp',
+                  child: Text('firewallProtocolUdp'.tr()),
+                ),
                 DropdownMenuItem(
-                    value: 'any', child: Text('firewallProtocolAny'.tr())),
+                  value: 'any',
+                  child: Text('firewallProtocolAny'.tr()),
+                ),
               ],
               onChanged: (value) {
                 if (value != null) setState(() => _protocol = value);
@@ -605,8 +612,9 @@ class _AddFirewallRuleSheetState extends State<_AddFirewallRuleSheet> {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                    onPressed: _submit,
-                    child: Text('firewallAddRuleSubmit'.tr())),
+                  onPressed: _submit,
+                  child: Text('firewallAddRuleSubmit'.tr()),
+                ),
               ],
             ),
           ],

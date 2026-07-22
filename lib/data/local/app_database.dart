@@ -90,6 +90,16 @@ class DeploymentResources extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
+/// Reusable shell scripts. Snippets intentionally contain no credentials; they
+/// execute through the selected server's existing SSH connection.
+class ScriptSnippets extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get script => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     Servers,
@@ -98,13 +108,14 @@ class DeploymentResources extends Table {
     ContainerCacheEntries,
     DeploymentProjects,
     DeploymentResources,
+    ScriptSnippets,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'maid_kit'));
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -174,6 +185,9 @@ class AppDatabase extends _$AppDatabase {
               'Migrated Compose link ' || compose_project_links.id
         ''');
       }
+      if (from < 8) {
+        await m.createTable(scriptSnippets);
+      }
     },
   );
 
@@ -191,4 +205,8 @@ class AppDatabase extends _$AppDatabase {
 
   Stream<List<DeploymentResource>> watchDeploymentResources() =>
       select(deploymentResources).watch();
+
+  Stream<List<ScriptSnippet>> watchScriptSnippets() => (select(
+    scriptSnippets,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
 }

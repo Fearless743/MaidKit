@@ -169,7 +169,9 @@ class _UnusedLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final label = dangling ? 'imagesPruneDanglingLabel'.tr() : 'imagesPruneUnusedLabel'.tr();
+    final label = dangling
+        ? 'imagesPruneDanglingLabel'.tr()
+        : 'imagesPruneUnusedLabel'.tr();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(

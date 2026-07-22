@@ -1,7 +1,14 @@
 /// Systemd unit lifecycle actions exposed in the Services tab.
 enum SystemdUnitAction { start, stop, restart, reload, enable, disable }
 
-enum SystemdUnitActionLabel { systemdStart, systemdStop, systemdRestart, systemdReload, systemdEnable, systemdDisable }
+enum SystemdUnitActionLabel {
+  systemdStart,
+  systemdStop,
+  systemdRestart,
+  systemdReload,
+  systemdEnable,
+  systemdDisable,
+}
 
 extension SystemdUnitActionX on SystemdUnitAction {
   String get trLabel => switch (this) {
