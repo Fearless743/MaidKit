@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:libghostty/libghostty.dart' as ghostty;
+import 'package:maid_kit/servers/ghostty_terminal_session_adapter.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/servers/terminal_adapter_preferences.dart';
 import 'package:maid_kit/servers/terminal_session_adapter.dart';
@@ -21,7 +23,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      expect(container.read(selectedTerminalSessionAdapterProvider), 'xterm');
+      expect(container.read(selectedTerminalSessionAdapterProvider), 'ghostty');
 
       await container
           .read(selectedTerminalSessionAdapterProvider.notifier)
@@ -31,6 +33,51 @@ void main() {
       expect(settings.selectedAdapterId, 'xterm');
     },
   );
+
+  test('Ghostty adapter reports terminal resize events', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final resize = adapter.resizeEvents.first;
+
+    adapter.resize(columns: 120, rows: 36, pixelWidth: 960, pixelHeight: 720);
+
+    expect(
+      await resize,
+      isA<TerminalResize>()
+          .having((event) => event.columns, 'columns', 120)
+          .having((event) => event.rows, 'rows', 36),
+    );
+    await adapter.dispose();
+  });
+
+  test('Ghostty adapter encodes cursor keys for the remote shell', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final output = adapter.outgoingBytes.first;
+
+    adapter.sendKey(ghostty.Key.arrowUp);
+
+    expect(utf8.decode(await output), '\u001b[A');
+    await adapter.dispose();
+  });
+
+  test('Ghostty adapter encodes backspace for the remote shell', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final output = adapter.outgoingBytes.first;
+
+    adapter.sendKey(ghostty.Key.backspace);
+
+    expect(utf8.decode(await output), '\u007f');
+    await adapter.dispose();
+  });
+
+  test('Ghostty adapter sends terminal control sequences', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final output = adapter.outgoingBytes.first;
+
+    adapter.sendInput('\u0003\t\u001b');
+
+    expect(utf8.decode(await output), '\u0003\t\u001b');
+    await adapter.dispose();
+  });
 
   test('forwards shell output, terminal input, and resize events', () async {
     final stdout = StreamController<Uint8List>();

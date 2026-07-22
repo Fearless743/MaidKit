@@ -53,6 +53,8 @@ dependencies:
       path: packages/window_manager
       ref: 6fae92d21b4c80ce1b8f71c1190d7970cf722bd4
   local_auth: ^3.0.2
+  libghostty:
+    path: packages/libghostty
   shared_preferences: ^2.5.5
   super_context_menu: ^0.9.1
   uuid: ^4.6.0
