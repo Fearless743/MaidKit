@@ -1,0 +1,168 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
+
+jobs:
+  build-windows:
+    if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'windows'
+    runs-on: windows-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build windows --release
+      - name: Extract Version
+        id: extract_version
+        run: |
+          $pubspec = Get-Content pubspec.yaml -Raw
+          if ($pubspec -match 'version:\s*(\d+\.\d+\.\d+)\+(\d+)') {
+            $appVersion = $matches[1]
+            $buildNumber = $matches[2]
+            Write-Host "app_version=$appVersion" >> $env:GITHUB_OUTPUT
+            Write-Host "build_number=$buildNumber" >> $env:GITHUB_OUTPUT
+          }
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-windows
+          path: build/windows/x64/runner/Release/
+
+  build-linux:
+    if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y libmpv-dev mpv
+          sudo apt-get install -y libayatana-appindicator3-dev
+          sudo apt-get install -y keybinder-3.0
+          sudo apt-get install -y libnotify-dev
+          sudo apt-get install -y libsecret-1-dev
+          sudo apt-get install -y libcurl4-openssl-dev
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build linux --release --no-tree-shake-icons
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-linux
+          path: build/linux/x64/release/bundle/
+
+  build-macos:
+    if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos'
+    runs-on: macos-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build macos --release
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-macos
+          path: build/macos/Build/Products/Release/MaidKit.app
+
+  upload-to-s3:
+    needs: [build-windows, build-linux, build-macos]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - if: needs.build-windows.result == 'success'
+        name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output-windows
+          path: ./artifacts/windows
+      - if: needs.build-linux.result == 'success'
+        name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output-linux
+          path: ./artifacts/linux
+      - if: needs.build-macos.result == 'success'
+        name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output-macos
+          path: ./artifacts/macos
+      - if: needs.build-windows.result == 'success'
+        name: Zip Windows build
+        run: |
+          cd ./artifacts/windows
+          zip -r ../build-output-windows.zip .
+      - if: needs.build-linux.result == 'success'
+        name: Zip Linux build
+        run: |
+          cd ./artifacts/linux
+          zip -r ../build-output-linux.zip .
+      - if: needs.build-macos.result == 'success'
+        name: Zip macOS build
+        run: |
+          cd ./artifacts/macos
+          zip -r ../build-output-macos.zip .
+      - if: needs.build-windows.result == 'success'
+        name: Upload Windows to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.S3_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
+          source-dir: ./artifacts/build-output-windows.zip
+          destination-dir: maidkit
+      - if: needs.build-linux.result == 'success'
+        name: Upload Linux to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.S3_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
+          source-dir: ./artifacts/build-output-linux.zip
+          destination-dir: maidkit
+      - if: needs.build-macos.result == 'success'
+        name: Upload macOS to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.S3_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
+          source-dir: ./artifacts/build-output-macos.zip
+          destination-dir: maidkit
