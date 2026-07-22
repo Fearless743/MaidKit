@@ -8,6 +8,7 @@ import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'port_forwarding_models.dart';
 import 'server_providers.dart';
+import 'terminal_tabs_provider.dart';
 
 @RoutePage()
 class ServerWorkspacePage extends StatelessWidget {
@@ -40,6 +41,13 @@ class _ServerTabsShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tabsRouter = AutoTabsRouter.of(context);
+    final isDashboardFocused =
+        tabsRouter.activeIndex != 0 ||
+        ref.watch(
+          terminalTabsProvider.select(
+            (tabs) => tabs.selectedTab is DashboardTab,
+          ),
+        );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -108,7 +116,7 @@ class _ServerTabsShell extends ConsumerWidget {
                   ],
                 )
               : child,
-          bottomNavigationBar: isWide
+          bottomNavigationBar: isWide || !isDashboardFocused
               ? null
               : NavigationBar(
                   height: 56,

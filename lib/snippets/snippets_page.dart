@@ -11,6 +11,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
+import 'package:styled_widget/styled_widget.dart';
 import 'snippet_repository.dart';
 
 @RoutePage()
@@ -22,38 +23,22 @@ class SnippetsPage extends ConsumerWidget {
     WidgetRef ref, [
     ScriptSnippet? item,
   ]) async {
-    final nameController = TextEditingController(text: item?.name);
-    final scriptController = TextEditingController(text: item?.script);
-    final formKey = GlobalKey<FormState>();
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: _SnippetEditor(
-          title: item == null ? 'snippetsNew'.tr() : 'snippetsEdit'.tr(),
-          formKey: formKey,
-          nameController: nameController,
-          scriptController: scriptController,
-          onSave: () async {
-            if (!formKey.currentState!.validate()) return;
-            await ref
-                .read(snippetRepositoryProvider)
-                .save(
-                  id: item?.id,
-                  name: nameController.text,
-                  script: scriptController.text,
-                );
-            if (context.mounted) Navigator.pop(context, true);
-          },
-        ),
+      builder: (context) => _SnippetEditor(
+        title: item == null ? 'snippetsNew'.tr() : 'snippetsEdit'.tr(),
+        initialName: item?.name,
+        initialScript: item?.script,
+        onSave: (name, script) async {
+          await ref
+              .read(snippetRepositoryProvider)
+              .save(id: item?.id, name: name, script: script);
+          if (context.mounted) Navigator.pop(context, true);
+        },
       ),
     );
-    nameController.dispose();
-    scriptController.dispose();
     if (saved == true && context.mounted) {
       showSnackBar('snippetsSaved'.tr());
     }
@@ -121,7 +106,9 @@ class SnippetsPage extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text(error.toString())),
         data: (items) => items.isEmpty
-            ? _EmptySnippets(onCreate: () => _edit(context, ref))
+            ? _EmptySnippets(
+                onCreate: () => _edit(context, ref),
+              ).padding(horizontal: 8)
             : ListView.separated(
                 padding: const EdgeInsets.all(24),
                 itemCount: items.length,
@@ -210,64 +197,88 @@ class _EmptySnippets extends StatelessWidget {
   );
 }
 
-class _SnippetEditor extends StatelessWidget {
+class _SnippetEditor extends StatefulWidget {
   const _SnippetEditor({
     required this.title,
-    required this.formKey,
-    required this.nameController,
-    required this.scriptController,
+    this.initialName,
+    this.initialScript,
     required this.onSave,
   });
 
   final String title;
-  final GlobalKey<FormState> formKey;
-  final TextEditingController nameController;
-  final TextEditingController scriptController;
-  final Future<void> Function() onSave;
+  final String? initialName;
+  final String? initialScript;
+  final Future<void> Function(String name, String script) onSave;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Form(
-      key: formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: nameController,
-            autofocus: true,
-            decoration: InputDecoration(labelText: 'snippetsName'.tr()),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'commonRequired'.tr()
-                : null,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: scriptController,
-            minLines: 10,
-            maxLines: 18,
-            style: const TextStyle(fontFamily: 'IBM Plex Mono'),
-            decoration: InputDecoration(
-              labelText: 'snippetsScript'.tr(),
-              alignLabelWithHint: true,
-              hintText: '#!/bin/sh\necho "Hello from MaidKit"',
+  State<_SnippetEditor> createState() => _SnippetEditorState();
+}
+
+class _SnippetEditorState extends State<_SnippetEditor> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nameController = TextEditingController(text: widget.initialName);
+  late final _scriptController = TextEditingController(
+    text: widget.initialScript,
+  );
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _scriptController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(widget.title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nameController,
+              autofocus: true,
+              decoration: InputDecoration(labelText: 'snippetsName'.tr()),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'commonRequired'.tr()
+                  : null,
             ),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'commonRequired'.tr()
-                : null,
-          ),
-          const SizedBox(height: 24),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: () => unawaited(onSave()),
-              child: Text('commonSave'.tr()),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _scriptController,
+              minLines: 10,
+              maxLines: 18,
+              style: const TextStyle(fontFamily: 'IBM Plex Mono'),
+              decoration: InputDecoration(
+                labelText: 'snippetsScript'.tr(),
+                alignLabelWithHint: true,
+                hintText: '#!/bin/sh\necho "Hello from MaidKit"',
+              ),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'commonRequired'.tr()
+                  : null,
             ),
-          ),
-        ],
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: () {
+                  if (!_formKey.currentState!.validate()) return;
+                  unawaited(
+                    widget.onSave(_nameController.text, _scriptController.text),
+                  );
+                },
+                child: Text('commonSave'.tr()),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );

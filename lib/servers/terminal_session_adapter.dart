@@ -22,6 +22,9 @@ abstract interface class TerminalSessionAdapter {
   /// Displays bytes received from the remote shell.
   void write(Uint8List bytes);
 
+  /// Sends text or terminal control sequences to the remote shell.
+  void sendInput(String text);
+
   /// Builds this adapter's terminal renderer.
   ///
   /// [readOnly] disables keyboard input when the surface is used for log
@@ -136,6 +139,13 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   @override
   void write(Uint8List bytes) {
     if (!_disposed) _terminal.write(utf8.decode(bytes, allowMalformed: true));
+  }
+
+  @override
+  void sendInput(String text) {
+    if (!_disposed && text.isNotEmpty) {
+      _outgoingBytes.add(Uint8List.fromList(utf8.encode(text)));
+    }
   }
 
   @override

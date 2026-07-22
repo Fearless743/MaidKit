@@ -68,7 +68,6 @@ MaidKitLoadingHandle showMaidKitLoadingModal(
         child: Center(
           child: AlertDialog(
             content: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 // Island explicitly uses the 2024 Material spinner here.
                 CircularProgressIndicator(
@@ -77,7 +76,7 @@ MaidKitLoadingHandle showMaidKitLoadingModal(
                   padding: EdgeInsets.zero,
                 ).width(28).height(28).padding(horizontal: 8),
                 const SizedBox(width: 16),
-                Text(message),
+                Flexible(child: Text(message)),
               ],
             ),
             contentPadding: const EdgeInsets.symmetric(

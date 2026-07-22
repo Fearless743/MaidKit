@@ -82,6 +82,7 @@
   "settingsBiometricError": "Could not load biometric settings: {}",
   "settingsBiometricUnlock": "Biometric unlock",
   "settingsBiometricUnlockHint": "Use Touch ID or your device biometric prompt to unlock the vault.",
+  "settingsBiometricSetupFailed": "Could not enable biometric unlock: {}",
   "settingsData": "Data",
   "settingsExportData": "Export encrypted backup",
   "settingsExportDataHint": "Save all MaidKit data in a password-encrypted backup file.",

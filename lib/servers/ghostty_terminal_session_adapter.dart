@@ -176,6 +176,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
     cursorAnimationEnabled: cursorAnimationEnabled,
   );
 
+  @override
   void sendInput(String text) {
     if (!_disposed && text.isNotEmpty) {
       _terminal.selection = null;

@@ -69,6 +69,16 @@ void main() {
     await adapter.dispose();
   });
 
+  test('Ghostty adapter sends terminal control sequences', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final output = adapter.outgoingBytes.first;
+
+    adapter.sendInput('\u0003\t\u001b');
+
+    expect(utf8.decode(await output), '\u0003\t\u001b');
+    await adapter.dispose();
+  });
+
   test('forwards shell output, terminal input, and resize events', () async {
     final stdout = StreamController<Uint8List>();
     final stderr = StreamController<Uint8List>();
@@ -179,4 +189,8 @@ class _FakeTerminalSessionAdapter implements TerminalSessionAdapter {
 
   @override
   void write(Uint8List bytes) => received.add(bytes);
+
+  @override
+  void sendInput(String text) =>
+      _outgoing.add(Uint8List.fromList(utf8.encode(text)));
 }

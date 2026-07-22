@@ -112,7 +112,14 @@ class DatabaseBackupService {
       await _database.delete(_database.savedCredentials).go();
 
       for (final record in credentials) {
-        final credential = SavedCredential.fromJson(record);
+        // The archive intentionally excludes these device-specific fields.
+        // `SavedCredential.fromJson` cannot be used here because its database
+        // representation requires them, even though we replace them below.
+        final credential = SavedCredential.fromJson({
+          ...record,
+          'encryptedCredential': '',
+          'credentialNonce': '',
+        });
         final clearText = record['credential'];
         if (clearText is! String) {
           throw const FormatException('Invalid saved credential.');

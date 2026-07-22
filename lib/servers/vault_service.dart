@@ -127,8 +127,32 @@ class VaultService {
     }
   }
 
+  /// Prompts for biometrics once, then stores the data key for future unlocks.
+  /// Does not enable on failure (nothing is written).
   Future<void> enableBiometricUnlock() async {
     final key = _requireKey();
+    final authentication = LocalAuthentication();
+    if (!await authentication.isDeviceSupported() ||
+        !await authentication.canCheckBiometrics) {
+      throw const BiometricUnlockException(
+        'Biometrics are unavailable on this device.',
+      );
+    }
+    try {
+      final authenticated = await authentication.authenticate(
+        localizedReason: 'Enable biometric unlock for MaidKit',
+        biometricOnly: true,
+      );
+      if (!authenticated) {
+        throw const BiometricUnlockException(
+          'Biometric authentication was cancelled.',
+        );
+      }
+    } on BiometricUnlockException {
+      rethrow;
+    } catch (error) {
+      throw BiometricUnlockException('Biometric setup failed: $error');
+    }
     await _secureStorage.write(
       key: _biometricKey,
       value: _encode(await key.extractBytes()),

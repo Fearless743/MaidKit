@@ -79,6 +79,7 @@
   "settingsBiometricError": "无法加载生物识别设置：{}",
   "settingsBiometricUnlock": "生物识别解锁",
   "settingsBiometricUnlockHint": "使用 Touch ID 或设备的生物识别提示来解锁金库。",
+  "settingsBiometricSetupFailed": "无法启用生物识别解锁：{}",
   "settingsData": "数据",
   "settingsExportData": "导出加密备份",
   "settingsExportDataHint": "将所有 MaidKit 数据保存到受密码加密保护的备份文件。",

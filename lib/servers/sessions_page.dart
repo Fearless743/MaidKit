@@ -15,6 +15,7 @@ import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_command_palette.dart';
 import 'terminal_find_host.dart';
+import 'terminal_session_adapter.dart';
 import 'terminal_tabs_provider.dart';
 
 /// Unified server workspace with dashboard, terminal, and file-management tabs.
@@ -26,6 +27,10 @@ class SessionsWorkspace extends ConsumerWidget {
     final tabs = ref.watch(terminalTabsProvider);
     final sessions = ref.watch(sessionsProvider);
     final servers = ref.watch(serversProvider);
+    final focusedTerminal = switch (tabs.selectedTab) {
+      TerminalTab(:final terminal) => terminal,
+      _ => null,
+    };
     final focusedSession = _sessionForTab(sessions, tabs.selectedTab);
 
     return Scaffold(
@@ -45,7 +50,8 @@ class SessionsWorkspace extends ConsumerWidget {
                 : _SessionLayoutView(tabs: tabs, servers: servers),
           ),
           _AnimatedTerminalStatusBar(
-            session: tabs.selectedTab is TerminalTab ? focusedSession : null,
+            session: focusedSession,
+            terminal: focusedTerminal,
           ),
         ],
       ),
@@ -792,13 +798,17 @@ String _tabLabel(SessionTab tab) {
 }
 
 class _AnimatedTerminalStatusBar extends StatelessWidget {
-  const _AnimatedTerminalStatusBar({required this.session});
+  const _AnimatedTerminalStatusBar({
+    required this.session,
+    required this.terminal,
+  });
 
   final SshSessionInfo? session;
+  final TerminalSessionAdapter? terminal;
 
   @override
   Widget build(BuildContext context) {
-    final activeSession = session;
+    final activeTerminal = terminal;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 180),
       reverseDuration: const Duration(milliseconds: 140),
@@ -818,20 +828,26 @@ class _AnimatedTerminalStatusBar extends StatelessWidget {
           ),
         );
       },
-      child: activeSession == null
+      child: activeTerminal == null
           ? const SizedBox.shrink(key: ValueKey('no-session'))
           : _TerminalStatusBar(
-              key: ValueKey(activeSession.serverId),
-              session: activeSession,
+              key: ValueKey(activeTerminal),
+              session: session,
+              terminal: activeTerminal,
             ),
     );
   }
 }
 
 class _TerminalStatusBar extends StatelessWidget {
-  const _TerminalStatusBar({required this.session, super.key});
+  const _TerminalStatusBar({
+    required this.session,
+    required this.terminal,
+    super.key,
+  });
 
-  final SshSessionInfo session;
+  final SshSessionInfo? session;
+  final TerminalSessionAdapter terminal;
 
   @override
   Widget build(BuildContext context) {
@@ -846,7 +862,7 @@ class _TerminalStatusBar extends StatelessWidget {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
-    final stats = session.stats;
+    final stats = session?.stats;
     final memoryTotalKb = stats?.memoryTotalKb;
     final memoryAvailableKb = stats?.memoryAvailableKb;
     final usedMemoryKb = memoryTotalKb == null || memoryAvailableKb == null
@@ -857,12 +873,13 @@ class _TerminalStatusBar extends StatelessWidget {
         ? null
         : (usedMemoryKb / memoryTotalKb).clamp(0.0, 1.0);
     final systemLabel = [
-      session.systemInfo?.distribution,
-      session.systemInfo?.kernel,
+      session?.systemInfo?.distribution,
+      session?.systemInfo?.kernel,
     ].whereType<String>().join(' · ');
 
     final segments = <Widget>[
-      _StatusBarIdentity(session: session),
+      if (session case final activeSession?)
+        _StatusBarIdentity(session: activeSession),
       if (stats?.loadAverage case final load?)
         _StatusBarMetric(
           icon: Symbols.speed,
@@ -907,25 +924,78 @@ class _TerminalStatusBar extends StatelessWidget {
             ),
           ),
         ),
-        child: SizedBox(
-          height: 28,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            scrollDirection: Axis.horizontal,
-            itemCount: segments.length,
-            separatorBuilder: (_, _) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Center(
-                child: Container(
-                  width: 1,
-                  height: 12,
-                  color: scheme.outlineVariant.withValues(alpha: 0.7),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (MediaQuery.sizeOf(context).width <= 768)
+                _TerminalQuickKeys(terminal: terminal),
+              if (segments.isNotEmpty)
+                SizedBox(
+                  height: 28,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: segments.length,
+                    separatorBuilder: (_, _) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Center(
+                        child: Container(
+                          width: 1,
+                          height: 12,
+                          color: scheme.outlineVariant.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                    itemBuilder: (context, index) =>
+                        Center(child: segments[index]),
+                  ),
                 ),
-              ),
-            ),
-            itemBuilder: (context, index) => Center(child: segments[index]),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TerminalQuickKeys extends StatelessWidget {
+  const _TerminalQuickKeys({required this.terminal});
+
+  final TerminalSessionAdapter terminal;
+
+  @override
+  Widget build(BuildContext context) {
+    const shortcuts = [
+      ('Ctrl+C', '\u0003'),
+      ('Tab', '\t'),
+      ('Esc', '\u001b'),
+      ('↑', '\u001b[A'),
+      ('↓', '\u001b[B'),
+      ('←', '\u001b[D'),
+      ('→', '\u001b[C'),
+      ('Enter', '\r'),
+    ];
+
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        scrollDirection: Axis.horizontal,
+        itemCount: shortcuts.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 4),
+        itemBuilder: (context, index) {
+          final (label, input) = shortcuts[index];
+          return TextButton(
+            onPressed: () => terminal.sendInput(input),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(48, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: Text(label),
+          );
+        },
       ),
     );
   }

@@ -218,7 +218,8 @@ class SettingsPage extends ConsumerWidget {
                   title: const Text('settingsBiometricUnlock').tr(),
                   subtitle: const Text('settingsBiometricUnlockHint').tr(),
                   value: enabled,
-                  onChanged: (value) => _setBiometricUnlock(ref, value),
+                  onChanged: (value) =>
+                      _setBiometricUnlock(context, ref, value),
                 ),
               ),
             ),
@@ -339,14 +340,30 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _setBiometricUnlock(WidgetRef ref, bool enabled) async {
+  Future<void> _setBiometricUnlock(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
     final vault = ref.read(vaultServiceProvider);
-    if (enabled) {
-      await vault.enableBiometricUnlock();
-    } else {
+    try {
+      if (enabled) {
+        // Prompt once during setup; only persist when authentication succeeds.
+        await vault.enableBiometricUnlock();
+      } else {
+        await vault.disableBiometricUnlock();
+      }
+    } catch (error) {
+      // Leave the switch off if setup fails (e.g. cancelled or unavailable).
       await vault.disableBiometricUnlock();
+      if (context.mounted) {
+        _showMessage(
+          'settingsBiometricSetupFailed'.tr(args: [error.toString()]),
+        );
+      }
+    } finally {
+      ref.invalidate(biometricUnlockEnabledProvider);
     }
-    ref.invalidate(biometricUnlockEnabledProvider);
   }
 
   Future<void> _addCredential(BuildContext context, WidgetRef ref) async {
@@ -651,71 +668,91 @@ class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
 Future<String?> _backupPasswordDialog(
   BuildContext context, {
   required bool confirm,
-}) {
-  final password = TextEditingController();
-  final confirmation = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(
-        confirm
-            ? 'settingsExportPasswordTitle'.tr()
-            : 'settingsImportPasswordTitle'.tr(),
-      ),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              (confirm
-                      ? 'settingsExportVaultPasswordHint'
-                      : 'settingsImportVaultPasswordHint')
-                  .tr(),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: password,
-              autofocus: true,
-              obscureText: true,
-              decoration: InputDecoration(labelText: 'vaultPasswordLabel'.tr()),
-            ),
-            if (confirm) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: confirmation,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'vaultConfirmPasswordLabel'.tr(),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('commonCancel').tr(),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (confirm && password.text != confirmation.text) {
-              _showMessage('vaultPasswordsDontMatch'.tr());
-              return;
-            }
-            Navigator.of(context).pop(password.text);
-          },
-          child: Text(
-            confirm ? 'settingsExportData'.tr() : 'settingsImportData'.tr(),
-          ),
-        ),
-      ],
+}) => showDialog<String>(
+  context: context,
+  builder: (context) => _BackupPasswordDialog(confirm: confirm),
+);
+
+class _BackupPasswordDialog extends StatefulWidget {
+  const _BackupPasswordDialog({required this.confirm});
+
+  final bool confirm;
+
+  @override
+  State<_BackupPasswordDialog> createState() => _BackupPasswordDialogState();
+}
+
+class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
+  final _password = TextEditingController();
+  final _confirmation = TextEditingController();
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirmation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
+    title: Text(
+      widget.confirm
+          ? 'settingsExportPasswordTitle'.tr()
+          : 'settingsImportPasswordTitle'.tr(),
     ),
-  ).whenComplete(() {
-    password.dispose();
-    confirmation.dispose();
-  });
+    content: SizedBox(
+      width: 360,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            (widget.confirm
+                    ? 'settingsExportVaultPasswordHint'
+                    : 'settingsImportVaultPasswordHint')
+                .tr(),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _password,
+            autofocus: true,
+            obscureText: true,
+            decoration: InputDecoration(labelText: 'vaultPasswordLabel'.tr()),
+          ),
+          if (widget.confirm) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _confirmation,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'vaultConfirmPasswordLabel'.tr(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('commonCancel').tr(),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (widget.confirm && _password.text != _confirmation.text) {
+            _showMessage('vaultPasswordsDontMatch'.tr());
+            return;
+          }
+          Navigator.of(context).pop(_password.text);
+        },
+        child: Text(
+          widget.confirm
+              ? 'settingsExportData'.tr()
+              : 'settingsImportData'.tr(),
+        ),
+      ),
+    ],
+  );
 }
 
 void _showMessage(String message) {

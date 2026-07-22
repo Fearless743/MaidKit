@@ -179,6 +179,14 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
   _FileClipboard? _clipboard;
   var _localCollapsed = false;
 
+  /// Phone-width layouts always keep the local pane visible (no collapse).
+  static const _mobileLocalBreakpoint = 900.0;
+
+  bool get _isMobileLayout {
+    final width = MediaQuery.sizeOf(context).width;
+    return width < _mobileLocalBreakpoint;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2550,22 +2558,27 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
                 onPressed: _chooseLeftServer,
                 icon: const Icon(Symbols.swap_horiz, size: 18),
               ),
-              IconButton(
-                tooltip: 'Hide local',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                onPressed: () => setState(() {
-                  _localCollapsed = true;
-                  if (_focusedSide == _FileSide.local) {
-                    _focusedSide = _FileSide.remote;
-                  }
-                  if (_dropTargetSide == _FileSide.local) {
-                    _dropTargetSide = null;
-                  }
-                }),
-                icon: const Icon(Symbols.left_panel_close, size: 18),
-              ),
+              // Keep local visible on mobile; collapse is desktop/wide only.
+              if (!_isMobileLayout)
+                IconButton(
+                  tooltip: 'fileManagerHideLocal'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  onPressed: () => setState(() {
+                    _localCollapsed = true;
+                    if (_focusedSide == _FileSide.local) {
+                      _focusedSide = _FileSide.remote;
+                    }
+                    if (_dropTargetSide == _FileSide.local) {
+                      _dropTargetSide = null;
+                    }
+                  }),
+                  icon: const Icon(Symbols.left_panel_close, size: 18),
+                ),
             ],
             child: _LocalFileList(
               entries: _localEntries,
@@ -2634,9 +2647,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       },
       onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.remote),
       headerActions: [
-        if (_localCollapsed)
+        if (_localCollapsed && !_isMobileLayout)
           IconButton(
-            tooltip: 'Show local',
+            tooltip: 'fileManagerShowLocal'.tr(),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -2669,14 +2682,17 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
 
     final content = LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
+        final wide = constraints.maxWidth >= _mobileLocalBreakpoint;
+        // Mobile always shows the local pane; collapse is wide-layout only.
+        final forceLocal = !wide;
+        final showExpanded = forceLocal || !_localCollapsed;
         return TweenAnimationBuilder<double>(
           duration: const Duration(milliseconds: 280),
           curve: Curves.easeInOutCubic,
-          tween: Tween<double>(end: _localCollapsed ? 0.0 : 1.0),
+          tween: Tween<double>(end: showExpanded ? 1.0 : 0.0),
           builder: (context, localFactor, _) {
-            final factor = localFactor.clamp(0.0, 1.0);
-            final showLocal = factor > 0.001;
+            final factor = forceLocal ? 1.0 : localFactor.clamp(0.0, 1.0);
+            final showLocal = forceLocal || factor > 0.001;
             if (wide) {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2704,17 +2720,8 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
             return Column(
               children: [
                 if (showLocal) ...[
-                  ClipRect(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      heightFactor: factor,
-                      child: SizedBox(
-                        height: constraints.maxHeight / 2,
-                        child: Opacity(opacity: factor, child: localPane),
-                      ),
-                    ),
-                  ),
-                  Opacity(opacity: factor, child: const Divider(height: 1)),
+                  SizedBox(height: constraints.maxHeight / 2, child: localPane),
+                  const Divider(height: 1),
                 ],
                 Expanded(child: remotePane),
               ],
@@ -2837,14 +2844,15 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           onPressed: _chooseLeftServer,
           icon: const Icon(Symbols.swap_horiz, size: 18),
         ),
-        IconButton(
-          tooltip: 'fileManagerHideLeftPane'.tr(),
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          onPressed: () => setState(() => _localCollapsed = true),
-          icon: const Icon(Symbols.left_panel_close, size: 18),
-        ),
+        if (!_isMobileLayout)
+          IconButton(
+            tooltip: 'fileManagerHideLeftPane'.tr(),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: () => setState(() => _localCollapsed = true),
+            icon: const Icon(Symbols.left_panel_close, size: 18),
+          ),
       ],
       child: _RemoteFileList(
         entries: _leftRemoteEntries,
