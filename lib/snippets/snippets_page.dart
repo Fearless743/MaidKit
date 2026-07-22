@@ -55,11 +55,7 @@ class SnippetsPage extends ConsumerWidget {
     nameController.dispose();
     scriptController.dispose();
     if (saved == true && context.mounted) {
-      showStyledSnackBar(
-        message: 'snippetsSaved'.tr(),
-        icon: Symbols.check_circle,
-        accentColor: Theme.of(context).colorScheme.primary,
-      );
+      showSnackBar('snippetsSaved'.tr());
     }
   }
 

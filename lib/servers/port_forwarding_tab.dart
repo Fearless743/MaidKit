@@ -55,19 +55,11 @@ class _PortForwardingTabState extends ConsumerState<PortForwardingTab> {
             targetPort: int.parse(_targetPort.text),
           );
       if (mounted) {
-        showStyledSnackBar(
-          message: 'portForwardingStarted'.tr(),
-          icon: Symbols.check_circle,
-          accentColor: Theme.of(context).colorScheme.primary,
-        );
+        showSnackBar('portForwardingStarted'.tr());
       }
     } catch (error) {
       if (mounted) {
-        showStyledSnackBar(
-          message: 'portForwardingStartError'.tr(args: ['$error']),
-          icon: Symbols.error,
-          accentColor: Theme.of(context).colorScheme.error,
-        );
+        showSnackBar('portForwardingStartError'.tr(args: ['$error']));
       }
     } finally {
       if (mounted) setState(() => _starting = false);

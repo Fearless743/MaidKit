@@ -279,7 +279,7 @@ class SettingsPage extends ConsumerWidget {
     final vault = ref.read(vaultServiceProvider);
     if (!await vault.unlockWithPassword(password)) {
       if (context.mounted) {
-        _showMessage(context, 'settingsVaultPasswordInvalid'.tr());
+        _showMessage('settingsVaultPasswordInvalid'.tr());
       }
       return;
     }
@@ -299,13 +299,10 @@ class SettingsPage extends ConsumerWidget {
         ref.read(vaultServiceProvider),
       ).exportArchive(password);
       await File(path).writeAsString(archive);
-      if (context.mounted) _showMessage(context, 'settingsExportSuccess'.tr());
+      if (context.mounted) _showMessage('settingsExportSuccess'.tr());
     } catch (error) {
       if (context.mounted) {
-        _showMessage(
-          context,
-          'settingsBackupError'.tr(args: [error.toString()]),
-        );
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
       }
     }
   }
@@ -346,13 +343,10 @@ class SettingsPage extends ConsumerWidget {
         ref.read(databaseProvider),
         ref.read(vaultServiceProvider),
       ).importArchive(archive, password);
-      if (context.mounted) _showMessage(context, 'settingsImportSuccess'.tr());
+      if (context.mounted) _showMessage('settingsImportSuccess'.tr());
     } catch (error) {
       if (context.mounted) {
-        _showMessage(
-          context,
-          'settingsBackupError'.tr(args: [error.toString()]),
-        );
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
       }
     }
   }
@@ -411,7 +405,7 @@ Future<String?> _backupPasswordDialog(
         FilledButton(
           onPressed: () {
             if (confirm && password.text != confirmation.text) {
-              _showMessage(context, 'vaultPasswordsDontMatch'.tr());
+              _showMessage('vaultPasswordsDontMatch'.tr());
               return;
             }
             Navigator.of(context).pop(password.text);
@@ -428,8 +422,8 @@ Future<String?> _backupPasswordDialog(
   });
 }
 
-void _showMessage(BuildContext context, String message) {
-  showStyledSnackBar(message: message);
+void _showMessage(String message) {
+  showSnackBar(message);
 }
 
 class _SettingsSection extends StatelessWidget {

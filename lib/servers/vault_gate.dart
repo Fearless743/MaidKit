@@ -105,27 +105,48 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Symbols.lock,
-                    size: 40,
-                    color: theme.colorScheme.primary,
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset(
+                        'assets/icons/icon.png',
+                        width: 72,
+                        height: 72,
+                        errorBuilder: (_, _, _) => Container(
+                          width: 72,
+                          height: 72,
+                          alignment: Alignment.center,
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          child: Icon(
+                            Symbols.lock,
+                            size: 36,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   Text(
                     hasVault
                         ? 'vaultUnlockTitle'.tr()
                         : 'vaultCreateTitle'.tr(),
-                    style: theme.textTheme.headlineSmall,
-                    textAlign: .center,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     hasVault
                         ? 'vaultUnlockSubtitle'.tr()
                         : 'vaultCreateSubtitle'.tr(),
-                    textAlign: .center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   TextField(
                     controller: _password,
                     obscureText: true,

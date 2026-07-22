@@ -356,10 +356,8 @@ class _WebServerTabState extends ConsumerState<WebServerTab> {
         const <DeploymentProject>[];
     if (projects.isEmpty) {
       if (mounted) {
-        showStyledSnackBar(
-          message: 'Create a deployment project before adding resources.',
-          icon: Symbols.error,
-          accentColor: Theme.of(context).colorScheme.error,
+        showSnackBar(
+          'Create a deployment project before adding resources.',
         );
       }
       return;
@@ -416,11 +414,7 @@ class _WebServerTabState extends ConsumerState<WebServerTab> {
           },
         );
     if (mounted) {
-      showStyledSnackBar(
-        message: '${status.label} added to ${project.name}.',
-        icon: Symbols.check_circle,
-        accentColor: Theme.of(context).colorScheme.primary,
-      );
+      showSnackBar('${status.label} added to ${project.name}.');
     }
   }
 

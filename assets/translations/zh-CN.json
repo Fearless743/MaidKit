@@ -183,6 +183,7 @@
   "detailRootDisk": "根磁盘",
   "detailSystem": "系统",
   "detailRefreshDetails": "刷新详情",
+  "detailRefreshDetailsAt": "详情刷新于 {}",
   "detailConnectToCollect": "连接以收集实时服务器数据。",
   "detailConnectForMetrics": "连接以获取指标",
   "detailMetricsCollecting": "正在收集指标…",

@@ -662,7 +662,7 @@ class _ServerStats extends StatelessWidget {
         ],
         if (stats?.updatedAt != null) ...[
           Text(
-            'detailRefreshDetails'.tr(
+            'detailRefreshDetailsAt'.tr(
               args: [_formatRelative(stats!.updatedAt)],
             ),
             maxLines: 1,

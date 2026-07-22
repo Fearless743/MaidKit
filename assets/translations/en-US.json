@@ -186,6 +186,7 @@
   "detailRootDisk": "Root disk",
   "detailSystem": "System",
   "detailRefreshDetails": "Refresh details",
+  "detailRefreshDetailsAt": "Details refreshed {}",
   "detailConnectToCollect": "Connect to collect live server data.",
   "detailConnectForMetrics": "Connect for metrics",
   "detailMetricsCollecting": "Metrics are being collected…",
