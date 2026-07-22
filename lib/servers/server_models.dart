@@ -2,6 +2,13 @@ import 'dart:convert';
 
 enum CredentialType { password, privateKey }
 
+class SavedCredentialDraft {
+  const SavedCredentialDraft({required this.name, required this.credential});
+
+  final String name;
+  final ServerCredential credential;
+}
+
 class ServerCredential {
   const ServerCredential.password(this.password)
     : type = CredentialType.password,
@@ -49,7 +56,9 @@ class ServerDraft {
     required this.host,
     required this.port,
     required this.username,
-    required this.credential,
+    this.credential,
+    this.credentialId,
+    this.credentialName,
     this.collectStats = true,
     this.collectSystemInfo = true,
   });
@@ -58,7 +67,11 @@ class ServerDraft {
   final String host;
   final int port;
   final String username;
-  final ServerCredential credential;
+
+  /// A new credential to save, or an existing [credentialId] to reuse.
+  final ServerCredential? credential;
+  final int? credentialId;
+  final String? credentialName;
   final bool collectStats;
   final bool collectSystemInfo;
 }

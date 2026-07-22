@@ -14,13 +14,16 @@ import 'vault_service.dart';
 class DatabaseBackupService {
   DatabaseBackupService(this._database, this._vault);
 
-  static const _formatVersion = 2;
+  static const _formatVersion = 3;
 
   final AppDatabase _database;
   final VaultService _vault;
 
   Future<String> exportArchive(String password) async {
     final servers = await _database.select(_database.servers).get();
+    final credentials = await _database
+        .select(_database.savedCredentials)
+        .get();
     final serverRecords = <Map<String, dynamic>>[];
     for (final server in servers) {
       final record = server.toJson()
@@ -38,11 +41,26 @@ class DatabaseBackupService {
       }
       serverRecords.add(record);
     }
+    final credentialRecords = <Map<String, dynamic>>[];
+    for (final credential in credentials) {
+      final record = credential.toJson()
+        ..remove('encryptedCredential')
+        ..remove('credentialNonce');
+      record['credential'] = await _vault.decrypt(
+        EncryptedValue(
+          bytes: credential.encryptedCredential,
+          nonce: credential.credentialNonce,
+        ),
+        context: 'server-credential',
+      );
+      credentialRecords.add(record);
+    }
 
     final archive = <String, Object?>{
       'version': _formatVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'servers': serverRecords,
+      'savedCredentials': credentialRecords,
       'composeProjectLinks':
           (await _database.select(_database.composeProjectLinks).get())
               .map((record) => record.toJson())
@@ -77,6 +95,7 @@ class DatabaseBackupService {
     }
 
     final servers = _records(payload, 'servers');
+    final credentials = _records(payload, 'savedCredentials');
     final composeLinks = _records(payload, 'composeProjectLinks');
     final cacheEntries = _records(payload, 'containerCacheEntries');
     final projects = _records(payload, 'deploymentProjects');
@@ -90,6 +109,32 @@ class DatabaseBackupService {
       await _database.delete(_database.composeProjectLinks).go();
       await _database.delete(_database.scriptSnippets).go();
       await _database.delete(_database.servers).go();
+      await _database.delete(_database.savedCredentials).go();
+
+      for (final record in credentials) {
+        final credential = SavedCredential.fromJson(record);
+        final clearText = record['credential'];
+        if (clearText is! String) {
+          throw const FormatException('Invalid saved credential.');
+        }
+        final encrypted = await _vault.encrypt(
+          clearText,
+          context: 'server-credential',
+        );
+        await _database
+            .into(_database.savedCredentials)
+            .insert(
+              SavedCredentialsCompanion(
+                id: Value(credential.id),
+                name: Value(credential.name),
+                credentialType: Value(credential.credentialType),
+                encryptedCredential: Value(encrypted.bytes),
+                credentialNonce: Value(encrypted.nonce),
+                createdAt: Value(credential.createdAt),
+                updatedAt: Value(credential.updatedAt),
+              ),
+            );
+      }
 
       for (final record in servers) {
         final server = Server.fromJson(record);
@@ -114,6 +159,7 @@ class DatabaseBackupService {
                 credentialType: Value(server.credentialType),
                 encryptedCredential: Value(encrypted?.bytes),
                 credentialNonce: Value(encrypted?.nonce),
+                credentialId: Value(server.credentialId),
                 hostKeyAlgorithm: Value(server.hostKeyAlgorithm),
                 hostKeyFingerprint: Value(server.hostKeyFingerprint),
                 collectStats: Value(server.collectStats),

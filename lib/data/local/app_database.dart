@@ -17,11 +17,24 @@ class Servers extends Table {
   TextColumn get credentialType => text().nullable()();
   TextColumn get encryptedCredential => text().nullable()();
   TextColumn get credentialNonce => text().nullable()();
+  IntColumn get credentialId => integer().nullable()();
   TextColumn get hostKeyAlgorithm => text().nullable()();
   TextColumn get hostKeyFingerprint => text().nullable()();
   BoolColumn get collectStats => boolean().withDefault(const Constant(true))();
   BoolColumn get collectSystemInfo =>
       boolean().withDefault(const Constant(true))();
+}
+
+/// An encrypted SSH credential that may be linked to by more than one server.
+/// The encrypted payload remains protected by the user's vault key.
+class SavedCredentials extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get credentialType => text()();
+  TextColumn get encryptedCredential => text()();
+  TextColumn get credentialNonce => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
 }
 
 class VaultMetadata extends Table {
@@ -103,6 +116,7 @@ class ScriptSnippets extends Table {
 @DriftDatabase(
   tables: [
     Servers,
+    SavedCredentials,
     VaultMetadata,
     ComposeProjectLinks,
     ContainerCacheEntries,
@@ -115,7 +129,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'maid_kit'));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -187,6 +201,33 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 8) {
         await m.createTable(scriptSnippets);
+      }
+      if (from < 9) {
+        await m.createTable(savedCredentials);
+        await m.addColumn(servers, servers.credentialId);
+        // Each pre-relationship server gets its own saved credential. Keeping
+        // the original ciphertext means no vault unlock is required here.
+        await customStatement('''
+          INSERT INTO saved_credentials
+            (name, credential_type, encrypted_credential, credential_nonce, created_at, updated_at)
+          SELECT name, credential_type, encrypted_credential, credential_nonce,
+            COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
+          FROM servers
+          WHERE encrypted_credential IS NOT NULL
+            AND credential_nonce IS NOT NULL
+            AND credential_type IS NOT NULL
+        ''');
+        await customStatement('''
+          UPDATE servers
+          SET credential_id = (
+            SELECT saved_credentials.id FROM saved_credentials
+            WHERE saved_credentials.name = servers.name
+              AND saved_credentials.encrypted_credential = servers.encrypted_credential
+              AND saved_credentials.credential_nonce = servers.credential_nonce
+            ORDER BY saved_credentials.id DESC LIMIT 1
+          )
+          WHERE encrypted_credential IS NOT NULL AND credential_nonce IS NOT NULL
+        ''');
       }
     },
   );

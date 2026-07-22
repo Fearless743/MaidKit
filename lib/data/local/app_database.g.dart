@@ -147,6 +147,17 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _credentialIdMeta = const VerificationMeta(
+    'credentialId',
+  );
+  @override
+  late final GeneratedColumn<int> credentialId = GeneratedColumn<int>(
+    'credential_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _hostKeyAlgorithmMeta = const VerificationMeta(
     'hostKeyAlgorithm',
   );
@@ -214,6 +225,7 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     credentialType,
     encryptedCredential,
     credentialNonce,
+    credentialId,
     hostKeyAlgorithm,
     hostKeyFingerprint,
     collectStats,
@@ -324,6 +336,15 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         ),
       );
     }
+    if (data.containsKey('credential_id')) {
+      context.handle(
+        _credentialIdMeta,
+        credentialId.isAcceptableOrUnknown(
+          data['credential_id']!,
+          _credentialIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('host_key_algorithm')) {
       context.handle(
         _hostKeyAlgorithmMeta,
@@ -421,6 +442,10 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         DriftSqlType.string,
         data['${effectivePrefix}credential_nonce'],
       ),
+      credentialId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}credential_id'],
+      ),
       hostKeyAlgorithm: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}host_key_algorithm'],
@@ -460,6 +485,7 @@ class Server extends DataClass implements Insertable<Server> {
   final String? credentialType;
   final String? encryptedCredential;
   final String? credentialNonce;
+  final int? credentialId;
   final String? hostKeyAlgorithm;
   final String? hostKeyFingerprint;
   final bool collectStats;
@@ -478,6 +504,7 @@ class Server extends DataClass implements Insertable<Server> {
     this.credentialType,
     this.encryptedCredential,
     this.credentialNonce,
+    this.credentialId,
     this.hostKeyAlgorithm,
     this.hostKeyFingerprint,
     required this.collectStats,
@@ -514,6 +541,9 @@ class Server extends DataClass implements Insertable<Server> {
     }
     if (!nullToAbsent || credentialNonce != null) {
       map['credential_nonce'] = Variable<String>(credentialNonce);
+    }
+    if (!nullToAbsent || credentialId != null) {
+      map['credential_id'] = Variable<int>(credentialId);
     }
     if (!nullToAbsent || hostKeyAlgorithm != null) {
       map['host_key_algorithm'] = Variable<String>(hostKeyAlgorithm);
@@ -557,6 +587,9 @@ class Server extends DataClass implements Insertable<Server> {
       credentialNonce: credentialNonce == null && nullToAbsent
           ? const Value.absent()
           : Value(credentialNonce),
+      credentialId: credentialId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(credentialId),
       hostKeyAlgorithm: hostKeyAlgorithm == null && nullToAbsent
           ? const Value.absent()
           : Value(hostKeyAlgorithm),
@@ -589,6 +622,7 @@ class Server extends DataClass implements Insertable<Server> {
         json['encryptedCredential'],
       ),
       credentialNonce: serializer.fromJson<String?>(json['credentialNonce']),
+      credentialId: serializer.fromJson<int?>(json['credentialId']),
       hostKeyAlgorithm: serializer.fromJson<String?>(json['hostKeyAlgorithm']),
       hostKeyFingerprint: serializer.fromJson<String?>(
         json['hostKeyFingerprint'],
@@ -614,6 +648,7 @@ class Server extends DataClass implements Insertable<Server> {
       'credentialType': serializer.toJson<String?>(credentialType),
       'encryptedCredential': serializer.toJson<String?>(encryptedCredential),
       'credentialNonce': serializer.toJson<String?>(credentialNonce),
+      'credentialId': serializer.toJson<int?>(credentialId),
       'hostKeyAlgorithm': serializer.toJson<String?>(hostKeyAlgorithm),
       'hostKeyFingerprint': serializer.toJson<String?>(hostKeyFingerprint),
       'collectStats': serializer.toJson<bool>(collectStats),
@@ -635,6 +670,7 @@ class Server extends DataClass implements Insertable<Server> {
     Value<String?> credentialType = const Value.absent(),
     Value<String?> encryptedCredential = const Value.absent(),
     Value<String?> credentialNonce = const Value.absent(),
+    Value<int?> credentialId = const Value.absent(),
     Value<String?> hostKeyAlgorithm = const Value.absent(),
     Value<String?> hostKeyFingerprint = const Value.absent(),
     bool? collectStats,
@@ -661,6 +697,7 @@ class Server extends DataClass implements Insertable<Server> {
     credentialNonce: credentialNonce.present
         ? credentialNonce.value
         : this.credentialNonce,
+    credentialId: credentialId.present ? credentialId.value : this.credentialId,
     hostKeyAlgorithm: hostKeyAlgorithm.present
         ? hostKeyAlgorithm.value
         : this.hostKeyAlgorithm,
@@ -693,6 +730,9 @@ class Server extends DataClass implements Insertable<Server> {
       credentialNonce: data.credentialNonce.present
           ? data.credentialNonce.value
           : this.credentialNonce,
+      credentialId: data.credentialId.present
+          ? data.credentialId.value
+          : this.credentialId,
       hostKeyAlgorithm: data.hostKeyAlgorithm.present
           ? data.hostKeyAlgorithm.value
           : this.hostKeyAlgorithm,
@@ -724,6 +764,7 @@ class Server extends DataClass implements Insertable<Server> {
           ..write('credentialType: $credentialType, ')
           ..write('encryptedCredential: $encryptedCredential, ')
           ..write('credentialNonce: $credentialNonce, ')
+          ..write('credentialId: $credentialId, ')
           ..write('hostKeyAlgorithm: $hostKeyAlgorithm, ')
           ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
           ..write('collectStats: $collectStats, ')
@@ -747,6 +788,7 @@ class Server extends DataClass implements Insertable<Server> {
     credentialType,
     encryptedCredential,
     credentialNonce,
+    credentialId,
     hostKeyAlgorithm,
     hostKeyFingerprint,
     collectStats,
@@ -769,6 +811,7 @@ class Server extends DataClass implements Insertable<Server> {
           other.credentialType == this.credentialType &&
           other.encryptedCredential == this.encryptedCredential &&
           other.credentialNonce == this.credentialNonce &&
+          other.credentialId == this.credentialId &&
           other.hostKeyAlgorithm == this.hostKeyAlgorithm &&
           other.hostKeyFingerprint == this.hostKeyFingerprint &&
           other.collectStats == this.collectStats &&
@@ -789,6 +832,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
   final Value<String?> credentialType;
   final Value<String?> encryptedCredential;
   final Value<String?> credentialNonce;
+  final Value<int?> credentialId;
   final Value<String?> hostKeyAlgorithm;
   final Value<String?> hostKeyFingerprint;
   final Value<bool> collectStats;
@@ -807,6 +851,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.credentialType = const Value.absent(),
     this.encryptedCredential = const Value.absent(),
     this.credentialNonce = const Value.absent(),
+    this.credentialId = const Value.absent(),
     this.hostKeyAlgorithm = const Value.absent(),
     this.hostKeyFingerprint = const Value.absent(),
     this.collectStats = const Value.absent(),
@@ -826,6 +871,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.credentialType = const Value.absent(),
     this.encryptedCredential = const Value.absent(),
     this.credentialNonce = const Value.absent(),
+    this.credentialId = const Value.absent(),
     this.hostKeyAlgorithm = const Value.absent(),
     this.hostKeyFingerprint = const Value.absent(),
     this.collectStats = const Value.absent(),
@@ -847,6 +893,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Expression<String>? credentialType,
     Expression<String>? encryptedCredential,
     Expression<String>? credentialNonce,
+    Expression<int>? credentialId,
     Expression<String>? hostKeyAlgorithm,
     Expression<String>? hostKeyFingerprint,
     Expression<bool>? collectStats,
@@ -867,6 +914,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
       if (encryptedCredential != null)
         'encrypted_credential': encryptedCredential,
       if (credentialNonce != null) 'credential_nonce': credentialNonce,
+      if (credentialId != null) 'credential_id': credentialId,
       if (hostKeyAlgorithm != null) 'host_key_algorithm': hostKeyAlgorithm,
       if (hostKeyFingerprint != null)
         'host_key_fingerprint': hostKeyFingerprint,
@@ -889,6 +937,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Value<String?>? credentialType,
     Value<String?>? encryptedCredential,
     Value<String?>? credentialNonce,
+    Value<int?>? credentialId,
     Value<String?>? hostKeyAlgorithm,
     Value<String?>? hostKeyFingerprint,
     Value<bool>? collectStats,
@@ -908,6 +957,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
       credentialType: credentialType ?? this.credentialType,
       encryptedCredential: encryptedCredential ?? this.encryptedCredential,
       credentialNonce: credentialNonce ?? this.credentialNonce,
+      credentialId: credentialId ?? this.credentialId,
       hostKeyAlgorithm: hostKeyAlgorithm ?? this.hostKeyAlgorithm,
       hostKeyFingerprint: hostKeyFingerprint ?? this.hostKeyFingerprint,
       collectStats: collectStats ?? this.collectStats,
@@ -957,6 +1007,9 @@ class ServersCompanion extends UpdateCompanion<Server> {
     if (credentialNonce.present) {
       map['credential_nonce'] = Variable<String>(credentialNonce.value);
     }
+    if (credentialId.present) {
+      map['credential_id'] = Variable<int>(credentialId.value);
+    }
     if (hostKeyAlgorithm.present) {
       map['host_key_algorithm'] = Variable<String>(hostKeyAlgorithm.value);
     }
@@ -988,10 +1041,481 @@ class ServersCompanion extends UpdateCompanion<Server> {
           ..write('credentialType: $credentialType, ')
           ..write('encryptedCredential: $encryptedCredential, ')
           ..write('credentialNonce: $credentialNonce, ')
+          ..write('credentialId: $credentialId, ')
           ..write('hostKeyAlgorithm: $hostKeyAlgorithm, ')
           ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
           ..write('collectStats: $collectStats, ')
           ..write('collectSystemInfo: $collectSystemInfo')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SavedCredentialsTable extends SavedCredentials
+    with TableInfo<$SavedCredentialsTable, SavedCredential> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SavedCredentialsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _credentialTypeMeta = const VerificationMeta(
+    'credentialType',
+  );
+  @override
+  late final GeneratedColumn<String> credentialType = GeneratedColumn<String>(
+    'credential_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _encryptedCredentialMeta =
+      const VerificationMeta('encryptedCredential');
+  @override
+  late final GeneratedColumn<String> encryptedCredential =
+      GeneratedColumn<String>(
+        'encrypted_credential',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _credentialNonceMeta = const VerificationMeta(
+    'credentialNonce',
+  );
+  @override
+  late final GeneratedColumn<String> credentialNonce = GeneratedColumn<String>(
+    'credential_nonce',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    credentialType,
+    encryptedCredential,
+    credentialNonce,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'saved_credentials';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavedCredential> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('credential_type')) {
+      context.handle(
+        _credentialTypeMeta,
+        credentialType.isAcceptableOrUnknown(
+          data['credential_type']!,
+          _credentialTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_credentialTypeMeta);
+    }
+    if (data.containsKey('encrypted_credential')) {
+      context.handle(
+        _encryptedCredentialMeta,
+        encryptedCredential.isAcceptableOrUnknown(
+          data['encrypted_credential']!,
+          _encryptedCredentialMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_encryptedCredentialMeta);
+    }
+    if (data.containsKey('credential_nonce')) {
+      context.handle(
+        _credentialNonceMeta,
+        credentialNonce.isAcceptableOrUnknown(
+          data['credential_nonce']!,
+          _credentialNonceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_credentialNonceMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SavedCredential map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavedCredential(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      credentialType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}credential_type'],
+      )!,
+      encryptedCredential: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}encrypted_credential'],
+      )!,
+      credentialNonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}credential_nonce'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SavedCredentialsTable createAlias(String alias) {
+    return $SavedCredentialsTable(attachedDatabase, alias);
+  }
+}
+
+class SavedCredential extends DataClass implements Insertable<SavedCredential> {
+  final int id;
+  final String name;
+  final String credentialType;
+  final String encryptedCredential;
+  final String credentialNonce;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const SavedCredential({
+    required this.id,
+    required this.name,
+    required this.credentialType,
+    required this.encryptedCredential,
+    required this.credentialNonce,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['credential_type'] = Variable<String>(credentialType);
+    map['encrypted_credential'] = Variable<String>(encryptedCredential);
+    map['credential_nonce'] = Variable<String>(credentialNonce);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SavedCredentialsCompanion toCompanion(bool nullToAbsent) {
+    return SavedCredentialsCompanion(
+      id: Value(id),
+      name: Value(name),
+      credentialType: Value(credentialType),
+      encryptedCredential: Value(encryptedCredential),
+      credentialNonce: Value(credentialNonce),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SavedCredential.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavedCredential(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      credentialType: serializer.fromJson<String>(json['credentialType']),
+      encryptedCredential: serializer.fromJson<String>(
+        json['encryptedCredential'],
+      ),
+      credentialNonce: serializer.fromJson<String>(json['credentialNonce']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'credentialType': serializer.toJson<String>(credentialType),
+      'encryptedCredential': serializer.toJson<String>(encryptedCredential),
+      'credentialNonce': serializer.toJson<String>(credentialNonce),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SavedCredential copyWith({
+    int? id,
+    String? name,
+    String? credentialType,
+    String? encryptedCredential,
+    String? credentialNonce,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => SavedCredential(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    credentialType: credentialType ?? this.credentialType,
+    encryptedCredential: encryptedCredential ?? this.encryptedCredential,
+    credentialNonce: credentialNonce ?? this.credentialNonce,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SavedCredential copyWithCompanion(SavedCredentialsCompanion data) {
+    return SavedCredential(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      credentialType: data.credentialType.present
+          ? data.credentialType.value
+          : this.credentialType,
+      encryptedCredential: data.encryptedCredential.present
+          ? data.encryptedCredential.value
+          : this.encryptedCredential,
+      credentialNonce: data.credentialNonce.present
+          ? data.credentialNonce.value
+          : this.credentialNonce,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedCredential(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('credentialType: $credentialType, ')
+          ..write('encryptedCredential: $encryptedCredential, ')
+          ..write('credentialNonce: $credentialNonce, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    credentialType,
+    encryptedCredential,
+    credentialNonce,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavedCredential &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.credentialType == this.credentialType &&
+          other.encryptedCredential == this.encryptedCredential &&
+          other.credentialNonce == this.credentialNonce &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SavedCredentialsCompanion extends UpdateCompanion<SavedCredential> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String> credentialType;
+  final Value<String> encryptedCredential;
+  final Value<String> credentialNonce;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const SavedCredentialsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.credentialType = const Value.absent(),
+    this.encryptedCredential = const Value.absent(),
+    this.credentialNonce = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  SavedCredentialsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required String credentialType,
+    required String encryptedCredential,
+    required String credentialNonce,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+  }) : name = Value(name),
+       credentialType = Value(credentialType),
+       encryptedCredential = Value(encryptedCredential),
+       credentialNonce = Value(credentialNonce),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<SavedCredential> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? credentialType,
+    Expression<String>? encryptedCredential,
+    Expression<String>? credentialNonce,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (credentialType != null) 'credential_type': credentialType,
+      if (encryptedCredential != null)
+        'encrypted_credential': encryptedCredential,
+      if (credentialNonce != null) 'credential_nonce': credentialNonce,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  SavedCredentialsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? credentialType,
+    Value<String>? encryptedCredential,
+    Value<String>? credentialNonce,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return SavedCredentialsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      credentialType: credentialType ?? this.credentialType,
+      encryptedCredential: encryptedCredential ?? this.encryptedCredential,
+      credentialNonce: credentialNonce ?? this.credentialNonce,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (credentialType.present) {
+      map['credential_type'] = Variable<String>(credentialType.value);
+    }
+    if (encryptedCredential.present) {
+      map['encrypted_credential'] = Variable<String>(encryptedCredential.value);
+    }
+    if (credentialNonce.present) {
+      map['credential_nonce'] = Variable<String>(credentialNonce.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedCredentialsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('credentialType: $credentialType, ')
+          ..write('encryptedCredential: $encryptedCredential, ')
+          ..write('credentialNonce: $credentialNonce, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -3802,6 +4326,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ServersTable servers = $ServersTable(this);
+  late final $SavedCredentialsTable savedCredentials = $SavedCredentialsTable(
+    this,
+  );
   late final $VaultMetadataTable vaultMetadata = $VaultMetadataTable(this);
   late final $ComposeProjectLinksTable composeProjectLinks =
       $ComposeProjectLinksTable(this);
@@ -3818,6 +4345,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     servers,
+    savedCredentials,
     vaultMetadata,
     composeProjectLinks,
     containerCacheEntries,
@@ -3842,6 +4370,7 @@ typedef $$ServersTableCreateCompanionBuilder =
       Value<String?> credentialType,
       Value<String?> encryptedCredential,
       Value<String?> credentialNonce,
+      Value<int?> credentialId,
       Value<String?> hostKeyAlgorithm,
       Value<String?> hostKeyFingerprint,
       Value<bool> collectStats,
@@ -3862,6 +4391,7 @@ typedef $$ServersTableUpdateCompanionBuilder =
       Value<String?> credentialType,
       Value<String?> encryptedCredential,
       Value<String?> credentialNonce,
+      Value<int?> credentialId,
       Value<String?> hostKeyAlgorithm,
       Value<String?> hostKeyFingerprint,
       Value<bool> collectStats,
@@ -3939,6 +4469,11 @@ class $$ServersTableFilterComposer
 
   ColumnFilters<String> get credentialNonce => $composableBuilder(
     column: $table.credentialNonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get credentialId => $composableBuilder(
+    column: $table.credentialId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4037,6 +4572,11 @@ class $$ServersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get credentialId => $composableBuilder(
+    column: $table.credentialId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hostKeyAlgorithm => $composableBuilder(
     column: $table.hostKeyAlgorithm,
     builder: (column) => ColumnOrderings(column),
@@ -4114,6 +4654,11 @@ class $$ServersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get credentialId => $composableBuilder(
+    column: $table.credentialId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get hostKeyAlgorithm => $composableBuilder(
     column: $table.hostKeyAlgorithm,
     builder: (column) => column,
@@ -4176,6 +4721,7 @@ class $$ServersTableTableManager
                 Value<String?> credentialType = const Value.absent(),
                 Value<String?> encryptedCredential = const Value.absent(),
                 Value<String?> credentialNonce = const Value.absent(),
+                Value<int?> credentialId = const Value.absent(),
                 Value<String?> hostKeyAlgorithm = const Value.absent(),
                 Value<String?> hostKeyFingerprint = const Value.absent(),
                 Value<bool> collectStats = const Value.absent(),
@@ -4194,6 +4740,7 @@ class $$ServersTableTableManager
                 credentialType: credentialType,
                 encryptedCredential: encryptedCredential,
                 credentialNonce: credentialNonce,
+                credentialId: credentialId,
                 hostKeyAlgorithm: hostKeyAlgorithm,
                 hostKeyFingerprint: hostKeyFingerprint,
                 collectStats: collectStats,
@@ -4214,6 +4761,7 @@ class $$ServersTableTableManager
                 Value<String?> credentialType = const Value.absent(),
                 Value<String?> encryptedCredential = const Value.absent(),
                 Value<String?> credentialNonce = const Value.absent(),
+                Value<int?> credentialId = const Value.absent(),
                 Value<String?> hostKeyAlgorithm = const Value.absent(),
                 Value<String?> hostKeyFingerprint = const Value.absent(),
                 Value<bool> collectStats = const Value.absent(),
@@ -4232,6 +4780,7 @@ class $$ServersTableTableManager
                 credentialType: credentialType,
                 encryptedCredential: encryptedCredential,
                 credentialNonce: credentialNonce,
+                credentialId: credentialId,
                 hostKeyAlgorithm: hostKeyAlgorithm,
                 hostKeyFingerprint: hostKeyFingerprint,
                 collectStats: collectStats,
@@ -4257,6 +4806,250 @@ typedef $$ServersTableProcessedTableManager =
       $$ServersTableUpdateCompanionBuilder,
       (Server, BaseReferences<_$AppDatabase, $ServersTable, Server>),
       Server,
+      PrefetchHooks Function()
+    >;
+typedef $$SavedCredentialsTableCreateCompanionBuilder =
+    SavedCredentialsCompanion Function({
+      Value<int> id,
+      required String name,
+      required String credentialType,
+      required String encryptedCredential,
+      required String credentialNonce,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+    });
+typedef $$SavedCredentialsTableUpdateCompanionBuilder =
+    SavedCredentialsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> credentialType,
+      Value<String> encryptedCredential,
+      Value<String> credentialNonce,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+class $$SavedCredentialsTableFilterComposer
+    extends Composer<_$AppDatabase, $SavedCredentialsTable> {
+  $$SavedCredentialsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get credentialType => $composableBuilder(
+    column: $table.credentialType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get encryptedCredential => $composableBuilder(
+    column: $table.encryptedCredential,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get credentialNonce => $composableBuilder(
+    column: $table.credentialNonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SavedCredentialsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavedCredentialsTable> {
+  $$SavedCredentialsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get credentialType => $composableBuilder(
+    column: $table.credentialType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get encryptedCredential => $composableBuilder(
+    column: $table.encryptedCredential,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get credentialNonce => $composableBuilder(
+    column: $table.credentialNonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SavedCredentialsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavedCredentialsTable> {
+  $$SavedCredentialsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get credentialType => $composableBuilder(
+    column: $table.credentialType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get encryptedCredential => $composableBuilder(
+    column: $table.encryptedCredential,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get credentialNonce => $composableBuilder(
+    column: $table.credentialNonce,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SavedCredentialsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SavedCredentialsTable,
+          SavedCredential,
+          $$SavedCredentialsTableFilterComposer,
+          $$SavedCredentialsTableOrderingComposer,
+          $$SavedCredentialsTableAnnotationComposer,
+          $$SavedCredentialsTableCreateCompanionBuilder,
+          $$SavedCredentialsTableUpdateCompanionBuilder,
+          (
+            SavedCredential,
+            BaseReferences<
+              _$AppDatabase,
+              $SavedCredentialsTable,
+              SavedCredential
+            >,
+          ),
+          SavedCredential,
+          PrefetchHooks Function()
+        > {
+  $$SavedCredentialsTableTableManager(
+    _$AppDatabase db,
+    $SavedCredentialsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavedCredentialsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SavedCredentialsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SavedCredentialsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> credentialType = const Value.absent(),
+                Value<String> encryptedCredential = const Value.absent(),
+                Value<String> credentialNonce = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => SavedCredentialsCompanion(
+                id: id,
+                name: name,
+                credentialType: credentialType,
+                encryptedCredential: encryptedCredential,
+                credentialNonce: credentialNonce,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required String credentialType,
+                required String encryptedCredential,
+                required String credentialNonce,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+              }) => SavedCredentialsCompanion.insert(
+                id: id,
+                name: name,
+                credentialType: credentialType,
+                encryptedCredential: encryptedCredential,
+                credentialNonce: credentialNonce,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SavedCredentialsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SavedCredentialsTable,
+      SavedCredential,
+      $$SavedCredentialsTableFilterComposer,
+      $$SavedCredentialsTableOrderingComposer,
+      $$SavedCredentialsTableAnnotationComposer,
+      $$SavedCredentialsTableCreateCompanionBuilder,
+      $$SavedCredentialsTableUpdateCompanionBuilder,
+      (
+        SavedCredential,
+        BaseReferences<_$AppDatabase, $SavedCredentialsTable, SavedCredential>,
+      ),
+      SavedCredential,
       PrefetchHooks Function()
     >;
 typedef $$VaultMetadataTableCreateCompanionBuilder =
@@ -5768,6 +6561,8 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$ServersTableTableManager get servers =>
       $$ServersTableTableManager(_db, _db.servers);
+  $$SavedCredentialsTableTableManager get savedCredentials =>
+      $$SavedCredentialsTableTableManager(_db, _db.savedCredentials);
   $$VaultMetadataTableTableManager get vaultMetadata =>
       $$VaultMetadataTableTableManager(_db, _db.vaultMetadata);
   $$ComposeProjectLinksTableTableManager get composeProjectLinks =>

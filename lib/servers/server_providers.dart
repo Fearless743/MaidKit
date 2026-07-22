@@ -27,6 +27,10 @@ final serverRepositoryProvider = Provider<ServerRepository>((ref) {
   );
 });
 
+final savedCredentialsProvider = StreamProvider<List<SavedCredential>>((ref) {
+  return ref.watch(serverRepositoryProvider).watchCredentials();
+});
+
 final vaultServiceProvider = Provider<VaultService>((ref) {
   return VaultService(ref.watch(databaseProvider));
 });

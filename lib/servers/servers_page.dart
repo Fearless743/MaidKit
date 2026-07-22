@@ -19,11 +19,13 @@ class ServerDashboardTab extends ConsumerWidget {
   const ServerDashboardTab({super.key});
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final credentials = await ref.read(serverRepositoryProvider).credentials();
+    if (!context.mounted) return;
     final draft = await showModalBottomSheet<ServerDraft>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => const _AddServerDialog(),
+      builder: (_) => _AddServerDialog(credentials: credentials),
     );
     if (draft == null || !context.mounted) return;
     try {
@@ -52,21 +54,25 @@ class ServerDashboardTab extends ConsumerWidget {
 
   Future<void> _edit(BuildContext context, WidgetRef ref, Server server) async {
     try {
-      final credential = await ref
-          .read(serverRepositoryProvider)
-          .credentialFor(server);
+      final repository = ref.read(serverRepositoryProvider);
+      final credential = server.credentialId == null
+          ? null
+          : await repository.credentialFor(server);
+      final credentials = await repository.credentials();
       if (!context.mounted) return;
       final draft = await showModalBottomSheet<ServerDraft>(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
         builder: (_) => _AddServerDialog(
+          credentials: credentials,
           initial: ServerDraft(
             name: server.name,
             host: server.host,
             port: server.port,
             username: server.username,
             credential: credential,
+            credentialId: server.credentialId,
             collectStats: server.collectStats,
             collectSystemInfo: server.collectSystemInfo,
           ),
@@ -887,9 +893,10 @@ class _EmptyServers extends StatelessWidget {
 }
 
 class _AddServerDialog extends StatefulWidget {
-  const _AddServerDialog({this.initial});
+  const _AddServerDialog({required this.credentials, this.initial});
 
   final ServerDraft? initial;
+  final List<SavedCredential> credentials;
   @override
   State<_AddServerDialog> createState() => _AddServerDialogState();
 }
@@ -903,6 +910,8 @@ class _AddServerDialogState extends State<_AddServerDialog> {
   final _secret = TextEditingController();
   final _passphrase = TextEditingController();
   CredentialType _type = CredentialType.password;
+  int? _credentialId;
+  bool _useNewCredential = true;
   bool _collectStats = true;
   bool _collectSystemInfo = true;
 
@@ -915,10 +924,14 @@ class _AddServerDialogState extends State<_AddServerDialog> {
     _host.text = initial.host;
     _port.text = initial.port.toString();
     _user.text = initial.username;
-    _type = initial.credential.type;
-    _secret.text =
-        initial.credential.password ?? initial.credential.privateKey ?? '';
-    _passphrase.text = initial.credential.keyPassphrase ?? '';
+    _credentialId = initial.credentialId;
+    _useNewCredential = initial.credentialId == null;
+    final credential = initial.credential;
+    if (credential != null) {
+      _type = credential.type;
+      _secret.text = credential.password ?? credential.privateKey ?? '';
+      _passphrase.text = credential.keyPassphrase ?? '';
+    }
     _collectStats = initial.collectStats;
     _collectSystemInfo = initial.collectSystemInfo;
   }
@@ -957,7 +970,9 @@ class _AddServerDialogState extends State<_AddServerDialog> {
 
   void _save() {
     if (!_form.currentState!.validate()) return;
-    final credential = _type == CredentialType.password
+    final credential = !_useNewCredential
+        ? null
+        : _type == CredentialType.password
         ? ServerCredential.password(_secret.text)
         : ServerCredential.privateKey(
             privateKey: _secret.text,
@@ -971,6 +986,8 @@ class _AddServerDialogState extends State<_AddServerDialog> {
         port: int.parse(_port.text),
         username: _user.text,
         credential: credential,
+        credentialId: _useNewCredential ? null : _credentialId,
+        credentialName: _name.text,
         collectStats: _collectStats,
         collectSystemInfo: _collectSystemInfo,
       ),
@@ -1028,53 +1045,80 @@ class _AddServerDialogState extends State<_AddServerDialog> {
               validator: _required,
             ),
             const SizedBox(height: 12),
-            SegmentedButton<CredentialType>(
-              segments: [
-                ButtonSegment(
-                  value: CredentialType.password,
-                  label: Text('serverAuthPassword'.tr()),
-                ),
-                ButtonSegment(
-                  value: CredentialType.privateKey,
-                  label: Text('serverAuthPrivateKey'.tr()),
-                ),
-              ],
-              selected: {_type},
-              onSelectionChanged: (value) =>
-                  setState(() => _type = value.first),
-            ),
-            const SizedBox(height: 12),
-            if (_type == CredentialType.password)
-              TextFormField(
-                controller: _secret,
-                obscureText: true,
+            if (widget.credentials.isNotEmpty) ...[
+              DropdownButtonFormField<int?>(
+                initialValue: _useNewCredential ? null : _credentialId,
                 decoration: InputDecoration(
-                  labelText: 'serverPasswordLabel'.tr(),
+                  labelText: 'serverCredentialLabel'.tr(),
                 ),
-                validator: _required,
-              )
-            else ...[
-              TextFormField(
-                controller: _secret,
-                minLines: 4,
-                maxLines: 8,
-                validator: _required,
-                decoration: InputDecoration(
-                  labelText: 'serverPrivateKeyLabel'.tr(),
-                  suffixIcon: IconButton(
-                    onPressed: _pickKey,
-                    icon: const Icon(Symbols.upload_file),
+                items: [
+                  DropdownMenuItem(
+                    value: null,
+                    child: Text('serverCredentialNew'.tr()),
                   ),
-                ),
+                  ...widget.credentials.map(
+                    (credential) => DropdownMenuItem(
+                      value: credential.id,
+                      child: Text(credential.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() {
+                  _credentialId = value;
+                  _useNewCredential = value == null;
+                }),
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _passphrase,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'serverKeyPassphraseLabel'.tr(),
-                ),
+            ],
+            if (_useNewCredential) ...[
+              SegmentedButton<CredentialType>(
+                segments: [
+                  ButtonSegment(
+                    value: CredentialType.password,
+                    label: Text('serverAuthPassword'.tr()),
+                  ),
+                  ButtonSegment(
+                    value: CredentialType.privateKey,
+                    label: Text('serverAuthPrivateKey'.tr()),
+                  ),
+                ],
+                selected: {_type},
+                onSelectionChanged: (value) =>
+                    setState(() => _type = value.first),
               ),
+              const SizedBox(height: 12),
+              if (_type == CredentialType.password)
+                TextFormField(
+                  controller: _secret,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'serverPasswordLabel'.tr(),
+                  ),
+                  validator: _required,
+                )
+              else ...[
+                TextFormField(
+                  controller: _secret,
+                  minLines: 4,
+                  maxLines: 8,
+                  validator: _required,
+                  decoration: InputDecoration(
+                    labelText: 'serverPrivateKeyLabel'.tr(),
+                    suffixIcon: IconButton(
+                      onPressed: _pickKey,
+                      icon: const Icon(Symbols.upload_file),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _passphrase,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'serverKeyPassphraseLabel'.tr(),
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 12),
             SwitchListTile(

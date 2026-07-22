@@ -21,11 +21,8 @@ class ServerRepository {
   )..where((table) => table.deletedAt.isNull())).get();
 
   Future<Server> create(ServerDraft draft) async {
-    final encrypted = await _vault.encrypt(
-      draft.credential.encode(),
-      context: 'server-credential',
-    );
     final now = DateTime.now().toUtc();
+    final credentialId = await _credentialIdForDraft(draft, now);
     final id = await _database
         .into(_database.servers)
         .insert(
@@ -37,9 +34,7 @@ class ServerRepository {
             syncId: Value(_uuid.v4()),
             createdAt: Value(now),
             updatedAt: Value(now),
-            credentialType: Value(draft.credential.type.name),
-            encryptedCredential: Value(encrypted.bytes),
-            credentialNonce: Value(encrypted.nonce),
+            credentialId: Value(credentialId),
             collectStats: Value(draft.collectStats),
             collectSystemInfo: Value(draft.collectSystemInfo),
           ),
@@ -50,9 +45,9 @@ class ServerRepository {
   }
 
   Future<void> update(Server server, ServerDraft draft) async {
-    final encrypted = await _vault.encrypt(
-      draft.credential.encode(),
-      context: 'server-credential',
+    final credentialId = await _credentialIdForDraft(
+      draft,
+      DateTime.now().toUtc(),
     );
     await (_database.update(
       _database.servers,
@@ -62,9 +57,7 @@ class ServerRepository {
         host: Value(draft.host.trim()),
         port: Value(draft.port),
         username: Value(draft.username.trim()),
-        credentialType: Value(draft.credential.type.name),
-        encryptedCredential: Value(encrypted.bytes),
-        credentialNonce: Value(encrypted.nonce),
+        credentialId: Value(credentialId),
         collectStats: Value(draft.collectStats),
         collectSystemInfo: Value(draft.collectSystemInfo),
         updatedAt: Value(DateTime.now().toUtc()),
@@ -73,14 +66,135 @@ class ServerRepository {
   }
 
   Future<ServerCredential> credentialFor(Server server) async {
+    final credential = await credentialRecordFor(server);
     final value = await _vault.decrypt(
       EncryptedValue(
-        bytes: server.encryptedCredential!,
-        nonce: server.credentialNonce!,
+        bytes: credential.encryptedCredential,
+        nonce: credential.credentialNonce,
       ),
       context: 'server-credential',
     );
     return ServerCredential.decode(value);
+  }
+
+  Stream<List<SavedCredential>> watchCredentials() => (_database.select(
+    _database.savedCredentials,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
+
+  Future<List<SavedCredential>> credentials() => (_database.select(
+    _database.savedCredentials,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).get();
+
+  Future<SavedCredential> credentialRecordFor(Server server) async {
+    final id = server.credentialId;
+    if (id == null) {
+      throw StateError('This server has no saved credential.');
+    }
+    return (_database.select(
+      _database.savedCredentials,
+    )..where((table) => table.id.equals(id))).getSingle();
+  }
+
+  Future<ServerCredential> decryptCredential(SavedCredential credential) async {
+    final value = await _vault.decrypt(
+      EncryptedValue(
+        bytes: credential.encryptedCredential,
+        nonce: credential.credentialNonce,
+      ),
+      context: 'server-credential',
+    );
+    return ServerCredential.decode(value);
+  }
+
+  Future<void> createCredential(SavedCredentialDraft draft) async {
+    final now = DateTime.now().toUtc();
+    await _insertCredential(draft, now);
+  }
+
+  Future<void> updateCredential(
+    SavedCredential existing,
+    SavedCredentialDraft draft,
+  ) async {
+    final encrypted = await _vault.encrypt(
+      draft.credential.encode(),
+      context: 'server-credential',
+    );
+    await (_database.update(
+      _database.savedCredentials,
+    )..where((table) => table.id.equals(existing.id))).write(
+      SavedCredentialsCompanion(
+        name: Value(draft.name.trim()),
+        credentialType: Value(draft.credential.type.name),
+        encryptedCredential: Value(encrypted.bytes),
+        credentialNonce: Value(encrypted.nonce),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+  }
+
+  Future<int> serversUsingCredential(int credentialId) =>
+      (_database.select(_database.servers)
+            ..where((table) => table.credentialId.equals(credentialId))
+            ..where((table) => table.deletedAt.isNull()))
+          .get()
+          .then((servers) => servers.length);
+
+  Future<void> deleteCredential(SavedCredential credential) =>
+      _database.transaction(() async {
+        await (_database.update(_database.servers)
+              ..where((table) => table.credentialId.equals(credential.id)))
+            .write(const ServersCompanion(credentialId: Value(null)));
+        await (_database.delete(
+          _database.savedCredentials,
+        )..where((table) => table.id.equals(credential.id))).go();
+      });
+
+  Future<int> _credentialIdForDraft(ServerDraft draft, DateTime now) async {
+    if (draft.credentialId case final id?) return id;
+    final credential = draft.credential;
+    if (credential == null) {
+      throw ArgumentError('Choose an existing credential or create a new one.');
+    }
+    final encrypted = await _vault.encrypt(
+      credential.encode(),
+      context: 'server-credential',
+    );
+    return _database
+        .into(_database.savedCredentials)
+        .insert(
+          SavedCredentialsCompanion.insert(
+            name: draft.credentialName?.trim().isNotEmpty == true
+                ? draft.credentialName!.trim()
+                : draft.name.trim(),
+            credentialType: credential.type.name,
+            encryptedCredential: encrypted.bytes,
+            credentialNonce: encrypted.nonce,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+  }
+
+  Future<int> _insertCredential(
+    SavedCredentialDraft draft,
+    DateTime now,
+  ) async {
+    final encrypted = await _vault.encrypt(
+      draft.credential.encode(),
+      context: 'server-credential',
+    );
+    return _database
+        .into(_database.savedCredentials)
+        .insert(
+          SavedCredentialsCompanion.insert(
+            name: draft.name.trim(),
+            credentialType: draft.credential.type.name,
+            encryptedCredential: encrypted.bytes,
+            credentialNonce: encrypted.nonce,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
   }
 
   Future<void> markConnected(int id) =>
