@@ -1,0 +1,197 @@
+# MaidKit
+
+<p align="center">
+  <img src="assets/icons/icon-padded.png" width="120" alt="MaidKit Logo">
+</p>
+
+<p align="center">
+  <b>A cross-platform SSH server manager</b>
+</p>
+
+<p align="center">
+  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License"></a>
+</p>
+
+---
+
+MaidKit is a collection of tools used by LittleSheep when acting as a "maid" for servers (i.e., performing server maintenance). The goal is to provide a more convenient way to maintain servers that is non-intrusive — being 100% SSH-based, without installing any software on the server or increasing security risks.
+
+Built with Flutter, MaidKit runs on desktop and mobile platforms alike. Inspired by the [Island](https://github.com/Solsynth/HyperNet.Surface) project's desktop-native approach, it brings the same calm, functional philosophy to server administration.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Getting Started](#getting-started)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Contributing](#contributing)
+- [Licensing](#licensing)
+
+---
+
+## Features
+
+### Servers
+
+| Feature | Description |
+|---------|-------------|
+| Dashboard | Grid of server cards with live status, load, memory, and uptime |
+| Activity | Real-time performance charts (CPU, memory, network, disk) |
+| Terminal | Full SSH terminal with split panes, drag-and-drop tabs, and command palette |
+| File Management | Dual-pane SFTP browser with drag-and-drop transfers and in-app editor |
+| Processes | List and kill running processes |
+| Services | Systemd unit management (start/stop/enable/disable) |
+| Web Servers | nginx and Caddy configuration management |
+| Crontab | Edit scheduled tasks |
+| Packages | Package management (apt, dnf, and more) |
+| Firewall | UFW, firewalld, nftables, and iptables management |
+| Port Forwarding | Local and remote tunnel configuration |
+
+### Containers
+
+- Docker and Podman container management
+- Start, stop, restart, pause, kill, and remove containers
+- Compose project grouping
+- Container image management
+- Runtime installation assistance
+
+### Projects
+
+- Deployment project catalog
+- Group compose stacks, web servers, and containers
+- Import and export as TOML
+
+### Snippets
+
+- Create and edit reusable shell scripts
+- Execute on one or more connected servers
+- Streaming output with progress tracking
+
+### Security
+
+- AES-GCM 256-bit encrypted credential vault
+- PBKDF2 key derivation (310,000 iterations)
+- Biometric unlock support
+- Encrypted backup archives (.mkb)
+
+### Settings
+
+- Theme (system/light/dark)
+- Language (English / 简体中文)
+- Terminal renderer selection (Ghostty libghostty-vt or xterm)
+- Connect on startup
+- Metrics refresh intervals
+- Data export and import
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Flutter SDK](https://flutter.dev) installed (SDK ^3.12.2)
+- For Windows development, install [NASM](https://www.nasm.us) (required by `webcrypto` native assets):
+  ```powershell
+  winget install NASM.NASM
+  ```
+- For Linux development, install additional dependencies:
+  ```bash
+  sudo apt-get update -y
+  sudo apt-get install -y \
+    ninja-build \
+    libgtk-3-dev \
+    libayatana-appindicator3-dev \
+    keybinder-3.0 \
+    libnotify-dev
+  ```
+
+### Running the App
+
+```bash
+# Install dependencies
+flutter pub get
+
+# Run in debug mode
+flutter run
+
+# Build release version
+flutter build <platform>
+```
+
+### Development
+
+After changing route annotations or Drift schema:
+
+```bash
+dart run build_runner build
+```
+
+Run checks before committing:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+---
+
+## Architecture
+
+Features are flat and live directly under `lib/<feature>/`. The app uses:
+
+- **Riverpod** for state management with `ConsumerWidget` for reactive views
+- **auto_route** for declarative nested navigation
+- **Drift** for local SQLite persistence
+- **dartssh2** for SSH connections
+- **island_ui_foundation** for the desktop window frame
+
+See [docs/architecture.md](./docs/architecture.md) for the full architecture guide.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Framework** | Flutter with Material 3 |
+| **State** | Riverpod + flutter_hooks |
+| **Navigation** | auto_route |
+| **Database** | Drift (SQLite) |
+| **SSH** | dartssh2 |
+| **Encryption** | cryptography (AES-GCM, PBKDF2) |
+| **Terminal** | libghostty-vt / xterm |
+| **Desktop** | window_manager + island_ui_foundation |
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+---
+
+## Licensing
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+If you deploy an instance, fork this project, or redistribute modified versions of this software, you must comply with the AGPL-3.0 license terms, including:
+
+- Including a copy of the original license
+- Preserving existing copyright notices and attribution
+- Clearly stating any modifications you made
+- Providing corresponding source code to users interacting with the service over a network
+
+Original authorship and copyright attribution to LittleSheep, Solsynth, and this project's contributors must be retained where applicable.
+
+Please note that the AGPL-3.0 license applies to the software source code only. Certain assets, logos, icons, branding materials, and trademarks may be licensed separately and are not automatically covered under the same terms.
+
+See [LICENSE.txt](./LICENSE.txt) for the full license text.
+
+---
+
+<p align="center">
+  Made by LittleSheep with ❤️
+</p>

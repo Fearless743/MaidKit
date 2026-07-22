@@ -32,6 +32,17 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Temporary compatibility fix for dependencies that still include
+# <experimental/coroutine> when compiling with newer MSVC versions.
+#
+# This definition is intentionally added before Flutter and plugin
+# subdirectories so it is inherited by native plugin targets.
+if(MSVC)
+  add_compile_definitions(
+    _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+  )
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
@@ -39,8 +50,8 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
-  target_compile_options(${TARGET} PRIVATE /EHsc)
+  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100" /wd"4819")
+  target_compile_options(${TARGET} PRIVATE /EHsc /utf-8)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
 endfunction()
@@ -52,6 +63,9 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Provide defaults for policies left unset by plugin subdirectories.
+set(CMAKE_POLICY_DEFAULT_CMP0169 OLD)
+set(CMAKE_POLICY_DEFAULT_CMP0175 OLD)
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.

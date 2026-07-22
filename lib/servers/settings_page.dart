@@ -144,13 +144,7 @@ class SettingsPage extends ConsumerWidget {
                     title: const Text('settingsAnimateCursor').tr(),
                     subtitle: const Text('settingsAnimateCursorHint').tr(),
                     value: cursorAnimationEnabled,
-                    onChanged: selectedAdapter == 'ghostty'
-                        ? (enabled) async {
-                            await ref
-                                .read(cursorAnimationEnabledProvider.notifier)
-                                .setEnabled(enabled);
-                          }
-                        : null,
+                    onChanged: null,
                   ),
                 ],
               ),

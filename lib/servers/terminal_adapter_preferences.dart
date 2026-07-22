@@ -30,7 +30,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
     final store = preferences ?? SharedPreferencesAsync();
     return TerminalAdapterPreferences(
       store,
-      await store.getString(_adapterIdKey) ?? 'ghostty',
+      'xterm',
       await store.getBool(_cursorAnimationEnabledKey) ?? true,
     );
   }
@@ -46,7 +46,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
 
 class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
   InMemoryTerminalAdapterSettings({
-    this.selectedAdapterId = 'ghostty',
+    this.selectedAdapterId = 'xterm',
     this.cursorAnimationEnabled = true,
   });
 

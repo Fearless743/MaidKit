@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
-import 'ghostty_terminal_session_adapter.dart';
 import 'metrics_refresh_preferences.dart';
 import 'port_forwarding_models.dart';
 import 'server_repository.dart';
@@ -56,20 +55,11 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
 
 final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
-      final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
       return [
-        TerminalSessionAdapterOption(
-          id: 'ghostty',
-          label: 'Ghostty',
-          description: 'The default libghostty-vt renderer for new terminals.',
-          factory: GhosttyTerminalSessionAdapterFactory(
-            cursorAnimationEnabled: cursorAnimationEnabled,
-          ),
-        ),
         TerminalSessionAdapterOption(
           id: 'xterm',
           label: 'xterm',
-          description: 'The built-in Flutter fallback renderer.',
+          description: 'The built-in Flutter terminal renderer.',
           factory: XtermTerminalSessionAdapterFactory(),
         ),
       ];
