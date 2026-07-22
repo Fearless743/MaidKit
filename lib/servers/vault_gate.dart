@@ -123,6 +123,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                     hasVault
                         ? 'vaultUnlockSubtitle'.tr()
                         : 'vaultCreateSubtitle'.tr(),
+                    textAlign: .center,
                   ),
                   const SizedBox(height: 20),
                   TextField(

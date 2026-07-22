@@ -323,7 +323,6 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
                                       setState(() => _query = '');
                                     },
                                   ),
-                            border: const OutlineInputBorder(),
                           ),
                           onChanged: (value) => setState(() => _query = value),
                         ),

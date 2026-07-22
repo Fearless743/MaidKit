@@ -240,10 +240,12 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
       for (final r in widget.resources)
         if (r.serverId != null) r.serverId!,
     };
+    // Flatten by kind so cards can share one horizontal waterfall instead of
+    // stacking separate full-width sections under each kind header.
     final grouped = _grouped;
-    final orderedKinds = DeploymentResourceKind.values
-        .where((kind) => grouped.containsKey(kind))
-        .toList();
+    final orderedResources = [
+      for (final kind in DeploymentResourceKind.values) ...?grouped[kind],
+    ];
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -316,60 +318,87 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
                   ),
                   if (widget.resources.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: 'deploymentFilterResources'.tr(),
-                        prefixIcon: const Icon(Symbols.search, size: 20),
-                        suffixIcon: _query.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: 'deploymentClearTooltip'.tr(),
-                                icon: const Icon(Symbols.close, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _query = '');
-                                },
-                              ),
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (value) => setState(() => _query = value),
-                    ),
-                    if (kindCounts.length > 1) ...[
-                      const SizedBox(height: 10),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            FilterChip(
-                              label: Text('deploymentFilterAll'.tr()),
-                              selected: _kindFilter == null,
-                              onSelected: (_) =>
-                                  setState(() => _kindFilter = null),
-                            ),
-                            const SizedBox(width: 8),
-                            for (final kind in kindCounts.keys) ...[
-                              FilterChip(
-                                avatar: Icon(
-                                  deploymentResourceKindIcon(kind),
-                                  size: 16,
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final wideToolbar = constraints.maxWidth >= 720;
+                        final searchField = TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: 'deploymentFilterResources'.tr(),
+                            prefixIcon: const Icon(Symbols.search, size: 20),
+                            suffixIcon: _query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'deploymentClearTooltip'.tr(),
+                                    icon: const Icon(Symbols.close, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _query = '');
+                                    },
+                                  ),
+                          ),
+                          onChanged: (value) => setState(() => _query = value),
+                        );
+                        final kindChips = kindCounts.length > 1
+                            ? SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    FilterChip(
+                                      label: Text('deploymentFilterAll'.tr()),
+                                      selected: _kindFilter == null,
+                                      onSelected: (_) =>
+                                          setState(() => _kindFilter = null),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    for (final kind in kindCounts.keys) ...[
+                                      FilterChip(
+                                        avatar: Icon(
+                                          deploymentResourceKindIcon(kind),
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          '${deploymentResourceKindLabel(kind)}'
+                                          ' (${kindCounts[kind]})',
+                                        ),
+                                        selected: _kindFilter == kind,
+                                        onSelected: (selected) => setState(
+                                          () => _kindFilter = selected
+                                              ? kind
+                                              : null,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                  ],
                                 ),
-                                label: Text(
-                                  '${deploymentResourceKindLabel(kind)}'
-                                  ' (${kindCounts[kind]})',
-                                ),
-                                selected: _kindFilter == kind,
-                                onSelected: (selected) => setState(
-                                  () => _kindFilter = selected ? kind : null,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
+                              )
+                            : null;
+
+                        if (!wideToolbar || kindChips == null) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              searchField,
+                              if (kindChips != null) ...[
+                                const SizedBox(height: 10),
+                                kindChips,
+                              ],
                             ],
+                          );
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            SizedBox(width: 280, child: searchField),
+                            const SizedBox(width: 16),
+                            Expanded(child: kindChips),
                           ],
-                        ),
-                      ),
-                    ],
+                        );
+                      },
+                    ),
                   ],
                   const SizedBox(height: 20),
                   Row(
@@ -422,58 +451,99 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final kind = orderedKinds[index];
-                  final items = grouped[kind]!;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (orderedKinds.length > 1 || _kindFilter != null) ...[
-                          Row(
-                            children: [
-                              Icon(
-                                deploymentResourceKindIcon(kind),
-                                size: 18,
-                                color: scheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                deploymentResourceKindLabel(kind),
-                                style: theme.textTheme.titleSmall,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${items.length}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                        for (final resource in items)
-                          _ResourceTile(
-                            resource: resource,
-                            serverName: resource.serverId == null
-                                ? null
-                                : serverNames[resource.serverId!],
-                            server: resource.serverId == null
-                                ? null
-                                : serverById[resource.serverId!],
-                            onDelete: () => _deleteResource(resource),
-                          ),
-                      ],
-                    ),
-                  );
-                }, childCount: orderedKinds.length),
+              sliver: SliverToBoxAdapter(
+                child: _ResourceWaterfall(
+                  resources: orderedResources,
+                  serverNames: serverNames,
+                  serverById: serverById,
+                  onDelete: _deleteResource,
+                ),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Multi-column masonry layout. Wider columns, packs left-to-right so the
+/// resource preview uses horizontal space instead of a single tall stack.
+class _ResourceWaterfall extends StatelessWidget {
+  const _ResourceWaterfall({
+    required this.resources,
+    required this.serverNames,
+    required this.serverById,
+    required this.onDelete,
+  });
+
+  final List<DeploymentResource> resources;
+  final Map<int, String> serverNames;
+  final Map<int, Server> serverById;
+  final ValueChanged<DeploymentResource> onDelete;
+
+  /// Prefer fewer, wider cards on desktop.
+  static const double _minColumnWidth = 480;
+  static const double _columnGap = 16;
+  static const int _maxColumns = 3;
+
+  static int columnCountFor(double width) {
+    if (width <= 0) return 1;
+    final raw = ((width + _columnGap) / (_minColumnWidth + _columnGap)).floor();
+    return raw.clamp(1, _maxColumns);
+  }
+
+  /// Row-major buckets: item 0 → col 0, item 1 → col 1, … so the first
+  /// screenful fills across before growing downward.
+  static List<List<T>> distribute<T>(List<T> items, int columns) {
+    if (columns <= 1) return [List<T>.from(items)];
+    final buckets = List.generate(columns, (_) => <T>[]);
+    for (var i = 0; i < items.length; i++) {
+      buckets[i % columns].add(items[i]);
+    }
+    return buckets;
+  }
+
+  Widget _tile(DeploymentResource resource) {
+    return _ResourceTile(
+      resource: resource,
+      serverName: resource.serverId == null
+          ? null
+          : serverNames[resource.serverId!],
+      server: resource.serverId == null ? null : serverById[resource.serverId!],
+      onDelete: () => onDelete(resource),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = columnCountFor(constraints.maxWidth);
+        if (columns == 1) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [for (final resource in resources) _tile(resource)],
+          );
+        }
+
+        final buckets = distribute(resources, columns);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var c = 0; c < columns; c++) ...[
+              if (c > 0) const SizedBox(width: _columnGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final resource in buckets[c]) _tile(resource),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -1044,7 +1114,7 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     final overflow = actions.skip(4).toList();
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
@@ -1457,7 +1527,6 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
 
   ContainerRuntime get _runtime => _runtimeFrom(widget.configuration);
   ContainerScope get _scope => _scopeFrom(widget.configuration);
-  String get _directory => '${widget.configuration['directory'] ?? ''}'.trim();
 
   Future<String?> _sudoPassword() async {
     final credential = await ref
@@ -1466,47 +1535,6 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
     return credential.type == CredentialType.password
         ? credential.password
         : null;
-  }
-
-  Future<void> _run(ComposeProjectAction action) async {
-    if (_directory.isEmpty) return;
-    await runComposeProjectActionWithTerminal(
-      ref: ref,
-      serverId: widget.server.id,
-      serverName: widget.server.name,
-      runtime: _runtime,
-      scope: _scope,
-      projectName: _name,
-      directory: _directory,
-      action: action,
-      sudoPassword: await _sudoPassword(),
-    );
-    if (mounted) setState(() => _containers = _load());
-  }
-
-  Future<void> _showStackLogs() async {
-    if (_directory.isEmpty || !mounted) return;
-    final sudo = await _sudoPassword();
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      useRootNavigator: true,
-      builder: (_) => _RemoteTextSheet(
-        title: 'Logs · $_name',
-        load: () => ref
-            .read(connectionManagerProvider)
-            .readComposeProjectLogs(
-              widget.server.id,
-              runtime: _runtime,
-              scope: _scope,
-              projectName: _name,
-              directory: _directory,
-              sudoPassword: sudo,
-            ),
-      ),
-    );
   }
 
   Future<void> _containerAction(
@@ -1582,12 +1610,6 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const Spacer(),
-              if (_directory.isNotEmpty)
-                IconButton(
-                  tooltip: 'deploymentStackLogs'.tr(),
-                  icon: const Icon(Symbols.terminal, size: 18),
-                  onPressed: _showStackLogs,
-                ),
               if (snapshot.connectionState == ConnectionState.done)
                 IconButton(
                   tooltip: 'deploymentRefreshContainers'.tr(),
@@ -1654,30 +1676,6 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                 ),
               );
             }),
-          if (_directory.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                for (final action in [
-                  ComposeProjectAction.up,
-                  ComposeProjectAction.pull,
-                  ComposeProjectAction.restart,
-                  ComposeProjectAction.stop,
-                ])
-                  OutlinedButton(
-                    onPressed: () => _run(action),
-                    child: Text(action.label),
-                  ),
-                OutlinedButton.icon(
-                  onPressed: _showStackLogs,
-                  icon: const Icon(Symbols.terminal, size: 16),
-                  label: Text('deploymentQuickActionLogs'.tr()),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     ),
