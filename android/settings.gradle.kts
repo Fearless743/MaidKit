@@ -19,7 +19,10 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "9.0.1" apply false
+    // CargoKit (used transitively by super_context_menu) still calls
+    // Project.exec(), which Gradle 9 removed. Stay on the latest AGP 8 release
+    // compatible with our plugins until CargoKit publishes a Gradle 9 update.
+    id("com.android.application") version "8.12.1" apply false
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
