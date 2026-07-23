@@ -31,6 +31,8 @@
 			<string>MaidKit Backup</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>dev.solsynth.maidkit.backup</string>
@@ -39,6 +41,14 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>MaidKit uses the camera only when you choose to capture an image to attach to content managed in the app.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MaidKit uses your location only when you choose to include location metadata with an image you capture.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MaidKit accesses your photo library only when you choose an image to attach to content managed in the app.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
