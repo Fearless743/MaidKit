@@ -18,6 +18,8 @@ String libraryExtension(OS os) => switch (os) {
 /// Environment variable for local Ghostty source path.
 const ghosttySrcEnvKey = 'GHOSTTY_SRC';
 
+const _requiredZigVersion = '0.15.2';
+
 /// Download method for Ghostty source.
 enum SourceLocation {
   /// Download tarball from GitHub, extract, apply patches.
@@ -70,7 +72,7 @@ sealed class LibraryProvider {
   /// Checks if Zig is installed and available on PATH.
   static bool zigAvailable() {
     try {
-      final result = Process.runSync('zig', ['version']);
+      final result = Process.runSync(_zigExecutable(), ['version']);
       return result.exitCode == 0;
     } on ProcessException {
       return false;
@@ -102,6 +104,7 @@ final class CompileFromSource extends LibraryProvider {
 
     final installDir = target.parent.parent.uri;
     final zig = zigTarget(os, arch, iOSSdk: ios);
+    final zigExecutable = _requireCompatibleZig();
 
     final zigArgs = [
       'build',
@@ -109,17 +112,13 @@ final class CompileFromSource extends LibraryProvider {
       '-p',
       Directory.fromUri(installDir).path,
       '--release=fast',
-      // App Store Connect requires an LC_ENCRYPTION_INFO load command in
-      // iOS executable code. Have Zig delegate final linking to Apple's ld
-      // and ask ld to emit that command instead of using Zig's linker.
-      if (os == .iOS) ...['-fno-lld', '-Xlinker', '-encryptable'],
       if (os == .windows) ...['--global-cache-dir', _zigCacheDir(sourceDir)],
       if (os != .current || arch != .current) '-Dtarget=$zig',
       if (ios == .iPhoneSimulator && arch == .arm64) '-Dcpu=apple_a17',
     ];
 
     final result = Process.runSync(
-      'zig',
+      zigExecutable,
       zigArgs,
       workingDirectory: sourceDir.path,
     );
@@ -132,10 +131,112 @@ final class CompileFromSource extends LibraryProvider {
       );
     }
 
+    if (os == OS.iOS) {
+      final staticLibrary = File(
+        '${installDir.toFilePath()}/lib/libghostty-vt.a',
+      );
+      _linkIosStaticLibrary(staticLibrary, target, arch, ios!);
+      return;
+    }
+
     final srcDir = os == .windows ? 'bin' : 'lib';
     final srcFileName = os.dylibFileName('ghostty-vt');
     final srcFile = File('${installDir.toFilePath()}/$srcDir/$srcFileName');
     if (srcFile.existsSync()) srcFile.renameSync(target.path);
+  }
+
+  String _requireCompatibleZig() {
+    final executable = _zigExecutable();
+    ProcessResult result;
+    try {
+      result = Process.runSync(executable, ['version']);
+    } on ProcessException {
+      throw StateError(
+        'Zig was not found. Install Zig $_requiredZigVersion and put its '
+        'bin directory first in PATH when building.',
+      );
+    }
+
+    final version = result.stdout.toString().trim();
+    if (result.exitCode != 0 || version != _requiredZigVersion) {
+      throw StateError(
+        'Ghostty requires Zig $_requiredZigVersion, but '
+        '$executable reports ${version.isEmpty ? 'an unknown version' : version}. '
+        'Install `brew install zig@0.15` and set '
+        'PATH=/opt/homebrew/opt/zig@0.15/bin:\$PATH when building.',
+      );
+    }
+    return executable;
+  }
+
+  /// Links Ghostty's static archive with Xcode's clang and Apple ld.
+  ///
+  /// Zig can build the archive but does not emit LC_ENCRYPTION_INFO_64 for its
+  /// iOS dynamic libraries. Apple ld adds that command with `-encryptable`.
+  void _linkIosStaticLibrary(
+    File staticLibrary,
+    File target,
+    Architecture arch,
+    IOSSdk iosSdk,
+  ) {
+    if (!staticLibrary.existsSync()) {
+      throw StateError(
+        'Ghostty static library was not produced: ${staticLibrary.path}',
+      );
+    }
+
+    final sdkName = iosSdk == IOSSdk.iPhoneSimulator
+        ? 'iphonesimulator'
+        : 'iphoneos';
+    final sdkResult = Process.runSync('/usr/bin/xcrun', [
+      '--sdk',
+      sdkName,
+      '--show-sdk-path',
+    ]);
+    if (sdkResult.exitCode != 0) {
+      throw StateError(
+        'Unable to locate the $sdkName SDK: ${sdkResult.stderr}',
+      );
+    }
+
+    final archName = switch (arch) {
+      Architecture.arm64 => 'arm64',
+      Architecture.x64 => 'x86_64',
+      _ => throw ArgumentError('Unsupported iOS architecture: $arch'),
+    };
+    final targetVersion = input.config.code.iOS.targetVersion;
+    final targetTriple = iosSdk == IOSSdk.iPhoneSimulator
+        ? '$archName-apple-ios$targetVersion-simulator'
+        : '$archName-apple-ios$targetVersion';
+
+    target.parent.createSync(recursive: true);
+    final linkResult = Process.runSync('/usr/bin/xcrun', [
+      'clang',
+      '-dynamiclib',
+      '-target',
+      targetTriple,
+      '-isysroot',
+      sdkResult.stdout.toString().trim(),
+      if (iosSdk == IOSSdk.iPhoneSimulator)
+        '-mios-simulator-version-min=$targetVersion'
+      else
+        '-mios-version-min=$targetVersion',
+      '-Wl,-all_load',
+      staticLibrary.path,
+      '-Wl,-install_name,@rpath/ghostty.framework/ghostty',
+      '-Wl,-headerpad_max_install_names',
+      '-Wl,-encryptable',
+      '-lc++',
+      '-o',
+      target.path,
+    ]);
+    if (linkResult.exitCode != 0) {
+      throw StateError(
+        'Apple linker failed (exit code ${linkResult.exitCode}):\n'
+        'stdout: ${linkResult.stdout}\n'
+        'stderr: ${linkResult.stderr}',
+      );
+    }
   }
 
   String _zigCacheDir(Directory sourceDir) {
@@ -201,6 +302,21 @@ final class CompileFromSource extends LibraryProvider {
       .git => _gitClone(),
     };
   }
+}
+
+String _zigExecutable() {
+  // Flutter's native-hook runner prepends Xcode's tools to PATH and filters
+  // arbitrary environment variables. Prefer Homebrew's pinned Zig formula so
+  // an otherwise linked Zig 0.16+ installation cannot break Ghostty builds.
+  if (Platform.isMacOS) {
+    for (final candidate in const [
+      '/opt/homebrew/opt/zig@0.15/bin/zig',
+      '/usr/local/opt/zig@0.15/bin/zig',
+    ]) {
+      if (File(candidate).existsSync()) return candidate;
+    }
+  }
+  return 'zig';
 }
 
 final class DownloadPrebuilt extends LibraryProvider {

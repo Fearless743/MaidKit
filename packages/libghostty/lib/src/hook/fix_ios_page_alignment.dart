@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 const _lcSegment64 = 0x19; // LC_SEGMENT_64
+const _lcEncryptionInfo64 = 0x2C; // LC_ENCRYPTION_INFO_64
 const _machoHeaderSize64 = 32; // sizeof(mach_header_64)
 // Mach-O 64-bit header constants (from mach-o/loader.h).
 const _machoMagic64 = 0xFEEDFACF; // MH_MAGIC_64
@@ -38,6 +39,38 @@ void fixIosPageAlignment(File libFile) {
   // Write modified bytes back. ByteData shares the same buffer as `bytes`,
   // so the patched values are already in place.
   libFile.writeAsBytesSync(bytes);
+}
+
+/// Ensures the iOS binary was linked by Apple's linker with `-encryptable`.
+///
+/// App Store Connect rejects a framework without this command, even though
+/// the command's `cryptid` is zero before Apple applies FairPlay encryption.
+void verifyIosEncryptionInfo(File libFile) {
+  final bytes = libFile.readAsBytesSync();
+  if (bytes.length < _machoHeaderSize64) {
+    throw StateError('Invalid Mach-O binary: ${libFile.path}');
+  }
+
+  final data = ByteData.sublistView(bytes);
+  if (data.getUint32(0, Endian.little) != _machoMagic64) {
+    throw StateError('Expected an arm64 Mach-O binary: ${libFile.path}');
+  }
+
+  final ncmds = data.getUint32(16, Endian.little);
+  var offset = _machoHeaderSize64;
+  for (var i = 0; i < ncmds; i++) {
+    if (offset + 8 > bytes.length) break;
+    final cmd = data.getUint32(offset, Endian.little);
+    final cmdsize = data.getUint32(offset + 4, Endian.little);
+    if (cmd == _lcEncryptionInfo64 && cmdsize >= 24) return;
+    if (cmdsize < 8) break;
+    offset += cmdsize;
+  }
+
+  throw StateError(
+    'iOS library lacks LC_ENCRYPTION_INFO_64. Ensure Xcode is installed and '
+    'that Ghostty links through Apple ld with -encryptable.',
+  );
 }
 
 /// Walks the Mach-O load command list and extracts all LC_SEGMENT_64 entries.

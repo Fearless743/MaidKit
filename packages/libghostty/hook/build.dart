@@ -33,7 +33,10 @@ Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
     );
   }
 
-  if (targetOS == OS.iOS) fixIosPageAlignment(libFile);
+  if (targetOS == OS.iOS) {
+    fixIosPageAlignment(libFile);
+    verifyIosEncryptionInfo(libFile);
+  }
 
   output.assets.code.add(
     CodeAsset(

@@ -92,6 +92,11 @@ Built with Flutter, MaidKit runs on desktop and mobile platforms alike. Inspired
 ### Prerequisites
 
 - [Flutter SDK](https://flutter.dev) installed (SDK ^3.12.2)
+- For iOS App Store archives, install Zig 0.15.2 for the vendored Ghostty
+  terminal library. The current Ghostty source is not compatible with Zig 0.16:
+  ```bash
+  brew install zig@0.15
+  ```
 - For Windows development, install [NASM](https://www.nasm.us) (required by `webcrypto` native assets):
   ```powershell
   winget install NASM.NASM
@@ -119,6 +124,22 @@ flutter run
 # Build release version
 flutter build <platform>
 ```
+
+### iOS App Store Archive
+
+The bundled Ghostty terminal library is compiled from source for iOS so the
+binary is linked by Apple's linker and includes the encryption metadata
+required by App Store Connect. After installing `zig@0.15`, the build hook
+selects it automatically when creating an IPA:
+
+```bash
+flutter clean
+flutter pub get
+flutter build ipa
+```
+
+The build stops if the generated Ghostty framework lacks
+`LC_ENCRYPTION_INFO_64`, preventing an invalid IPA from being produced.
 
 ### Development
 
