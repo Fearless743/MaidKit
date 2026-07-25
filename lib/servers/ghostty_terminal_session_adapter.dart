@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flterm/flterm.dart' as flterm;
 import 'package:flutter/material.dart';
 
+import 'terminal_color_scheme.dart';
 import 'terminal_session_adapter.dart';
 
 /// Terminal adapter backed by flterm's libghostty-vt renderer.
@@ -14,24 +15,29 @@ class GhosttyTerminalSessionAdapterFactory
     implements TerminalSessionAdapterFactory {
   const GhosttyTerminalSessionAdapterFactory({
     required this.cursorAnimationEnabled,
+    required this.colorScheme,
   });
 
   final bool cursorAnimationEnabled;
+  final TerminalColorScheme colorScheme;
 
   @override
   TerminalSessionAdapter create() => GhosttyTerminalSessionAdapter(
     cursorAnimationEnabled: cursorAnimationEnabled,
+    colorScheme: colorScheme,
   );
 }
 
 class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
-  GhosttyTerminalSessionAdapter({this.cursorAnimationEnabled = true})
-    : _controller = flterm.TerminalController(
-        config: flterm.TerminalConfig(
-          scrollbackLimit: 10 * 1024 * 1024,
-          cursorBlink: cursorAnimationEnabled,
-        ),
-      ) {
+  GhosttyTerminalSessionAdapter({
+    this.cursorAnimationEnabled = true,
+    this.colorScheme = TerminalColorSchemes.defaultScheme,
+  }) : _controller = flterm.TerminalController(
+         config: flterm.TerminalConfig(
+           scrollbackLimit: 10 * 1024 * 1024,
+           cursorBlink: cursorAnimationEnabled,
+         ),
+       ) {
     _controller.onOutput = (bytes) {
       if (!_disposed) _outgoingBytes.add(Uint8List.fromList(bytes));
     };
@@ -39,6 +45,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   }
 
   final bool cursorAnimationEnabled;
+  final TerminalColorScheme colorScheme;
   final flterm.TerminalController _controller;
   final flterm.TerminalScrollController _scrollController =
       flterm.TerminalScrollController();
@@ -104,7 +111,20 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
       scrollController: _scrollController,
       autofocus: autofocus && !readOnly,
       showKeyboard: !readOnly,
-      theme: flterm.TerminalTheme.dark().copyWith(fontFamily: 'IBM Plex Mono'),
+      theme: flterm.TerminalTheme(
+        palette: flterm.ColorPalette(
+          ansiColors: colorScheme.ansiColors,
+          background: colorScheme.background,
+          foreground: colorScheme.foreground,
+        ),
+        cursor: flterm.CursorTheme(
+          color: flterm.DynamicColor.fixed(colorScheme.cursor),
+        ),
+        selection: flterm.SelectionTheme(
+          background: flterm.DynamicColor.fixed(colorScheme.selection),
+        ),
+        fontFamily: 'IBM Plex Mono',
+      ),
     );
     if (readOnly) terminal = ExcludeFocus(child: terminal);
     return terminal;

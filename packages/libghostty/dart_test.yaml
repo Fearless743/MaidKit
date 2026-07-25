@@ -1,5 +1,0 @@
-tags:
-  ffi:
-    test_on: vm
-  wasm:
-    test_on: browser

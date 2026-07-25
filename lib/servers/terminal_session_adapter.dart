@@ -8,6 +8,8 @@ import 'package:xterm/xterm.dart';
 
 import 'package:maid_kit/theme.dart';
 
+import 'terminal_color_scheme.dart';
+
 /// A terminal emulator instance attached to one remote shell.
 ///
 /// The adapter owns emulator-specific state and rendering. SSH transport code
@@ -83,10 +85,13 @@ class TerminalSessionAdapterOption {
 
 class XtermTerminalSessionAdapterFactory
     implements TerminalSessionAdapterFactory {
-  const XtermTerminalSessionAdapterFactory();
+  const XtermTerminalSessionAdapterFactory({required this.colorScheme});
+
+  final TerminalColorScheme colorScheme;
 
   @override
-  TerminalSessionAdapter create() => XtermTerminalSessionAdapter();
+  TerminalSessionAdapter create() =>
+      XtermTerminalSessionAdapter(colorScheme: colorScheme);
 }
 
 class _BufferMatch {
@@ -99,7 +104,8 @@ class _BufferMatch {
 
 /// The production adapter backed by the xterm Flutter package.
 class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
-  XtermTerminalSessionAdapter() : _terminal = Terminal(maxLines: 10000) {
+  XtermTerminalSessionAdapter({required this.colorScheme})
+    : _terminal = Terminal(maxLines: 10000) {
     _terminal.onOutput = (data) {
       if (!_disposed) _outgoingBytes.add(Uint8List.fromList(utf8.encode(data)));
     };
@@ -118,6 +124,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   }
 
   final Terminal _terminal;
+  final TerminalColorScheme colorScheme;
   final TerminalController _controller = TerminalController();
   final ScrollController _scrollController = ScrollController();
   final _outgoingBytes = StreamController<Uint8List>.broadcast();
@@ -280,34 +287,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
     bool readOnly = false,
     bool showCursor = true,
   }) {
-    final baseTheme = TerminalThemes.defaultTheme;
-    final theme = showCursor
-        ? baseTheme
-        : TerminalTheme(
-            cursor: const Color(0x00000000),
-            selection: baseTheme.selection,
-            foreground: baseTheme.foreground,
-            background: baseTheme.background,
-            black: baseTheme.black,
-            red: baseTheme.red,
-            green: baseTheme.green,
-            yellow: baseTheme.yellow,
-            blue: baseTheme.blue,
-            magenta: baseTheme.magenta,
-            cyan: baseTheme.cyan,
-            white: baseTheme.white,
-            brightBlack: baseTheme.brightBlack,
-            brightRed: baseTheme.brightRed,
-            brightGreen: baseTheme.brightGreen,
-            brightYellow: baseTheme.brightYellow,
-            brightBlue: baseTheme.brightBlue,
-            brightMagenta: baseTheme.brightMagenta,
-            brightCyan: baseTheme.brightCyan,
-            brightWhite: baseTheme.brightWhite,
-            searchHitBackground: baseTheme.searchHitBackground,
-            searchHitBackgroundCurrent: baseTheme.searchHitBackgroundCurrent,
-            searchHitForeground: baseTheme.searchHitForeground,
-          );
+    final theme = _xtermThemeFor(colorScheme, showCursor: showCursor);
     return KeyedSubtree(
       key: ObjectKey(this),
       child: TerminalView(
@@ -352,6 +332,38 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
     await _outgoingBytes.close();
     await _resizeEvents.close();
   }
+}
+
+TerminalTheme _xtermThemeFor(
+  TerminalColorScheme scheme, {
+  required bool showCursor,
+}) {
+  final ansi = scheme.ansiColors;
+  return TerminalTheme(
+    cursor: showCursor ? scheme.cursor : const Color(0x00000000),
+    selection: scheme.selection,
+    foreground: scheme.foreground,
+    background: scheme.background,
+    black: ansi[0],
+    red: ansi[1],
+    green: ansi[2],
+    yellow: ansi[3],
+    blue: ansi[4],
+    magenta: ansi[5],
+    cyan: ansi[6],
+    white: ansi[7],
+    brightBlack: ansi[8],
+    brightRed: ansi[9],
+    brightGreen: ansi[10],
+    brightYellow: ansi[11],
+    brightBlue: ansi[12],
+    brightMagenta: ansi[13],
+    brightCyan: ansi[14],
+    brightWhite: ansi[15],
+    searchHitBackground: scheme.selection,
+    searchHitBackgroundCurrent: scheme.cursor,
+    searchHitForeground: scheme.background,
+  );
 }
 
 /// Wires a terminal adapter to one shell's byte streams without coupling the

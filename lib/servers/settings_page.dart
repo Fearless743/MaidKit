@@ -14,6 +14,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'database_backup_service.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'terminal_color_scheme.dart';
 
 @RoutePage()
 class SettingsPage extends ConsumerWidget {
@@ -26,6 +27,7 @@ class SettingsPage extends ConsumerWidget {
     final adapterOptions = ref.watch(terminalSessionAdapterOptionsProvider);
     final selectedAdapter = ref.watch(selectedTerminalSessionAdapterProvider);
     final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
+    final terminalColorScheme = ref.watch(terminalColorSchemeProvider);
     final connectOnStartup = ref.watch(connectOnStartupProvider);
     final refreshInterval = ref.watch(serverMetricsRefreshIntervalProvider);
     final focusedRefreshInterval = ref.watch(
@@ -136,6 +138,33 @@ class SettingsPage extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Text(
                     'settingsTerminalRendererHint',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ).tr(),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(terminalColorScheme.id),
+                    initialValue: terminalColorScheme.id,
+                    decoration: InputDecoration(
+                      labelText: 'settingsTerminalColorScheme'.tr(),
+                    ),
+                    items: [
+                      for (final scheme in TerminalColorSchemes.all)
+                        DropdownMenuItem(
+                          value: scheme.id,
+                          child: Text(scheme.label),
+                        ),
+                    ],
+                    onChanged: (schemeId) async {
+                      if (schemeId != null) {
+                        await ref
+                            .read(terminalColorSchemeProvider.notifier)
+                            .select(schemeId);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'settingsTerminalColorSchemeHint',
                     style: Theme.of(context).textTheme.bodySmall,
                   ).tr(),
                   const SizedBox(height: 8),

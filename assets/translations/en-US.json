@@ -63,6 +63,8 @@
   "settingsTerminal": "Terminal",
   "settingsTerminalRenderer": "Terminal renderer",
   "settingsTerminalRendererHint": "New terminals use the selected renderer. Reopen existing terminals to switch them.",
+  "settingsTerminalColorScheme": "Color scheme",
+  "settingsTerminalColorSchemeHint": "Applies to new terminals in both renderers. Reopen an existing terminal to use a new scheme.",
   "settingsAnimateCursor": "Animate cursor movement",
   "settingsAnimateCursorHint": "Smoothly move the Ghostty cursor between terminal cells.",
   "settingsConnections": "Connections",

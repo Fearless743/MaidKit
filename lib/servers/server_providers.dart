@@ -11,6 +11,7 @@ import 'ssh_connection_manager.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
 import 'terminal_adapter_preferences.dart';
+import 'terminal_color_scheme.dart';
 import 'startup_connection_preferences.dart';
 import 'vault_service.dart';
 
@@ -57,6 +58,7 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
 final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
       final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
+      final colorScheme = ref.watch(terminalColorSchemeProvider);
       return [
         TerminalSessionAdapterOption(
           id: 'ghostty',
@@ -64,13 +66,14 @@ final terminalSessionAdapterOptionsProvider =
           description: 'The default libghostty-vt renderer for new terminals.',
           factory: GhosttyTerminalSessionAdapterFactory(
             cursorAnimationEnabled: cursorAnimationEnabled,
+            colorScheme: colorScheme,
           ),
         ),
         TerminalSessionAdapterOption(
           id: 'xterm',
           label: 'xterm',
           description: 'The built-in Flutter fallback renderer.',
-          factory: XtermTerminalSessionAdapterFactory(),
+          factory: XtermTerminalSessionAdapterFactory(colorScheme: colorScheme),
         ),
       ];
     });
@@ -185,6 +188,26 @@ class CursorAnimationEnabledNotifier extends Notifier<bool> {
         .read(terminalAdapterPreferencesProvider)
         .saveCursorAnimationEnabled(enabled);
     state = enabled;
+  }
+}
+
+final terminalColorSchemeProvider =
+    NotifierProvider<TerminalColorSchemeNotifier, TerminalColorScheme>(
+      TerminalColorSchemeNotifier.new,
+    );
+
+class TerminalColorSchemeNotifier extends Notifier<TerminalColorScheme> {
+  @override
+  TerminalColorScheme build() => TerminalColorSchemes.byId(
+    ref.read(terminalAdapterPreferencesProvider).colorSchemeId,
+  );
+
+  Future<void> select(String colorSchemeId) async {
+    final scheme = TerminalColorSchemes.byId(colorSchemeId);
+    await ref
+        .read(terminalAdapterPreferencesProvider)
+        .saveColorSchemeId(scheme.id);
+    state = scheme;
   }
 }
 

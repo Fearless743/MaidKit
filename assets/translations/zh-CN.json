@@ -60,6 +60,8 @@
   "settingsTerminal": "终端",
   "settingsTerminalRenderer": "终端渲染器",
   "settingsTerminalRendererHint": "新终端使用选定的渲染器。重新打开现有终端以切换。",
+  "settingsTerminalColorScheme": "配色方案",
+  "settingsTerminalColorSchemeHint": "应用于两种渲染器的新终端。重新打开现有终端以使用新配色。",
   "settingsAnimateCursor": "动画光标移动",
   "settingsAnimateCursorHint": "在终端单元格之间平滑移动 Ghostty 光标。",
   "settingsConnections": "连接",

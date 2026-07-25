@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:xterm/xterm.dart' as xterm;
 import 'package:flterm/flterm.dart' as flterm;
 import 'package:maid_kit/servers/ghostty_terminal_session_adapter.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/servers/terminal_adapter_preferences.dart';
+import 'package:maid_kit/servers/terminal_color_scheme.dart';
 import 'package:maid_kit/servers/terminal_session_adapter.dart';
 
 void main() {
@@ -33,6 +35,54 @@ void main() {
       expect(settings.selectedAdapterId, 'xterm');
     },
   );
+
+  test(
+    'persists the selected terminal color scheme through settings',
+    () async {
+      final settings = InMemoryTerminalAdapterSettings(
+        colorSchemeId: TerminalColorSchemes.catppuccinMocha.id,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          terminalAdapterPreferencesProvider.overrideWithValue(settings),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      expect(
+        container.read(terminalColorSchemeProvider),
+        TerminalColorSchemes.catppuccinMocha,
+      );
+
+      await container
+          .read(terminalColorSchemeProvider.notifier)
+          .select(TerminalColorSchemes.nord.id);
+
+      expect(
+        container.read(terminalColorSchemeProvider),
+        TerminalColorSchemes.nord,
+      );
+      expect(settings.colorSchemeId, TerminalColorSchemes.nord.id);
+    },
+  );
+
+  test('applies the selected palette to both terminal renderers', () async {
+    final scheme = TerminalColorSchemes.catppuccinMocha;
+    final xtermAdapter = XtermTerminalSessionAdapter(colorScheme: scheme);
+    final ghostty = GhosttyTerminalSessionAdapter(colorScheme: scheme);
+    addTearDown(xtermAdapter.dispose);
+    addTearDown(ghostty.dispose);
+
+    final xtermView = xtermAdapter.buildView() as KeyedSubtree;
+    expect(
+      (xtermView.child as xterm.TerminalView).theme.background,
+      scheme.background,
+    );
+
+    final ghosttyView = ghostty.buildView() as flterm.TerminalView;
+    expect(ghosttyView.theme!.background, scheme.background);
+    expect(ghosttyView.theme!.foreground, scheme.foreground);
+  });
 
   test('Ghostty adapter encodes cursor keys for the remote shell', () async {
     final adapter = GhosttyTerminalSessionAdapter();
