@@ -377,21 +377,52 @@ class TerminalSessionBinding {
     required void Function(Uint8List bytes) send,
     required void Function(TerminalResize resize) resize,
     this.outputFlushDelay = const Duration(milliseconds: 8),
-  }) : _subscriptions = [] {
+  }) : // Public parameter names preserve the adapter binding API.
+       // ignore: prefer_initializing_formals
+       _send = send,
+       // ignore: prefer_initializing_formals
+       _resize = resize,
+       _subscriptions = [] {
     _subscriptions.addAll([
-      stdout.listen(_queueTerminalOutput),
-      stderr.listen(_queueTerminalOutput),
-      adapter.outgoingBytes.listen(send),
-      adapter.resizeEvents.listen(resize),
+      stdout.listen(_queueTerminalOutput, onError: _ignoreTransportError),
+      stderr.listen(_queueTerminalOutput, onError: _ignoreTransportError),
+      adapter.outgoingBytes.listen(_sendTerminalInput),
+      adapter.resizeEvents.listen(_resizeTerminal),
     ]);
   }
 
   final TerminalSessionAdapter adapter;
+  final void Function(Uint8List bytes) _send;
+  final void Function(TerminalResize resize) _resize;
   final List<StreamSubscription<Object?>> _subscriptions;
   final Duration outputFlushDelay;
   final _outputBuffer = BytesBuilder(copy: false);
   Timer? _outputFlushTimer;
   var _closed = false;
+
+  // SSH channel streams can report an error while their terminal is being
+  // closed. The owner observes shell completion and tears this binding down,
+  // so forwarding that late error into Flutter's root zone would only crash
+  // the app after a normal `exit`.
+  void _ignoreTransportError(Object error, StackTrace stackTrace) {}
+
+  void _sendTerminalInput(Uint8List bytes) {
+    if (_closed) return;
+    try {
+      _send(bytes);
+    } catch (_) {
+      // The SSH channel can close between delivering input and teardown.
+    }
+  }
+
+  void _resizeTerminal(TerminalResize resize) {
+    if (_closed) return;
+    try {
+      _resize(resize);
+    } catch (_) {
+      // See [_sendTerminalInput].
+    }
+  }
 
   /// Batch high-frequency remote output without delaying local key presses.
   ///

@@ -206,12 +206,13 @@ class SshConnectionManager {
       shell: shell,
       binding: binding,
     );
-    unawaited(
-      shell.done.whenComplete(() {
-        if (identical(_terminals[terminalId]?.shell, shell)) {
-          unawaited(closeTerminal(terminalId));
-        }
-      }),
+    // A remote shell ending is normal (`exit`, a logout, or a network drop).
+    // Do not use `whenComplete` here: its returned future re-emits an SSH
+    // channel error and, because this is fire-and-forget cleanup, would become
+    // an unhandled application error.
+    shell.done.then<void>(
+      (_) => _closeTerminalAfterShellEnds(terminalId, shell),
+      onError: (_, _) => _closeTerminalAfterShellEnds(terminalId, shell),
     );
     final directory = initialDirectory?.trim();
     if (directory != null && directory.isNotEmpty) {
@@ -233,9 +234,21 @@ class SshConnectionManager {
   Future<void> closeTerminal(String terminalId) async {
     final terminal = _terminals.remove(terminalId);
     if (terminal == null) return;
-    await terminal.shell.stdin.close();
-    await terminal.binding.close();
+    // The remote shell may already have closed its channel by the time this
+    // runs. Treat those close races as successful cleanup rather than letting
+    // an `exit` command escape as an unhandled error.
+    try {
+      await terminal.shell.stdin.close();
+    } catch (_) {}
+    try {
+      await terminal.binding.close();
+    } catch (_) {}
     terminal.client.close();
+  }
+
+  void _closeTerminalAfterShellEnds(String terminalId, SSHSession shell) {
+    if (!identical(_terminals[terminalId]?.shell, shell)) return;
+    unawaited(closeTerminal(terminalId).catchError((_) {}));
   }
 
   Future<void> refreshServerInfo(Server server) async {
