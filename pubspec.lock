@@ -401,6 +401,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.0"
+  flterm:
+    dependency: "direct main"
+    description:
+      path: "packages/flterm"
+      ref: "flterm-v0.0.4"
+      resolved-ref: "9448356bacb0ec3b93431e4c6a9a859e6b3bc21b"
+      url: "https://github.com/elias8/libghostty.git"
+    source: git
+    version: "0.0.4"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -727,11 +736,13 @@ packages:
     source: hosted
     version: "0.1.10"
   libghostty:
-    dependency: "direct main"
+    dependency: "direct overridden"
     description:
       path: "packages/libghostty"
-      relative: true
-    source: path
+      ref: "libghostty-v0.0.11"
+      resolved-ref: "379036102e85fecc0fcd882b006f079c66880341"
+      url: "https://github.com/elias8/libghostty.git"
+    source: git
     version: "0.0.11"
   linked_scroll_controller:
     dependency: transitive

@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:libghostty/libghostty.dart' as ghostty;
+import 'package:flterm/flterm.dart' as flterm;
 import 'package:maid_kit/servers/ghostty_terminal_session_adapter.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/servers/terminal_adapter_preferences.dart';
@@ -34,26 +34,11 @@ void main() {
     },
   );
 
-  test('Ghostty adapter reports terminal resize events', () async {
-    final adapter = GhosttyTerminalSessionAdapter();
-    final resize = adapter.resizeEvents.first;
-
-    adapter.resize(columns: 120, rows: 36, pixelWidth: 960, pixelHeight: 720);
-
-    expect(
-      await resize,
-      isA<TerminalResize>()
-          .having((event) => event.columns, 'columns', 120)
-          .having((event) => event.rows, 'rows', 36),
-    );
-    await adapter.dispose();
-  });
-
   test('Ghostty adapter encodes cursor keys for the remote shell', () async {
     final adapter = GhosttyTerminalSessionAdapter();
     final output = adapter.outgoingBytes.first;
 
-    adapter.sendKey(ghostty.Key.arrowUp);
+    adapter.sendKey(flterm.Key.arrowUp);
 
     expect(utf8.decode(await output), '\u001b[A');
     await adapter.dispose();
@@ -63,10 +48,32 @@ void main() {
     final adapter = GhosttyTerminalSessionAdapter();
     final output = adapter.outgoingBytes.first;
 
-    adapter.sendKey(ghostty.Key.backspace);
+    adapter.sendKey(flterm.Key.backspace);
 
     expect(utf8.decode(await output), '\u007f');
     await adapter.dispose();
+  });
+
+  testWidgets('Ghostty adapter renders with flterm and reports its grid size', (
+    tester,
+  ) async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    final resizes = <TerminalResize>[];
+    final subscription = adapter.resizeEvents.listen(resizes.add);
+    addTearDown(subscription.cancel);
+    addTearDown(adapter.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(width: 800, height: 600, child: adapter.buildView()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(flterm.TerminalView), findsOneWidget);
+    expect(resizes, isNotEmpty);
+    expect(resizes.last.columns, greaterThan(0));
+    expect(resizes.last.rows, greaterThan(0));
   });
 
   test('Ghostty adapter sends terminal control sequences', () async {
