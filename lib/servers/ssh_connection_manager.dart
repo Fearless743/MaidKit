@@ -3290,7 +3290,7 @@ fi
         ? SSHKeyPair.fromPem(credential.privateKey!, credential.keyPassphrase)
         : null;
     final client = SSHClient(
-      await SSHSocket.connect(server.host, server.port),
+      await _LowLatencySshSocket.connect(server.host, server.port),
       username: server.username,
       identities: identities,
       onPasswordRequest: credential.type == CredentialType.password
@@ -3326,6 +3326,44 @@ fi
     await client.authenticated;
     return client;
   }
+}
+
+/// An SSH socket with Nagle's algorithm disabled.
+///
+/// Interactive terminals commonly send one small packet for each key press.
+/// Waiting for an acknowledgement before transmitting a subsequent packet can
+/// turn normal network round-trip time into very noticeable typing lag.
+class _LowLatencySshSocket implements SSHSocket {
+  _LowLatencySshSocket._(this._socket);
+
+  final Socket _socket;
+
+  static Future<_LowLatencySshSocket> connect(String host, int port) async {
+    final socket = await Socket.connect(host, port);
+    socket.setOption(SocketOption.tcpNoDelay, true);
+    return _LowLatencySshSocket._(socket);
+  }
+
+  @override
+  Stream<Uint8List> get stream => _socket;
+
+  @override
+  StreamSink<List<int>> get sink => _socket;
+
+  @override
+  Future<void> get done => _socket.done;
+
+  @override
+  Future<void> close() => _socket.close();
+
+  @override
+  void destroy() => _socket.destroy();
+
+  @override
+  Future<void> flush() => _socket.flush();
+
+  @override
+  String toString() => _socket.toString();
 }
 
 class TerminalSessionHandle {

@@ -120,6 +120,9 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
         cursor: flterm.CursorTheme(
           color: flterm.DynamicColor.fixed(colorScheme.cursor),
         ),
+        cursorMotionDuration: cursorAnimationEnabled
+            ? const Duration(milliseconds: 90)
+            : Duration.zero,
         selection: flterm.SelectionTheme(
           background: flterm.DynamicColor.fixed(colorScheme.selection),
         ),

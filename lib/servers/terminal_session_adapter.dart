@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -375,20 +376,50 @@ class TerminalSessionBinding {
     required Stream<Uint8List> stderr,
     required void Function(Uint8List bytes) send,
     required void Function(TerminalResize resize) resize,
-  }) : _subscriptions = [
-         stdout.listen(adapter.write),
-         stderr.listen(adapter.write),
-         adapter.outgoingBytes.listen(send),
-         adapter.resizeEvents.listen(resize),
-       ];
+    this.outputFlushDelay = const Duration(milliseconds: 8),
+  }) : _subscriptions = [] {
+    _subscriptions.addAll([
+      stdout.listen(_queueTerminalOutput),
+      stderr.listen(_queueTerminalOutput),
+      adapter.outgoingBytes.listen(send),
+      adapter.resizeEvents.listen(resize),
+    ]);
+  }
 
   final TerminalSessionAdapter adapter;
   final List<StreamSubscription<Object?>> _subscriptions;
+  final Duration outputFlushDelay;
+  final _outputBuffer = BytesBuilder(copy: false);
+  Timer? _outputFlushTimer;
   var _closed = false;
+
+  /// Batch high-frequency remote output without delaying local key presses.
+  ///
+  /// An 8ms cap keeps interactive echo effectively immediate while preventing
+  /// a burst (for example, `cat` or a build log) from forcing one terminal
+  /// update per SSH packet. Large bursts bypass the timer to bound memory.
+  void _queueTerminalOutput(Uint8List bytes) {
+    if (_closed || bytes.isEmpty) return;
+    _outputBuffer.add(bytes);
+    if (_outputBuffer.length >= 16 * 1024) {
+      _flushTerminalOutput();
+      return;
+    }
+    _outputFlushTimer ??= Timer(outputFlushDelay, _flushTerminalOutput);
+  }
+
+  void _flushTerminalOutput() {
+    _outputFlushTimer?.cancel();
+    _outputFlushTimer = null;
+    if (_closed || _outputBuffer.length == 0) return;
+    adapter.write(_outputBuffer.takeBytes());
+  }
 
   Future<void> close() async {
     if (_closed) return;
+    _flushTerminalOutput();
     _closed = true;
+    _outputFlushTimer?.cancel();
     await Future.wait(
       _subscriptions.map((subscription) => subscription.cancel()),
     );

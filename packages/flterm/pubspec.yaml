@@ -1,0 +1,16 @@
+name: flterm
+description: Local MaidKit fork of flterm with smooth cursor motion.
+version: 0.0.4+maidkit.1
+homepage: https://github.com/elias8/libghostty
+repository: https://github.com/elias8/libghostty/tree/main/packages/flterm
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image: ^4.8.0
+  libghostty: ^0.0.10
+  meta: ^1.18.0

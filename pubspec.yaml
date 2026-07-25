@@ -54,10 +54,7 @@ dependencies:
       ref: 6fae92d21b4c80ce1b8f71c1190d7970cf722bd4
   local_auth: ^3.0.2
   flterm:
-    git:
-      url: https://github.com/elias8/libghostty.git
-      path: packages/flterm
-      ref: flterm-v0.0.4
+    path: packages/flterm
   shared_preferences: ^2.5.5
   super_context_menu: ^0.9.1
   uuid: ^4.6.0

@@ -405,11 +405,9 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/flterm"
-      ref: "flterm-v0.0.4"
-      resolved-ref: "9448356bacb0ec3b93431e4c6a9a859e6b3bc21b"
-      url: "https://github.com/elias8/libghostty.git"
-    source: git
-    version: "0.0.4"
+      relative: true
+    source: path
+    version: "0.0.4+maidkit.1"
   flutter:
     dependency: "direct main"
     description: flutter

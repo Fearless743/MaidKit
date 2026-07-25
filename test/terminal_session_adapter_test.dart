@@ -82,6 +82,10 @@ void main() {
     final ghosttyView = ghostty.buildView() as flterm.TerminalView;
     expect(ghosttyView.theme!.background, scheme.background);
     expect(ghosttyView.theme!.foreground, scheme.foreground);
+    expect(
+      ghosttyView.theme!.cursorMotionDuration,
+      const Duration(milliseconds: 90),
+    );
   });
 
   test('Ghostty adapter encodes cursor keys for the remote shell', () async {
@@ -160,11 +164,10 @@ void main() {
       pixelHeight: 720,
     );
     adapter.emitResize(resize);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 12));
 
     expect(adapter.received, [
-      Uint8List.fromList([1, 2]),
-      Uint8List.fromList([3]),
+      Uint8List.fromList([1, 2, 3]),
     ]);
     expect(sent, [
       Uint8List.fromList([4]),
