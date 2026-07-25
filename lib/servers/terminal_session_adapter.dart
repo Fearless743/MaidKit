@@ -22,6 +22,24 @@ abstract interface class TerminalSessionAdapter {
   /// Terminal size changes requested by the renderer.
   Stream<TerminalResize> get resizeEvents;
 
+  /// Whether the remote shell has reported that a command is active.
+  ///
+  /// This is informed by shell-integration/progress control sequences when
+  /// available, with a conservative Enter-to-prompt fallback for ordinary
+  /// interactive shells.
+  Stream<bool> get taskRunning;
+
+  /// Detailed task activity, including a percentage when the terminal or its
+  /// command reports one.
+  Stream<TerminalTaskActivity> get taskActivity;
+
+  /// Latest task activity value, used before [taskRunning] emits its first
+  /// event.
+  bool get isTaskRunning;
+
+  /// Latest detailed task activity value.
+  TerminalTaskActivity get currentTaskActivity;
+
   /// Displays bytes received from the remote shell.
   void write(Uint8List bytes);
 
@@ -66,6 +84,110 @@ class TerminalResize {
   final int pixelHeight;
 }
 
+/// Tracks shell activity without interpreting terminal text as command output.
+///
+/// OSC 133 (FinalTerm/iTerm shell integration), OSC 633 (VS Code shell
+/// integration), and OSC 9;4 (Windows Terminal progress) are established
+/// terminal conventions. Regular shells rarely enable these by default, so
+/// pressing Enter starts the indicator and a conventional prompt ends it.
+class TerminalTaskActivity {
+  const TerminalTaskActivity({required this.running, this.progress});
+
+  final bool running;
+
+  /// Completion fraction in the inclusive 0–1 range, if known.
+  final double? progress;
+}
+
+class TerminalActivityTracker {
+  final _changes = StreamController<TerminalTaskActivity>.broadcast();
+  var _running = false;
+  double? _progress;
+  var _recentOutput = '';
+
+  Stream<bool> get runningChanges =>
+      _changes.stream.map((activity) => activity.running);
+  Stream<TerminalTaskActivity> get changes => _changes.stream;
+  bool get isRunning => _running;
+  TerminalTaskActivity get current =>
+      TerminalTaskActivity(running: _running, progress: _progress);
+
+  void sentInput(String text) {
+    if (text.contains('\n') || text.contains('\r')) _setRunning(true);
+  }
+
+  void receivedOutput(Uint8List bytes) {
+    if (bytes.isEmpty) return;
+    _recentOutput += utf8.decode(bytes, allowMalformed: true);
+    if (_recentOutput.length > 1024) {
+      _recentOutput = _recentOutput.substring(_recentOutput.length - 1024);
+    }
+
+    // OSC 133 / 633: C = command execution started, D = command finished.
+    final osc = RegExp(
+      r'\x1b](?:133|633);([A-D])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\)',
+    );
+    for (final match in osc.allMatches(_recentOutput)) {
+      switch (match.group(1)) {
+        case 'C':
+          _setRunning(true);
+        case 'A':
+        case 'D':
+          _setRunning(false);
+      }
+    }
+
+    // Windows Terminal progress: 0 clears, 1/2/3 represent progress states.
+    final progress = RegExp(r'\x1b]9;4;([0-3])(?:;(\d+))?(?:\x07|\x1b\\)');
+    for (final match in progress.allMatches(_recentOutput)) {
+      final state = match.group(1)!;
+      final percent = int.tryParse(match.group(2) ?? '');
+      _setActivity(
+        running: state != '0',
+        progress: state == '1' && percent != null
+            ? percent.clamp(0, 100) / 100
+            : null,
+      );
+    }
+
+    // Fallback for shells without integration. This deliberately accepts only
+    // a prompt-looking final line, avoiding false completion during ordinary
+    // command output.
+    final visible = _recentOutput.replaceAll(
+      RegExp(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)'),
+      '',
+    );
+    if (RegExp(r'(?:^|[\r\n])[^\r\n]{0,160}[\$#%>❯➜]\s*$').hasMatch(visible)) {
+      _setActivity(running: false);
+    } else {
+      // Many CLI tools render a standalone percentage without emitting a
+      // terminal progress sequence. Limit this to a line ending in `%` so
+      // incidental values such as CPU usage do not hijack the tab indicator.
+      final percentage = RegExp(r'(?:^|[\r\n])[^\r\n]{0,120}\b(\d{1,3})%\s*$');
+      RegExpMatch? latest;
+      for (final match in percentage.allMatches(visible)) {
+        latest = match;
+      }
+      final value = latest == null ? null : int.tryParse(latest.group(1)!);
+      if (value != null && value <= 100) {
+        _setActivity(running: true, progress: value / 100);
+      }
+    }
+  }
+
+  void _setRunning(bool value) => _setActivity(running: value);
+
+  void _setActivity({required bool running, double? progress}) {
+    final normalizedProgress = running ? progress : null;
+    if (_running == running && _progress == normalizedProgress) return;
+    _running = running;
+    _progress = normalizedProgress;
+    if (!_changes.isClosed) _changes.add(current);
+  }
+
+  Future<void> dispose() => _changes.close();
+}
+
 abstract interface class TerminalSessionAdapterFactory {
   TerminalSessionAdapter create();
 }
@@ -108,7 +230,10 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   XtermTerminalSessionAdapter({required this.colorScheme})
     : _terminal = Terminal(maxLines: 10000) {
     _terminal.onOutput = (data) {
-      if (!_disposed) _outgoingBytes.add(Uint8List.fromList(utf8.encode(data)));
+      if (!_disposed) {
+        _activity.sentInput(data);
+        _outgoingBytes.add(Uint8List.fromList(utf8.encode(data)));
+      }
     };
     _terminal.onResize = (columns, rows, pixelWidth, pixelHeight) {
       if (!_disposed) {
@@ -132,6 +257,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   final _resizeEvents = StreamController<TerminalResize>.broadcast();
   final _highlights = <TerminalHighlight>[];
   final _matches = <_BufferMatch>[];
+  final _activity = TerminalActivityTracker();
   var _disposed = false;
 
   static const _hitColor = Color(0x66E5E510);
@@ -145,13 +271,29 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   Stream<TerminalResize> get resizeEvents => _resizeEvents.stream;
 
   @override
+  Stream<bool> get taskRunning => _activity.runningChanges;
+
+  @override
+  Stream<TerminalTaskActivity> get taskActivity => _activity.changes;
+
+  @override
+  bool get isTaskRunning => _activity.isRunning;
+
+  @override
+  TerminalTaskActivity get currentTaskActivity => _activity.current;
+
+  @override
   void write(Uint8List bytes) {
-    if (!_disposed) _terminal.write(utf8.decode(bytes, allowMalformed: true));
+    if (!_disposed) {
+      _activity.receivedOutput(bytes);
+      _terminal.write(utf8.decode(bytes, allowMalformed: true));
+    }
   }
 
   @override
   void sendInput(String text) {
     if (!_disposed && text.isNotEmpty) {
+      _activity.sentInput(text);
       _outgoingBytes.add(Uint8List.fromList(utf8.encode(text)));
     }
   }
@@ -332,6 +474,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
     _scrollController.dispose();
     await _outgoingBytes.close();
     await _resizeEvents.close();
+    await _activity.dispose();
   }
 }
 

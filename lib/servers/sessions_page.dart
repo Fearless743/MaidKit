@@ -569,7 +569,7 @@ class _DraggablePaneTab extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(_tabIcon(tab), size: 16),
+                          _TabActivityIcon(tab: tab),
                           const SizedBox(width: 6),
                           Text(
                             _tabLabel(tab),
@@ -631,9 +631,8 @@ class _PaneTabChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    _tabIcon(tab),
-                    size: 16,
+                  _TabActivityIcon(
+                    tab: tab,
                     color: selected ? scheme.primary : null,
                   ),
                   const SizedBox(width: 6),
@@ -663,6 +662,39 @@ class _PaneTabChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _TabActivityIcon extends StatelessWidget {
+  const _TabActivityIcon({required this.tab, this.color});
+
+  final SessionTab tab;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tab case TerminalTab(:final terminal)) {
+      return StreamBuilder<TerminalTaskActivity>(
+        stream: terminal.taskActivity,
+        initialData: terminal.currentTaskActivity,
+        builder: (context, snapshot) {
+          final activity = snapshot.data!;
+          if (activity.running) {
+            return SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                value: activity.progress,
+                strokeWidth: 2,
+                color: color,
+              ),
+            );
+          }
+          return Icon(Symbols.terminal, size: 16, color: color);
+        },
+      );
+    }
+    return Icon(_tabIcon(tab), size: 16, color: color);
   }
 }
 
@@ -925,7 +957,9 @@ class _TerminalStatusBar extends StatelessWidget {
           ),
         ),
         child: Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flterm/flterm.dart' as flterm;
@@ -39,7 +40,10 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
          ),
        ) {
     _controller.onOutput = (bytes) {
-      if (!_disposed) _outgoingBytes.add(Uint8List.fromList(bytes));
+      if (!_disposed) {
+        _activity.sentInput(utf8.decode(bytes, allowMalformed: true));
+        _outgoingBytes.add(Uint8List.fromList(bytes));
+      }
     };
     _controller.onResize = _onResize;
   }
@@ -52,6 +56,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   final _outgoingBytes = StreamController<Uint8List>.broadcast();
   final _resizeEvents = StreamController<TerminalResize>.broadcast();
   final _matches = <_FltermMatch>[];
+  final _activity = TerminalActivityTracker();
 
   var _disposed = false;
   var _lastColumns = 80;
@@ -64,13 +69,31 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   Stream<TerminalResize> get resizeEvents => _resizeEvents.stream;
 
   @override
+  Stream<bool> get taskRunning => _activity.runningChanges;
+
+  @override
+  Stream<TerminalTaskActivity> get taskActivity => _activity.changes;
+
+  @override
+  bool get isTaskRunning => _activity.isRunning;
+
+  @override
+  TerminalTaskActivity get currentTaskActivity => _activity.current;
+
+  @override
   void write(Uint8List bytes) {
-    if (!_disposed) _controller.write(bytes);
+    if (!_disposed) {
+      _activity.receivedOutput(bytes);
+      _controller.write(bytes);
+    }
   }
 
   @override
   void sendInput(String text) {
-    if (!_disposed && text.isNotEmpty) _controller.sendText(text);
+    if (!_disposed && text.isNotEmpty) {
+      _activity.sentInput(text);
+      _controller.sendText(text);
+    }
   }
 
   /// Exposes flterm's key encoder for the adapter integration tests and for
@@ -197,6 +220,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
     _scrollController.dispose();
     await _outgoingBytes.close();
     await _resizeEvents.close();
+    await _activity.dispose();
   }
 }
 

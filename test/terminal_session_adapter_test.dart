@@ -140,6 +140,36 @@ void main() {
     await adapter.dispose();
   });
 
+  test('terminal activity follows shell integration markers', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    addTearDown(adapter.dispose);
+    final states = <bool>[];
+    final subscription = adapter.taskRunning.listen(states.add);
+    addTearDown(subscription.cancel);
+
+    adapter.write(Uint8List.fromList(utf8.encode('\x1b]133;C\x07')));
+    adapter.write(Uint8List.fromList(utf8.encode('\x1b]133;D;0\x07')));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(states, [true, false]);
+    expect(adapter.isTaskRunning, isFalse);
+  });
+
+  test('terminal activity exposes reported progress percentages', () async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    addTearDown(adapter.dispose);
+    final activities = <TerminalTaskActivity>[];
+    final subscription = adapter.taskActivity.listen(activities.add);
+    addTearDown(subscription.cancel);
+
+    adapter.write(Uint8List.fromList(utf8.encode('\x1b]9;4;1;42\x07')));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(adapter.currentTaskActivity.running, isTrue);
+    expect(adapter.currentTaskActivity.progress, 0.42);
+    expect(activities.last.progress, 0.42);
+  });
+
   test('forwards shell output, terminal input, and resize events', () async {
     final stdout = StreamController<Uint8List>();
     final stderr = StreamController<Uint8List>();
@@ -219,6 +249,19 @@ class _FakeTerminalSessionAdapter implements TerminalSessionAdapter {
 
   @override
   Stream<TerminalResize> get resizeEvents => _resizes.stream;
+
+  @override
+  bool get isTaskRunning => false;
+
+  @override
+  Stream<bool> get taskRunning => const Stream.empty();
+
+  @override
+  Stream<TerminalTaskActivity> get taskActivity => const Stream.empty();
+
+  @override
+  TerminalTaskActivity get currentTaskActivity =>
+      const TerminalTaskActivity(running: false);
 
   @override
   Widget buildView({
