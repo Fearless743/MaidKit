@@ -9,12 +9,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'database_backup_service.dart';
 import 'server_providers.dart';
 import 'terminal_color_scheme.dart';
+import 'vault_service.dart';
 
 @RoutePage()
 class SettingsPage extends ConsumerWidget {
@@ -508,25 +510,107 @@ class SettingsPage extends ConsumerWidget {
 
     final password = await _backupPasswordDialog(context, confirm: false);
     if (password == null || !context.mounted) return;
-    final confirmed = await showDialog<bool>(
+
+    final destination = await showDialog<_ImportDestination>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('settingsImportConfirmTitle').tr(),
-        content: const Text('settingsImportConfirmDescription').tr(),
+        title: const Text('settingsImportDestinationTitle').tr(),
+        content: RadioGroup<_ImportDestination>(
+          groupValue: _ImportDestination.newVault,
+          onChanged: (value) {
+            if (value != null) Navigator.of(context).pop(value);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<_ImportDestination>(
+                value: _ImportDestination.newVault,
+                title: const Text('settingsImportNewVault').tr(),
+                subtitle: const Text('settingsImportNewVaultHint').tr(),
+              ),
+              RadioListTile<_ImportDestination>(
+                value: _ImportDestination.replaceCurrent,
+                title: const Text('settingsImportReplaceCurrent').tr(),
+                subtitle: const Text('settingsImportReplaceCurrentHint').tr(),
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('commonCancel').tr(),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('settingsImportData').tr(),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (destination == null || !context.mounted) return;
 
+    if (destination == _ImportDestination.replaceCurrent) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('settingsImportConfirmTitle').tr(),
+          content: const Text('settingsImportConfirmDescription').tr(),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('commonCancel').tr(),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('settingsImportReplaceCurrent').tr(),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      await _importIntoCurrentVault(context, ref, path, password);
+      return;
+    }
+
+    final vaultPath = await FilePicker.saveFile(
+      dialogTitle: 'vaultChooseFile'.tr(),
+      fileName: 'Imported MaidKit vault.maidkit',
+      type: FileType.custom,
+      allowedExtensions: const ['maidkit'],
+    );
+    if (vaultPath == null || !context.mounted) return;
+    if (await File(vaultPath).exists()) {
+      if (context.mounted) _showMessage('vaultFileAlreadyExists'.tr());
+      return;
+    }
+    if (!context.mounted) return;
+
+    final vaultPassword = await _newVaultPasswordDialog(context);
+    if (vaultPassword == null || !context.mounted) return;
+
+    final database = AppDatabase(filePath: vaultPath);
+    final vault = VaultService(database, vaultId: vaultPath);
+    try {
+      await vault.create(vaultPassword);
+      final archive = await File(path).readAsString();
+      await DatabaseBackupService(
+        database,
+        vault,
+      ).importArchive(archive, password);
+      await ref.read(activeVaultFileProvider.notifier).select(vaultPath);
+      if (context.mounted) _showMessage('settingsImportSuccess'.tr());
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
+      }
+    } finally {
+      await database.close();
+    }
+  }
+
+  Future<void> _importIntoCurrentVault(
+    BuildContext context,
+    WidgetRef ref,
+    String path,
+    String password,
+  ) async {
     try {
       final archive = await File(path).readAsString();
       await DatabaseBackupService(
@@ -542,6 +626,8 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
+enum _ImportDestination { newVault, replaceCurrent }
+
 Future<String?> _backupPasswordDialog(
   BuildContext context, {
   required bool confirm,
@@ -550,10 +636,29 @@ Future<String?> _backupPasswordDialog(
   builder: (context) => _BackupPasswordDialog(confirm: confirm),
 );
 
+Future<String?> _newVaultPasswordDialog(BuildContext context) =>
+    showDialog<String>(
+      context: context,
+      builder: (context) => const _BackupPasswordDialog(
+        confirm: true,
+        titleKey: 'settingsImportNewVaultPasswordTitle',
+        hintKey: 'settingsImportNewVaultPasswordHint',
+        actionKey: 'vaultCreateAction',
+      ),
+    );
+
 class _BackupPasswordDialog extends StatefulWidget {
-  const _BackupPasswordDialog({required this.confirm});
+  const _BackupPasswordDialog({
+    required this.confirm,
+    this.titleKey,
+    this.hintKey,
+    this.actionKey,
+  });
 
   final bool confirm;
+  final String? titleKey;
+  final String? hintKey;
+  final String? actionKey;
 
   @override
   State<_BackupPasswordDialog> createState() => _BackupPasswordDialogState();
@@ -574,19 +679,21 @@ class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
   Widget build(BuildContext context) => AlertDialog(
     scrollable: true,
     title: Text(
-      widget.confirm
-          ? 'settingsExportPasswordTitle'.tr()
-          : 'settingsImportPasswordTitle'.tr(),
-    ),
+      widget.titleKey ??
+          (widget.confirm
+              ? 'settingsExportPasswordTitle'
+              : 'settingsImportPasswordTitle'),
+    ).tr(),
     content: SizedBox(
       width: 360,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            (widget.confirm
-                    ? 'settingsExportVaultPasswordHint'
-                    : 'settingsImportVaultPasswordHint')
+            (widget.hintKey ??
+                    (widget.confirm
+                        ? 'settingsExportVaultPasswordHint'
+                        : 'settingsImportVaultPasswordHint'))
                 .tr(),
           ),
           const SizedBox(height: 16),
@@ -624,8 +731,8 @@ class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
         },
         child: Text(
           widget.confirm
-              ? 'settingsExportData'.tr()
-              : 'settingsImportData'.tr(),
+              ? (widget.actionKey ?? 'settingsExportData').tr()
+              : (widget.actionKey ?? 'settingsImportData').tr(),
         ),
       ),
     ],

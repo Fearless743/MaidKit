@@ -44,9 +44,17 @@ class MaidKitApp extends ConsumerWidget {
           OverlayEntry(
             builder: (context) => MaidKitWindowScaffold(
               title: 'title'.tr(),
-              child: VaultGate(
-                child: StartupConnectionBootstrap(
-                  child: child ?? const SizedBox.shrink(),
+              // The gate needs a Navigator for standard Material controls
+              // such as a dropdown. The app router remains below it and is
+              // only exposed once the vault unlocks.
+              child: Navigator(
+                onGenerateRoute: (settings) => MaterialPageRoute<void>(
+                  settings: settings,
+                  builder: (context) => VaultGate(
+                    child: StartupConnectionBootstrap(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ),
             ),

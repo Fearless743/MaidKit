@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
@@ -17,10 +18,76 @@ import 'startup_connection_preferences.dart';
 import 'vault_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
-  final database = AppDatabase();
+  final database = AppDatabase(filePath: ref.watch(activeVaultFileProvider));
   ref.onDispose(database.close);
   return database;
 });
+
+const _activeVaultFilePreference = 'active_vault_file';
+const _vaultFilesPreference = 'vault_files';
+
+/// The database file backing the currently selected vault. A null value keeps
+/// using the original MaidKit database so existing users migrate seamlessly.
+final activeVaultFileProvider =
+    NotifierProvider<ActiveVaultFileNotifier, String?>(
+      ActiveVaultFileNotifier.new,
+    );
+
+class ActiveVaultFileNotifier extends Notifier<String?> {
+  @override
+  String? build() {
+    _restore();
+    return null;
+  }
+
+  Future<void> _restore() async {
+    final preferences = await SharedPreferences.getInstance();
+    final path = preferences.getString(_activeVaultFilePreference);
+    if (path != null && path.isNotEmpty) {
+      await ref.read(vaultFilesProvider.notifier).remember(path);
+      state = path;
+    }
+  }
+
+  Future<void> select(String? path) async {
+    if (path != null) {
+      await ref.read(vaultFilesProvider.notifier).remember(path);
+    }
+    state = path;
+    final preferences = await SharedPreferences.getInstance();
+    if (path == null) {
+      await preferences.remove(_activeVaultFilePreference);
+    } else {
+      await preferences.setString(_activeVaultFilePreference, path);
+    }
+  }
+}
+
+/// Vault database files known to MaidKit. The original app database is a
+/// separate built-in option and is therefore not included in this list.
+final vaultFilesProvider = NotifierProvider<VaultFilesNotifier, List<String>>(
+  VaultFilesNotifier.new,
+);
+
+class VaultFilesNotifier extends Notifier<List<String>> {
+  @override
+  List<String> build() {
+    _restore();
+    return const [];
+  }
+
+  Future<void> _restore() async {
+    final preferences = await SharedPreferences.getInstance();
+    final stored = preferences.getStringList(_vaultFilesPreference) ?? const [];
+    state = [...stored, ...state.where((path) => !stored.contains(path))];
+  }
+
+  Future<void> remember(String path) async {
+    state = [path, ...state.where((value) => value != path)];
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(_vaultFilesPreference, state);
+  }
+}
 
 final serverRepositoryProvider = Provider<ServerRepository>((ref) {
   return ServerRepository(
@@ -34,7 +101,10 @@ final savedCredentialsProvider = StreamProvider<List<SavedCredential>>((ref) {
 });
 
 final vaultServiceProvider = Provider<VaultService>((ref) {
-  return VaultService(ref.watch(databaseProvider));
+  return VaultService(
+    ref.watch(databaseProvider),
+    vaultId: ref.watch(activeVaultFileProvider) ?? 'maid_kit',
+  );
 });
 
 final vaultExistsProvider = FutureProvider<bool>((ref) {

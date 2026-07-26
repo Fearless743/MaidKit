@@ -126,7 +126,17 @@ class ScriptSnippets extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'maid_kit'));
+  /// Opens the legacy app database when [filePath] is omitted, or a user
+  /// selected vault database when it is provided.
+  AppDatabase({String? filePath})
+    : super(
+        driftDatabase(
+          name: filePath ?? 'maid_kit',
+          native: filePath == null
+              ? null
+              : DriftNativeOptions(databasePath: () async => filePath),
+        ),
+      );
 
   @override
   int get schemaVersion => 9;

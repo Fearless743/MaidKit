@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:easy_localization/easy_localization.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -15,6 +18,7 @@ class VaultGate extends ConsumerStatefulWidget {
 }
 
 class _VaultGateState extends ConsumerState<VaultGate> {
+  static const _defaultVaultOption = '__default_vault__';
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
   bool _unlocked = false;
@@ -78,12 +82,71 @@ class _VaultGateState extends ConsumerState<VaultGate> {
     }
   }
 
+  Future<void> _openVaultFile() async {
+    if (_busy) return;
+    final selection = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['sqlite', 'db', 'maidkit'],
+    );
+    final path = selection?.files.singleOrNull?.path;
+    if (path == null) return;
+    await ref.read(activeVaultFileProvider.notifier).select(path);
+    if (mounted) {
+      setState(() {
+        _error = null;
+        _password.clear();
+        _confirmation.clear();
+      });
+    }
+  }
+
+  Future<void> _createVaultFile() async {
+    if (_busy) return;
+    final path = await FilePicker.saveFile(
+      dialogTitle: 'vaultChooseFile'.tr(),
+      fileName: 'MaidKit vault.maidkit',
+      type: FileType.custom,
+      allowedExtensions: const ['maidkit'],
+    );
+    if (path == null) return;
+    if (await File(path).exists()) {
+      if (mounted) setState(() => _error = 'vaultFileAlreadyExists'.tr());
+      return;
+    }
+    await ref.read(activeVaultFileProvider.notifier).select(path);
+    if (mounted) {
+      setState(() {
+        _error = null;
+        _password.clear();
+        _confirmation.clear();
+      });
+    }
+  }
+
+  Future<void> _selectVault(String? path) async {
+    if (_busy) return;
+    await ref.read(activeVaultFileProvider.notifier).select(path);
+    if (!mounted) return;
+    setState(() {
+      _error = null;
+      _password.clear();
+      _confirmation.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(activeVaultFileProvider, (previous, next) {
+      if (previous != next && _unlocked && mounted) {
+        setState(() => _unlocked = false);
+      }
+    });
     if (_unlocked) return widget.child;
 
     final exists = ref.watch(vaultExistsProvider);
     final biometricEnabled = ref.watch(biometricUnlockEnabledProvider);
+    final activeFile = ref.watch(activeVaultFileProvider);
+    final vaultFiles = ref.watch(vaultFilesProvider);
     final theme = Theme.of(context);
     final showBiometricUnlock = biometricEnabled.asData?.value ?? false;
 
@@ -96,108 +159,163 @@ class _VaultGateState extends ConsumerState<VaultGate> {
         ),
       ),
       data: (hasVault) => Scaffold(
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.asset(
-                        'assets/icons/icon.png',
-                        width: 72,
-                        height: 72,
-                        errorBuilder: (_, _, _) => Container(
-                          width: 72,
-                          height: 72,
-                          alignment: Alignment.center,
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Symbols.lock,
-                            size: 36,
-                            color: theme.colorScheme.primary,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.asset(
+                                'assets/icons/icon.png',
+                                width: 72,
+                                height: 72,
+                                errorBuilder: (_, _, _) => Container(
+                                  width: 72,
+                                  height: 72,
+                                  alignment: Alignment.center,
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
+                                  child: Icon(
+                                    Symbols.lock,
+                                    size: 36,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    hasVault
-                        ? 'vaultUnlockTitle'.tr()
-                        : 'vaultCreateTitle'.tr(),
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    hasVault
-                        ? 'vaultUnlockSubtitle'.tr()
-                        : 'vaultCreateSubtitle'.tr(),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: _password,
-                    obscureText: true,
-                    autofocus: true,
-                    enabled: !_busy,
-                    onSubmitted: (_) => _submit(hasVault),
-                    decoration: InputDecoration(
-                      labelText: 'vaultPasswordLabel'.tr(),
-                    ),
-                  ),
-                  if (!hasVault) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _confirmation,
-                      obscureText: true,
-                      enabled: !_busy,
-                      onSubmitted: (_) => _submit(false),
-                      decoration: InputDecoration(
-                        labelText: 'vaultConfirmPasswordLabel'.tr(),
-                      ),
-                    ),
-                  ],
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _busy ? null : () => _submit(hasVault),
-                    child: _busy
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
+                          const SizedBox(height: 20),
+                          Text(
                             hasVault
-                                ? 'vaultUnlockAction'.tr()
-                                : 'vaultCreateAction'.tr(),
+                                ? 'vaultUnlockTitle'.tr()
+                                : 'vaultCreateTitle'.tr(),
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            hasVault
+                                ? 'vaultUnlockSubtitle'.tr()
+                                : 'vaultCreateSubtitle'.tr(),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey(activeFile),
+                            initialValue: activeFile ?? _defaultVaultOption,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'vaultSelectLabel'.tr(),
+                            ),
+                            onChanged: _busy
+                                ? null
+                                : (value) => _selectVault(
+                                    value == _defaultVaultOption ? null : value,
+                                  ),
+                            items: [
+                              DropdownMenuItem(
+                                value: _defaultVaultOption,
+                                child: Text('vaultDefaultName'.tr()),
+                              ),
+                              ...vaultFiles.map(
+                                (path) => DropdownMenuItem(
+                                  value: path,
+                                  child: Text(
+                                    path.split(Platform.pathSeparator).last,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _password,
+                            obscureText: true,
+                            autofocus: true,
+                            enabled: !_busy,
+                            onSubmitted: (_) => _submit(hasVault),
+                            decoration: InputDecoration(
+                              labelText: 'vaultPasswordLabel'.tr(),
+                            ),
+                          ),
+                          if (!hasVault) ...[
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _confirmation,
+                              obscureText: true,
+                              enabled: !_busy,
+                              onSubmitted: (_) => _submit(false),
+                              decoration: InputDecoration(
+                                labelText: 'vaultConfirmPasswordLabel'.tr(),
+                              ),
+                            ),
+                          ],
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Text(
+                                _error!,
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: _busy ? null : () => _submit(hasVault),
+                            child: _busy
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    hasVault
+                                        ? 'vaultUnlockAction'.tr()
+                                        : 'vaultCreateAction'.tr(),
+                                  ),
+                          ),
+                          if (hasVault && showBiometricUnlock)
+                            TextButton(
+                              onPressed: _busy ? null : _unlockWithBiometrics,
+                              child: Text('vaultBiometricAction'.tr()),
+                            ).padding(top: 8),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: _busy ? null : _openVaultFile,
+                            icon: const Icon(Symbols.folder_open),
+                            label: Text('vaultOpenFileAction'.tr()),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: _busy ? null : _createVaultFile,
+                            icon: const Icon(Symbols.add),
+                            label: Text('vaultCreateFileAction'.tr()),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  if (hasVault && showBiometricUnlock)
-                    TextButton(
-                      onPressed: _busy ? null : _unlockWithBiometrics,
-                      child: Text('vaultBiometricAction'.tr()),
-                    ).padding(top: 8),
-                ],
+                ),
               ),
             ),
           ),

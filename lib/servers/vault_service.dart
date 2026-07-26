@@ -20,13 +20,19 @@ class BiometricUnlockException implements Exception {
 }
 
 class VaultService {
-  VaultService(this._database, {FlutterSecureStorage? secureStorage})
-    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  VaultService(
+    this._database, {
+    FlutterSecureStorage? secureStorage,
+    String vaultId = 'maid_kit',
+  }) : _biometricKey =
+           '${_biometricKeyPrefix}_${base64UrlEncode(utf8.encode(vaultId))}',
+       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
-  static const _biometricKey = 'maidkit_vault_data_key';
+  static const _biometricKeyPrefix = 'maidkit_vault_data_key';
   static const _iterations = 310000;
   final AppDatabase _database;
   final FlutterSecureStorage _secureStorage;
+  final String _biometricKey;
   final AesGcm _cipher = AesGcm.with256bits();
   SecretKey? _dataKey;
 
@@ -39,9 +45,6 @@ class VaultService {
       await _secureStorage.containsKey(key: _biometricKey);
 
   Future<void> create(String password) async {
-    if (password.length < 12) {
-      throw ArgumentError('Use a vault password with at least 12 characters.');
-    }
     final salt = _randomBytes(16);
     final wrappingKey = await _deriveKey(password, salt);
     final dataKey = await _cipher.newSecretKey();
