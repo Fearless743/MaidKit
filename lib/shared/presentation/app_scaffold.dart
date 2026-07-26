@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// File name used for an optional user-provided workspace background image.
 ///
 /// Keeping it in the application-support directory follows Island's approach
 /// and avoids making a large image part of the app bundle.
 const kMaidKitBackgroundImagePath = 'maidkit_app_background';
+const _maidKitBackgroundImageEnabledKey = 'maidkit_background_image_enabled';
 
 final maidKitBackgroundImageProvider = FutureProvider<File?>((ref) async {
   if (kIsWeb) return null;
@@ -18,6 +20,38 @@ final maidKitBackgroundImageProvider = FutureProvider<File?>((ref) async {
   final file = File('${directory.path}/$kMaidKitBackgroundImagePath');
   return file.existsSync() ? file : null;
 });
+
+final maidKitBackgroundImageEnabledProvider = FutureProvider<bool>((ref) async {
+  return await SharedPreferencesAsync().getBool(
+        _maidKitBackgroundImageEnabledKey,
+      ) ??
+      true;
+});
+
+Future<void> setMaidKitBackgroundImageEnabled(
+  WidgetRef ref,
+  bool enabled,
+) async {
+  await SharedPreferencesAsync().setBool(
+    _maidKitBackgroundImageEnabledKey,
+    enabled,
+  );
+  ref.invalidate(maidKitBackgroundImageEnabledProvider);
+}
+
+Future<void> saveMaidKitBackgroundImage(WidgetRef ref, File source) async {
+  final directory = await getApplicationSupportDirectory();
+  await source.copy('${directory.path}/$kMaidKitBackgroundImagePath');
+  await setMaidKitBackgroundImageEnabled(ref, true);
+  ref.invalidate(maidKitBackgroundImageProvider);
+}
+
+Future<void> clearMaidKitBackgroundImage(WidgetRef ref) async {
+  final directory = await getApplicationSupportDirectory();
+  final file = File('${directory.path}/$kMaidKitBackgroundImagePath');
+  if (await file.exists()) await file.delete();
+  ref.invalidate(maidKitBackgroundImageProvider);
+}
 
 /// Paints the normal app surface, optionally softened by a user background.
 ///
@@ -28,26 +62,30 @@ class MaidKitAppBackground extends ConsumerWidget {
     super.key,
     required this.child,
     required this.color,
+    this.showBackgroundImage = true,
   });
 
   final Widget child;
   final Color color;
+  final bool showBackgroundImage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final image = ref.watch(maidKitBackgroundImageProvider).asData?.value;
+    final isEnabled =
+        ref.watch(maidKitBackgroundImageEnabledProvider).asData?.value ?? true;
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color,
-        image: image == null
+        image: !showBackgroundImage || !isEnabled || image == null
             ? null
             : DecorationImage(
                 image: FileImage(image),
                 fit: BoxFit.cover,
-                opacity: 0.08,
+                opacity: 0.18,
                 colorFilter: ColorFilter.mode(
-                  color.withValues(alpha: 0.72),
+                  color.withValues(alpha: 0.48),
                   BlendMode.srcOver,
                 ),
               ),
@@ -77,6 +115,7 @@ class MaidKitAppScaffold extends StatelessWidget {
     this.extendBody = false,
     this.useSafeArea = true,
     this.backgroundColor,
+    this.showBackgroundImage = true,
   });
 
   final PreferredSizeWidget? appBar;
@@ -90,6 +129,7 @@ class MaidKitAppScaffold extends StatelessWidget {
   final bool extendBody;
   final bool useSafeArea;
   final Color? backgroundColor;
+  final bool showBackgroundImage;
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +139,7 @@ class MaidKitAppScaffold extends StatelessWidget {
         ? const SizedBox.shrink()
         : MaidKitAppBackground(
             color: pageColor,
+            showBackgroundImage: showBackgroundImage,
             child: useSafeArea
                 ? SafeArea(
                     top: appBar == null,

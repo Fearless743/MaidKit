@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -10,6 +11,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'database_backup_service.dart';
 import 'server_models.dart';
@@ -34,339 +36,419 @@ class SettingsPage extends ConsumerWidget {
       focusedServerRefreshIntervalProvider,
     );
     final credentials = ref.watch(savedCredentialsProvider);
+    final backgroundImage = ref.watch(maidKitBackgroundImageProvider);
+    final backgroundImageEnabled = ref.watch(
+      maidKitBackgroundImageEnabledProvider,
+    );
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
       orElse: () => adapterOptions.first,
     );
 
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          children: [
-            Text(
-              'settingsTitle',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ).tr(),
-            const SizedBox(height: 8),
-            Text(
-              'settingsDescription',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ).tr(),
-            const SizedBox(height: 32),
-            _SettingsSection(
-              titleKey: 'settingsAppearance',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('settingsTheme').tr(),
-                  const SizedBox(height: 4),
-                  Text(
-                    'settingsThemeDescription',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ).tr(),
-                  const SizedBox(height: 12),
-                  SegmentedButton<ThemeMode>(
-                    segments: [
-                      ButtonSegment(
-                        value: ThemeMode.system,
-                        label: Text('settingsThemeSystem'.tr()),
-                        icon: const Icon(Symbols.brightness_auto),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.light,
-                        label: Text('settingsThemeLight'.tr()),
-                        icon: const Icon(Symbols.light_mode),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.dark,
-                        label: Text('settingsThemeDark'.tr()),
-                        icon: const Icon(Symbols.dark_mode),
-                      ),
-                    ],
-                    selected: {themeMode},
-                    onSelectionChanged: (selection) {
-                      ref
-                          .read(themeModeProvider.notifier)
-                          .setThemeMode(selection.first);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  const _LanguageSwitcher(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _SettingsSection(
-              titleKey: 'settingsTerminal',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedAdapterOption.id,
-                    decoration: InputDecoration(
-                      labelText: 'settingsTerminalRenderer'.tr(),
-                    ),
-                    items: [
-                      for (final option in adapterOptions)
-                        DropdownMenuItem(
-                          value: option.id,
-                          child: Text(option.label),
+    return MaidKitAppScaffold(
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+            children: [
+              Text(
+                'settingsTitle',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ).tr(),
+              const SizedBox(height: 8),
+              Text(
+                'settingsDescription',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ).tr(),
+              const SizedBox(height: 32),
+              _SettingsSection(
+                titleKey: 'settingsAppearance',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('settingsTheme').tr(),
+                    const SizedBox(height: 4),
+                    Text(
+                      'settingsThemeDescription',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ).tr(),
+                    const SizedBox(height: 12),
+                    SegmentedButton<ThemeMode>(
+                      segments: [
+                        ButtonSegment(
+                          value: ThemeMode.system,
+                          label: Text('settingsThemeSystem'.tr()),
+                          icon: const Icon(Symbols.brightness_auto),
                         ),
+                        ButtonSegment(
+                          value: ThemeMode.light,
+                          label: Text('settingsThemeLight'.tr()),
+                          icon: const Icon(Symbols.light_mode),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.dark,
+                          label: Text('settingsThemeDark'.tr()),
+                          icon: const Icon(Symbols.dark_mode),
+                        ),
+                      ],
+                      selected: {themeMode},
+                      onSelectionChanged: (selection) {
+                        ref
+                            .read(themeModeProvider.notifier)
+                            .setThemeMode(selection.first);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const _LanguageSwitcher(),
+                    if (!kIsWeb) ...[
+                      const SizedBox(height: 24),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('settingsBackgroundImage').tr(),
+                        subtitle: Text(
+                          backgroundImage.asData?.value == null
+                              ? 'settingsBackgroundImageNone'.tr()
+                              : 'settingsBackgroundImageHint'.tr(),
+                        ),
+                        value: backgroundImageEnabled.asData?.value ?? true,
+                        onChanged: backgroundImage.asData?.value == null
+                            ? null
+                            : (enabled) => setMaidKitBackgroundImageEnabled(
+                                ref,
+                                enabled,
+                              ),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                _selectBackgroundImage(context, ref),
+                            icon: const Icon(Symbols.image),
+                            label: const Text(
+                              'settingsBackgroundImageChoose',
+                            ).tr(),
+                          ),
+                          if (backgroundImage.asData?.value != null)
+                            TextButton.icon(
+                              onPressed: () =>
+                                  _clearBackgroundImage(context, ref),
+                              icon: const Icon(Symbols.delete_outline),
+                              label: const Text(
+                                'settingsBackgroundImageClear',
+                              ).tr(),
+                            ),
+                        ],
+                      ),
                     ],
-                    onChanged: adapterOptions.length < 2
-                        ? null
-                        : (adapterId) async {
-                            if (adapterId != null) {
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsTerminal',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedAdapterOption.id,
+                      decoration: InputDecoration(
+                        labelText: 'settingsTerminalRenderer'.tr(),
+                      ),
+                      items: [
+                        for (final option in adapterOptions)
+                          DropdownMenuItem(
+                            value: option.id,
+                            child: Text(option.label),
+                          ),
+                      ],
+                      onChanged: adapterOptions.length < 2
+                          ? null
+                          : (adapterId) async {
+                              if (adapterId != null) {
+                                await ref
+                                    .read(
+                                      selectedTerminalSessionAdapterProvider
+                                          .notifier,
+                                    )
+                                    .select(adapterId);
+                              }
+                            },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      selectedAdapterOption.description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'settingsTerminalRendererHint',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ).tr(),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(terminalColorScheme.id),
+                      initialValue: terminalColorScheme.id,
+                      decoration: InputDecoration(
+                        labelText: 'settingsTerminalColorScheme'.tr(),
+                      ),
+                      items: [
+                        for (final scheme in TerminalColorSchemes.all)
+                          DropdownMenuItem(
+                            value: scheme.id,
+                            child: Text(scheme.label),
+                          ),
+                      ],
+                      onChanged: (schemeId) async {
+                        if (schemeId != null) {
+                          await ref
+                              .read(terminalColorSchemeProvider.notifier)
+                              .select(schemeId);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'settingsTerminalColorSchemeHint',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ).tr(),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('settingsAnimateCursor').tr(),
+                      subtitle: const Text('settingsAnimateCursorHint').tr(),
+                      value: cursorAnimationEnabled,
+                      onChanged: selectedAdapter == 'ghostty'
+                          ? (enabled) async {
                               await ref
-                                  .read(
-                                    selectedTerminalSessionAdapterProvider
-                                        .notifier,
-                                  )
-                                  .select(adapterId);
+                                  .read(cursorAnimationEnabledProvider.notifier)
+                                  .setEnabled(enabled);
                             }
-                          },
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    selectedAdapterOption.description,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'settingsTerminalRendererHint',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ).tr(),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey(terminalColorScheme.id),
-                    initialValue: terminalColorScheme.id,
-                    decoration: InputDecoration(
-                      labelText: 'settingsTerminalColorScheme'.tr(),
+                          : null,
                     ),
-                    items: [
-                      for (final scheme in TerminalColorSchemes.all)
-                        DropdownMenuItem(
-                          value: scheme.id,
-                          child: Text(scheme.label),
-                        ),
-                    ],
-                    onChanged: (schemeId) async {
-                      if (schemeId != null) {
-                        await ref
-                            .read(terminalColorSchemeProvider.notifier)
-                            .select(schemeId);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'settingsTerminalColorSchemeHint',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ).tr(),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('settingsAnimateCursor').tr(),
-                    subtitle: const Text('settingsAnimateCursorHint').tr(),
-                    value: cursorAnimationEnabled,
-                    onChanged: selectedAdapter == 'ghostty'
-                        ? (enabled) async {
-                            await ref
-                                .read(cursorAnimationEnabledProvider.notifier)
-                                .setEnabled(enabled);
-                          }
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _SettingsSection(
-              titleKey: 'settingsConnections',
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('settingsConnectOnStartup').tr(),
-                    subtitle: const Text('settingsConnectOnStartupHint').tr(),
-                    value: connectOnStartup,
-                    onChanged: (value) => ref
-                        .read(connectOnStartupProvider.notifier)
-                        .setEnabled(value),
-                  ),
-                  const SizedBox(height: 12),
-                  _IntervalDropdown(
-                    labelKey: 'settingsBackgroundRefreshInterval',
-                    helperKey: 'settingsBackgroundRefreshIntervalHint',
-                    value: refreshInterval,
-                    options: _refreshIntervals,
-                    fallback: _refreshIntervals[1],
-                    onChanged: (interval) {
-                      ref
-                          .read(serverMetricsRefreshIntervalProvider.notifier)
-                          .setInterval(interval);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _IntervalDropdown(
-                    labelKey: 'settingsFocusedRefreshInterval',
-                    helperKey: 'settingsFocusedRefreshIntervalHint',
-                    value: focusedRefreshInterval,
-                    options: _focusedRefreshIntervals,
-                    fallback: _focusedRefreshIntervals.first,
-                    onChanged: (interval) {
-                      ref
-                          .read(focusedServerRefreshIntervalProvider.notifier)
-                          .setInterval(interval);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            _SettingsSection(
-              titleKey: 'settingsSecurity',
-              padding: EdgeInsets.zero,
-              child: biometricEnabled.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: LinearProgressIndicator(),
+                  ],
                 ),
-                error: (error, _) => Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'settingsBiometricError'.tr(args: [error.toString()]),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsConnections',
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('settingsConnectOnStartup').tr(),
+                      subtitle: const Text('settingsConnectOnStartupHint').tr(),
+                      value: connectOnStartup,
+                      onChanged: (value) => ref
+                          .read(connectOnStartupProvider.notifier)
+                          .setEnabled(value),
+                    ),
+                    const SizedBox(height: 12),
+                    _IntervalDropdown(
+                      labelKey: 'settingsBackgroundRefreshInterval',
+                      helperKey: 'settingsBackgroundRefreshIntervalHint',
+                      value: refreshInterval,
+                      options: _refreshIntervals,
+                      fallback: _refreshIntervals[1],
+                      onChanged: (interval) {
+                        ref
+                            .read(serverMetricsRefreshIntervalProvider.notifier)
+                            .setInterval(interval);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _IntervalDropdown(
+                      labelKey: 'settingsFocusedRefreshInterval',
+                      helperKey: 'settingsFocusedRefreshIntervalHint',
+                      value: focusedRefreshInterval,
+                      options: _focusedRefreshIntervals,
+                      fallback: _focusedRefreshIntervals.first,
+                      onChanged: (interval) {
+                        ref
+                            .read(focusedServerRefreshIntervalProvider.notifier)
+                            .setInterval(interval);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsSecurity',
+                padding: EdgeInsets.zero,
+                child: biometricEnabled.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: LinearProgressIndicator(),
+                  ),
+                  error: (error, _) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'settingsBiometricError'.tr(args: [error.toString()]),
+                    ),
+                  ),
+                  data: (enabled) => SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    title: const Text('settingsBiometricUnlock').tr(),
+                    subtitle: const Text('settingsBiometricUnlockHint').tr(),
+                    value: enabled,
+                    onChanged: (value) =>
+                        _setBiometricUnlock(context, ref, value),
                   ),
                 ),
-                data: (enabled) => SwitchListTile(
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsAbout',
+                padding: EdgeInsets.zero,
+                child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  title: const Text('settingsBiometricUnlock').tr(),
-                  subtitle: const Text('settingsBiometricUnlockHint').tr(),
-                  value: enabled,
-                  onChanged: (value) =>
-                      _setBiometricUnlock(context, ref, value),
+                  leading: const Icon(Symbols.info),
+                  title: Text('aboutTitle'.tr()),
+                  subtitle: Text('settingsAboutHint'.tr()),
+                  trailing: const Icon(Symbols.chevron_right),
+                  onTap: () => context.router.push(const AboutRoute()),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            _SettingsSection(
-              titleKey: 'settingsAbout',
-              padding: EdgeInsets.zero,
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                leading: const Icon(Symbols.info),
-                title: Text('aboutTitle'.tr()),
-                subtitle: Text('settingsAboutHint'.tr()),
-                trailing: const Icon(Symbols.chevron_right),
-                onTap: () => context.router.push(const AboutRoute()),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _SettingsSection(
-              titleKey: 'settingsCredentials',
-              padding: EdgeInsets.zero,
-              child: ExpansionTile(
-                shape: const Border(),
-                collapsedShape: const Border(),
-                title: const Text('settingsCredentials').tr(),
-                children: [
-                  credentials.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: LinearProgressIndicator(),
-                    ),
-                    error: (error, _) => Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(error.toString()),
-                    ),
-                    data: (items) => Column(
-                      children: [
-                        for (final credential in items) ...[
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsCredentials',
+                padding: EdgeInsets.zero,
+                child: ExpansionTile(
+                  shape: const Border(),
+                  collapsedShape: const Border(),
+                  title: const Text('settingsCredentials').tr(),
+                  children: [
+                    credentials.when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: LinearProgressIndicator(),
+                      ),
+                      error: (error, _) => Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(error.toString()),
+                      ),
+                      data: (items) => Column(
+                        children: [
+                          for (final credential in items) ...[
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              leading: Icon(
+                                credential.credentialType ==
+                                        CredentialType.privateKey.name
+                                    ? Symbols.key
+                                    : Symbols.password,
+                              ),
+                              title: Text(credential.name),
+                              subtitle: Text(
+                                credential.credentialType ==
+                                        CredentialType.privateKey.name
+                                    ? 'serverAuthPrivateKey'.tr()
+                                    : 'serverAuthPassword'.tr(),
+                              ),
+                              trailing: Wrap(
+                                spacing: 4,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'settingsCredentialEdit'.tr(),
+                                    onPressed: () => _editCredential(
+                                      context,
+                                      ref,
+                                      credential,
+                                    ),
+                                    icon: const Icon(Symbols.edit),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'commonDelete'.tr(),
+                                    onPressed: () => _deleteCredential(
+                                      context,
+                                      ref,
+                                      credential,
+                                    ),
+                                    icon: const Icon(Symbols.delete_outline),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                             ),
-                            leading: Icon(
-                              credential.credentialType ==
-                                      CredentialType.privateKey.name
-                                  ? Symbols.key
-                                  : Symbols.password,
-                            ),
-                            title: Text(credential.name),
-                            subtitle: Text(
-                              credential.credentialType ==
-                                      CredentialType.privateKey.name
-                                  ? 'serverAuthPrivateKey'.tr()
-                                  : 'serverAuthPassword'.tr(),
-                            ),
-                            trailing: Wrap(
-                              spacing: 4,
-                              children: [
-                                IconButton(
-                                  tooltip: 'settingsCredentialEdit'.tr(),
-                                  onPressed: () =>
-                                      _editCredential(context, ref, credential),
-                                  icon: const Icon(Symbols.edit),
-                                ),
-                                IconButton(
-                                  tooltip: 'commonDelete'.tr(),
-                                  onPressed: () => _deleteCredential(
-                                    context,
-                                    ref,
-                                    credential,
-                                  ),
-                                  icon: const Icon(Symbols.delete_outline),
-                                ),
-                              ],
-                            ),
+                            leading: const Icon(Symbols.add),
+                            title: const Text('settingsCredentialAdd').tr(),
+                            onTap: () => _addCredential(context, ref),
                           ),
                         ],
-                        ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
-                          leading: const Icon(Symbols.add),
-                          title: const Text('settingsCredentialAdd').tr(),
-                          onTap: () => _addCredential(context, ref),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            _SettingsSection(
-              titleKey: 'settingsData',
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    leading: const Icon(Symbols.file_download),
-                    title: const Text('settingsExportData').tr(),
-                    subtitle: const Text('settingsExportDataHint').tr(),
-                    onTap: () => _exportDatabase(context, ref),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    leading: const Icon(Symbols.file_upload),
-                    title: const Text('settingsImportData').tr(),
-                    subtitle: const Text('settingsImportDataHint').tr(),
-                    onTap: () => _importDatabase(context, ref),
-                  ),
-                ],
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsData',
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
+                      leading: const Icon(Symbols.file_download),
+                      title: const Text('settingsExportData').tr(),
+                      subtitle: const Text('settingsExportDataHint').tr(),
+                      onTap: () => _exportDatabase(context, ref),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
+                      leading: const Icon(Symbols.file_upload),
+                      title: const Text('settingsImportData').tr(),
+                      subtitle: const Text('settingsImportDataHint').tr(),
+                      onTap: () => _importDatabase(context, ref),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _selectBackgroundImage(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final selection = await FilePicker.pickFiles(
+      dialogTitle: 'settingsBackgroundImageChoose'.tr(),
+      type: FileType.image,
+    );
+    final path = selection?.files.singleOrNull?.path;
+    if (path == null) return;
+    try {
+      await saveMaidKitBackgroundImage(ref, File(path));
+    } catch (error) {
+      if (context.mounted) _showMessage(error.toString());
+    }
+  }
+
+  Future<void> _clearBackgroundImage(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    await clearMaidKitBackgroundImage(ref);
+    if (context.mounted) _showMessage('settingsBackgroundImageCleared'.tr());
   }
 
   Future<void> _setBiometricUnlock(

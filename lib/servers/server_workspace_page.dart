@@ -56,6 +56,7 @@ class _ServerTabsShell extends ConsumerWidget {
 
         return MaidKitAppScaffold(
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+          showBackgroundImage: false,
           body: isWide
               ? Row(
                   children: [
