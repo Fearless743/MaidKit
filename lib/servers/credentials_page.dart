@@ -1,0 +1,307 @@
+import 'package:easy_localization/easy_localization.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+import 'package:maid_kit/data/local/app_database.dart';
+
+import 'server_models.dart';
+import 'server_providers.dart';
+
+class CredentialsPage extends ConsumerWidget {
+  const CredentialsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final credentials = ref.watch(savedCredentialsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'assetsCredentialsTitle'.tr(),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            FilledButton.icon(
+              onPressed: () => _addCredential(context, ref),
+              icon: const Icon(Symbols.add),
+              label: Text('settingsCredentialAdd'.tr()),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'assetsCredentialsDescription'.tr(),
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        credentials.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (error, _) => Text(error.toString()),
+          data: (items) => Column(
+            children: [
+              for (final credential in items)
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: Icon(
+                    credential.credentialType == CredentialType.privateKey.name
+                        ? Symbols.key
+                        : Symbols.password,
+                  ),
+                  title: Text(credential.name),
+                  subtitle: Text(
+                    credential.credentialType == CredentialType.privateKey.name
+                        ? 'serverAuthPrivateKey'.tr()
+                        : 'serverAuthPassword'.tr(),
+                  ),
+                  trailing: Wrap(
+                    spacing: 4,
+                    children: [
+                      IconButton(
+                        tooltip: 'settingsCredentialEdit'.tr(),
+                        onPressed: () =>
+                            _editCredential(context, ref, credential),
+                        icon: const Icon(Symbols.edit),
+                      ),
+                      IconButton(
+                        tooltip: 'commonDelete'.tr(),
+                        onPressed: () =>
+                            _deleteCredential(context, ref, credential),
+                        icon: const Icon(Symbols.delete_outline),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _addCredential(BuildContext context, WidgetRef ref) async {
+    final draft = await showDialog<SavedCredentialDraft>(
+      context: context,
+      builder: (_) => const _CredentialEditorDialog(),
+    );
+    if (draft == null) return;
+    try {
+      await ref.read(serverRepositoryProvider).createCredential(draft);
+    } catch (error) {
+      if (context.mounted) _showMessage(context, error.toString());
+    }
+  }
+
+  Future<void> _editCredential(
+    BuildContext context,
+    WidgetRef ref,
+    SavedCredential credential,
+  ) async {
+    try {
+      final value = await ref
+          .read(serverRepositoryProvider)
+          .decryptCredential(credential);
+      if (!context.mounted) return;
+      final draft = await showDialog<SavedCredentialDraft>(
+        context: context,
+        builder: (_) => _CredentialEditorDialog(
+          initial: SavedCredentialDraft(
+            name: credential.name,
+            credential: value,
+          ),
+        ),
+      );
+      if (draft != null) {
+        await ref
+            .read(serverRepositoryProvider)
+            .updateCredential(credential, draft);
+      }
+    } catch (error) {
+      if (context.mounted) _showMessage(context, error.toString());
+    }
+  }
+
+  Future<void> _deleteCredential(
+    BuildContext context,
+    WidgetRef ref,
+    SavedCredential credential,
+  ) async {
+    final repository = ref.read(serverRepositoryProvider);
+    final uses = await repository.serversUsingCredential(credential.id);
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('settingsCredentialDeleteTitle').tr(),
+        content: Text(
+          'settingsCredentialDeleteDescription'.tr(args: ['$uses']),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('commonCancel').tr(),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('commonDelete').tr(),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await repository.deleteCredential(credential);
+  }
+}
+
+class _CredentialEditorDialog extends StatefulWidget {
+  const _CredentialEditorDialog({this.initial});
+
+  final SavedCredentialDraft? initial;
+
+  @override
+  State<_CredentialEditorDialog> createState() =>
+      _CredentialEditorDialogState();
+}
+
+class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
+  final _form = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _secret = TextEditingController();
+  final _passphrase = TextEditingController();
+  CredentialType _type = CredentialType.privateKey;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initial;
+    if (initial == null) return;
+    _name.text = initial.name;
+    _type = initial.credential.type;
+    _secret.text =
+        initial.credential.password ?? initial.credential.privateKey ?? '';
+    _passphrase.text = initial.credential.keyPassphrase ?? '';
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _secret.dispose();
+    _passphrase.dispose();
+    super.dispose();
+  }
+
+  String? _required(String? value) =>
+      value == null || value.trim().isEmpty ? 'commonRequired'.tr() : null;
+
+  Future<void> _pickKey() async {
+    final result = await FilePicker.pickFiles(withData: true);
+    final bytes = result?.files.singleOrNull?.bytes;
+    if (bytes != null && mounted) {
+      setState(() => _secret.text = String.fromCharCodes(bytes));
+    }
+  }
+
+  void _save() {
+    if (!_form.currentState!.validate()) return;
+    final credential = _type == CredentialType.password
+        ? ServerCredential.password(_secret.text)
+        : ServerCredential.privateKey(
+            privateKey: _secret.text,
+            keyPassphrase: _passphrase.text.isEmpty ? null : _passphrase.text,
+          );
+    Navigator.pop(
+      context,
+      SavedCredentialDraft(name: _name.text, credential: credential),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(
+      widget.initial == null
+          ? 'settingsCredentialAdd'.tr()
+          : 'settingsCredentialEdit'.tr(),
+    ),
+    content: SizedBox(
+      width: 440,
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _name,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'settingsCredentialName'.tr(),
+              ),
+              validator: _required,
+            ),
+            const SizedBox(height: 16),
+            SegmentedButton<CredentialType>(
+              segments: [
+                ButtonSegment(
+                  value: CredentialType.password,
+                  label: Text('serverAuthPassword'.tr()),
+                ),
+                ButtonSegment(
+                  value: CredentialType.privateKey,
+                  label: Text('serverAuthPrivateKey'.tr()),
+                ),
+              ],
+              selected: {_type},
+              onSelectionChanged: (value) =>
+                  setState(() => _type = value.first),
+            ),
+            const SizedBox(height: 16),
+            if (_type == CredentialType.password)
+              TextFormField(
+                controller: _secret,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'serverPasswordLabel'.tr(),
+                ),
+                validator: _required,
+              )
+            else ...[
+              TextFormField(
+                controller: _secret,
+                minLines: 4,
+                maxLines: 7,
+                decoration: InputDecoration(
+                  labelText: 'serverPrivateKeyLabel'.tr(),
+                  suffixIcon: IconButton(
+                    onPressed: _pickKey,
+                    icon: const Icon(Symbols.upload_file),
+                  ),
+                ),
+                validator: _required,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _passphrase,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'serverKeyPassphraseLabel'.tr(),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('commonCancel').tr(),
+      ),
+      FilledButton(onPressed: _save, child: const Text('commonSave').tr()),
+    ],
+  );
+}
+
+void _showMessage(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}

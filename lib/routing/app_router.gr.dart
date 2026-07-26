@@ -9,29 +9,30 @@
 // coverage:ignore-file
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'package:auto_route/auto_route.dart' as _i10;
-import 'package:flutter/material.dart' as _i11;
-import 'package:maid_kit/containers/container_detail_page.dart' as _i2;
-import 'package:maid_kit/containers/container_models.dart' as _i13;
-import 'package:maid_kit/containers/project_detail_page.dart' as _i3;
-import 'package:maid_kit/containers/projects_page.dart' as _i4;
-import 'package:maid_kit/data/local/app_database.dart' as _i12;
+import 'package:auto_route/auto_route.dart' as _i11;
+import 'package:flutter/material.dart' as _i12;
+import 'package:maid_kit/containers/container_detail_page.dart' as _i3;
+import 'package:maid_kit/containers/container_models.dart' as _i14;
+import 'package:maid_kit/containers/project_detail_page.dart' as _i4;
+import 'package:maid_kit/containers/projects_page.dart' as _i5;
+import 'package:maid_kit/data/local/app_database.dart' as _i13;
 import 'package:maid_kit/servers/about_page.dart' as _i1;
-import 'package:maid_kit/servers/server_detail_page.dart' as _i5;
-import 'package:maid_kit/servers/server_workspace_page.dart' as _i6;
-import 'package:maid_kit/servers/servers_page.dart' as _i7;
-import 'package:maid_kit/servers/settings_page.dart' as _i8;
-import 'package:maid_kit/snippets/snippets_page.dart' as _i9;
+import 'package:maid_kit/servers/assets_page.dart' as _i2;
+import 'package:maid_kit/servers/server_detail_page.dart' as _i6;
+import 'package:maid_kit/servers/server_workspace_page.dart' as _i7;
+import 'package:maid_kit/servers/servers_page.dart' as _i8;
+import 'package:maid_kit/servers/settings_page.dart' as _i9;
+import 'package:maid_kit/snippets/snippets_page.dart' as _i10;
 
 /// generated route for
 /// [_i1.AboutPage]
-class AboutRoute extends _i10.PageRouteInfo<void> {
-  const AboutRoute({List<_i10.PageRouteInfo>? children})
+class AboutRoute extends _i11.PageRouteInfo<void> {
+  const AboutRoute({List<_i11.PageRouteInfo>? children})
     : super(AboutRoute.name, initialChildren: children);
 
   static const String name = 'AboutRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
       return const _i1.AboutPage();
@@ -40,17 +41,33 @@ class AboutRoute extends _i10.PageRouteInfo<void> {
 }
 
 /// generated route for
-/// [_i2.ContainerDetailPage]
+/// [_i2.AssetsPage]
+class AssetsRoute extends _i11.PageRouteInfo<void> {
+  const AssetsRoute({List<_i11.PageRouteInfo>? children})
+    : super(AssetsRoute.name, initialChildren: children);
+
+  static const String name = 'AssetsRoute';
+
+  static _i11.PageInfo page = _i11.PageInfo(
+    name,
+    builder: (data) {
+      return const _i2.AssetsPage();
+    },
+  );
+}
+
+/// generated route for
+/// [_i3.ContainerDetailPage]
 class ContainerDetailRoute
-    extends _i10.PageRouteInfo<ContainerDetailRouteArgs> {
+    extends _i11.PageRouteInfo<ContainerDetailRouteArgs> {
   ContainerDetailRoute({
-    _i11.Key? key,
-    required _i12.Server server,
-    required _i13.ContainerRuntime runtime,
-    required _i13.ContainerScope scope,
+    _i12.Key? key,
+    required _i13.Server server,
+    required _i14.ContainerRuntime runtime,
+    required _i14.ContainerScope scope,
     required String containerId,
     required String containerName,
-    List<_i10.PageRouteInfo>? children,
+    List<_i11.PageRouteInfo>? children,
   }) : super(
          ContainerDetailRoute.name,
          args: ContainerDetailRouteArgs(
@@ -66,11 +83,11 @@ class ContainerDetailRoute
 
   static const String name = 'ContainerDetailRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
       final args = data.argsAs<ContainerDetailRouteArgs>();
-      return _i2.ContainerDetailPage(
+      return _i3.ContainerDetailPage(
         key: args.key,
         server: args.server,
         runtime: args.runtime,
@@ -92,13 +109,13 @@ class ContainerDetailRouteArgs {
     required this.containerName,
   });
 
-  final _i11.Key? key;
+  final _i12.Key? key;
 
-  final _i12.Server server;
+  final _i13.Server server;
 
-  final _i13.ContainerRuntime runtime;
+  final _i14.ContainerRuntime runtime;
 
-  final _i13.ContainerScope scope;
+  final _i14.ContainerScope scope;
 
   final String containerId;
 
@@ -132,13 +149,13 @@ class ContainerDetailRouteArgs {
 }
 
 /// generated route for
-/// [_i3.ProjectDetailPage]
-class ProjectDetailRoute extends _i10.PageRouteInfo<ProjectDetailRouteArgs> {
+/// [_i4.ProjectDetailPage]
+class ProjectDetailRoute extends _i11.PageRouteInfo<ProjectDetailRouteArgs> {
   ProjectDetailRoute({
-    _i11.Key? key,
+    _i12.Key? key,
     int? projectId,
     int? linkId,
-    List<_i10.PageRouteInfo>? children,
+    List<_i11.PageRouteInfo>? children,
   }) : super(
          ProjectDetailRoute.name,
          args: ProjectDetailRouteArgs(
@@ -151,13 +168,13 @@ class ProjectDetailRoute extends _i10.PageRouteInfo<ProjectDetailRouteArgs> {
 
   static const String name = 'ProjectDetailRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
       final args = data.argsAs<ProjectDetailRouteArgs>(
         orElse: () => const ProjectDetailRouteArgs(),
       );
-      return _i3.ProjectDetailPage(
+      return _i4.ProjectDetailPage(
         key: args.key,
         projectId: args.projectId,
         linkId: args.linkId,
@@ -169,7 +186,7 @@ class ProjectDetailRoute extends _i10.PageRouteInfo<ProjectDetailRouteArgs> {
 class ProjectDetailRouteArgs {
   const ProjectDetailRouteArgs({this.key, this.projectId, this.linkId});
 
-  final _i11.Key? key;
+  final _i12.Key? key;
 
   final int? projectId;
 
@@ -194,31 +211,31 @@ class ProjectDetailRouteArgs {
 }
 
 /// generated route for
-/// [_i4.ProjectsPage]
-class ProjectsRoute extends _i10.PageRouteInfo<void> {
-  const ProjectsRoute({List<_i10.PageRouteInfo>? children})
+/// [_i5.ProjectsPage]
+class ProjectsRoute extends _i11.PageRouteInfo<void> {
+  const ProjectsRoute({List<_i11.PageRouteInfo>? children})
     : super(ProjectsRoute.name, initialChildren: children);
 
   static const String name = 'ProjectsRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
-      return const _i4.ProjectsPage();
+      return const _i5.ProjectsPage();
     },
   );
 }
 
 /// generated route for
-/// [_i5.ServerDetailPage]
-class ServerDetailRoute extends _i10.PageRouteInfo<ServerDetailRouteArgs> {
+/// [_i6.ServerDetailPage]
+class ServerDetailRoute extends _i11.PageRouteInfo<ServerDetailRouteArgs> {
   ServerDetailRoute({
-    _i11.Key? key,
-    required _i12.Server server,
+    _i12.Key? key,
+    required _i13.Server server,
     int initialTab = 0,
     String? initialComposeProject,
     bool embedded = false,
-    List<_i10.PageRouteInfo>? children,
+    List<_i11.PageRouteInfo>? children,
   }) : super(
          ServerDetailRoute.name,
          args: ServerDetailRouteArgs(
@@ -233,11 +250,11 @@ class ServerDetailRoute extends _i10.PageRouteInfo<ServerDetailRouteArgs> {
 
   static const String name = 'ServerDetailRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
       final args = data.argsAs<ServerDetailRouteArgs>();
-      return _i5.ServerDetailPage(
+      return _i6.ServerDetailPage(
         key: args.key,
         server: args.server,
         initialTab: args.initialTab,
@@ -257,9 +274,9 @@ class ServerDetailRouteArgs {
     this.embedded = false,
   });
 
-  final _i11.Key? key;
+  final _i12.Key? key;
 
-  final _i12.Server server;
+  final _i13.Server server;
 
   final int initialTab;
 
@@ -293,65 +310,65 @@ class ServerDetailRouteArgs {
 }
 
 /// generated route for
-/// [_i6.ServerWorkspacePage]
-class ServerWorkspaceRoute extends _i10.PageRouteInfo<void> {
-  const ServerWorkspaceRoute({List<_i10.PageRouteInfo>? children})
+/// [_i7.ServerWorkspacePage]
+class ServerWorkspaceRoute extends _i11.PageRouteInfo<void> {
+  const ServerWorkspaceRoute({List<_i11.PageRouteInfo>? children})
     : super(ServerWorkspaceRoute.name, initialChildren: children);
 
   static const String name = 'ServerWorkspaceRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
-      return const _i6.ServerWorkspacePage();
+      return const _i7.ServerWorkspacePage();
     },
   );
 }
 
 /// generated route for
-/// [_i7.ServersPage]
-class ServersRoute extends _i10.PageRouteInfo<void> {
-  const ServersRoute({List<_i10.PageRouteInfo>? children})
+/// [_i8.ServersPage]
+class ServersRoute extends _i11.PageRouteInfo<void> {
+  const ServersRoute({List<_i11.PageRouteInfo>? children})
     : super(ServersRoute.name, initialChildren: children);
 
   static const String name = 'ServersRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
-      return const _i7.ServersPage();
+      return const _i8.ServersPage();
     },
   );
 }
 
 /// generated route for
-/// [_i8.SettingsPage]
-class SettingsRoute extends _i10.PageRouteInfo<void> {
-  const SettingsRoute({List<_i10.PageRouteInfo>? children})
+/// [_i9.SettingsPage]
+class SettingsRoute extends _i11.PageRouteInfo<void> {
+  const SettingsRoute({List<_i11.PageRouteInfo>? children})
     : super(SettingsRoute.name, initialChildren: children);
 
   static const String name = 'SettingsRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
-      return const _i8.SettingsPage();
+      return const _i9.SettingsPage();
     },
   );
 }
 
 /// generated route for
-/// [_i9.SnippetsPage]
-class SnippetsRoute extends _i10.PageRouteInfo<void> {
-  const SnippetsRoute({List<_i10.PageRouteInfo>? children})
+/// [_i10.SnippetsPage]
+class SnippetsRoute extends _i11.PageRouteInfo<void> {
+  const SnippetsRoute({List<_i11.PageRouteInfo>? children})
     : super(SnippetsRoute.name, initialChildren: children);
 
   static const String name = 'SnippetsRoute';
 
-  static _i10.PageInfo page = _i10.PageInfo(
+  static _i11.PageInfo page = _i11.PageInfo(
     name,
     builder: (data) {
-      return const _i9.SnippetsPage();
+      return const _i10.SnippetsPage();
     },
   );
 }

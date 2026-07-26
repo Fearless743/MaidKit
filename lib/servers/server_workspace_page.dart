@@ -20,6 +20,7 @@ class ServerWorkspacePage extends StatelessWidget {
     return AutoTabsRouter(
       routes: const [
         ServersRoute(),
+        AssetsRoute(),
         ProjectsRoute(),
         SnippetsRoute(),
         SettingsRoute(),
@@ -62,7 +63,7 @@ class _ServerTabsShell extends ConsumerWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex < 3
+                      selectedIndex: tabsRouter.activeIndex < 4
                           ? tabsRouter.activeIndex
                           : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
@@ -77,7 +78,7 @@ class _ServerTabsShell extends ConsumerWidget {
                             const DeploySessionsRailButton(),
                             IconButton(
                               tooltip: 'tabSettings'.tr(),
-                              onPressed: () => tabsRouter.setActiveIndex(3),
+                              onPressed: () => tabsRouter.setActiveIndex(4),
                               icon: const Icon(Symbols.settings),
                             ),
                           ],
@@ -88,6 +89,14 @@ class _ServerTabsShell extends ConsumerWidget {
                           icon: const Icon(Symbols.dns),
                           selectedIcon: const Icon(Symbols.dns, fill: 1),
                           label: Text('tabServers').tr(),
+                        ),
+                        NavigationRailDestination(
+                          icon: const Icon(Symbols.inventory_2),
+                          selectedIcon: const Icon(
+                            Symbols.inventory_2,
+                            fill: 1,
+                          ),
+                          label: Text('tabAssets').tr(),
                         ),
                         NavigationRailDestination(
                           icon: const Icon(Symbols.deployed_code),
@@ -130,6 +139,11 @@ class _ServerTabsShell extends ConsumerWidget {
                       icon: const Icon(Symbols.dns),
                       selectedIcon: const Icon(Symbols.dns, fill: 1),
                       label: 'tabServers'.tr(),
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Symbols.inventory_2),
+                      selectedIcon: const Icon(Symbols.inventory_2, fill: 1),
+                      label: 'tabAssets'.tr(),
                     ),
                     NavigationDestination(
                       icon: const Icon(Symbols.deployed_code),

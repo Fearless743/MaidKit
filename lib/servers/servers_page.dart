@@ -26,7 +26,7 @@ class ServerDashboardTab extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _AddServerDialog(credentials: credentials),
+      builder: (_) => ServerEditorDialog(credentials: credentials),
     );
     if (draft == null || !context.mounted) return;
     try {
@@ -65,7 +65,7 @@ class ServerDashboardTab extends ConsumerWidget {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => _AddServerDialog(
+        builder: (_) => ServerEditorDialog(
           credentials: credentials,
           initial: ServerDraft(
             name: server.name,
@@ -892,16 +892,20 @@ class _EmptyServers extends StatelessWidget {
   );
 }
 
-class _AddServerDialog extends StatefulWidget {
-  const _AddServerDialog({required this.credentials, this.initial});
+class ServerEditorDialog extends StatefulWidget {
+  const ServerEditorDialog({
+    super.key,
+    required this.credentials,
+    this.initial,
+  });
 
   final ServerDraft? initial;
   final List<SavedCredential> credentials;
   @override
-  State<_AddServerDialog> createState() => _AddServerDialogState();
+  State<ServerEditorDialog> createState() => _AddServerDialogState();
 }
 
-class _AddServerDialogState extends State<_AddServerDialog> {
+class _AddServerDialogState extends State<ServerEditorDialog> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _host = TextEditingController();
