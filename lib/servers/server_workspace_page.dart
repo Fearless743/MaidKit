@@ -55,6 +55,7 @@ class _ServerTabsShell extends ConsumerWidget {
         final isWide = constraints.maxWidth > 768;
 
         return MaidKitAppScaffold(
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
           body: isWide
               ? Row(
                   children: [

@@ -24,18 +24,22 @@ final maidKitBackgroundImageProvider = FutureProvider<File?>((ref) async {
 /// The layer belongs inside a page scaffold rather than the root window shell,
 /// so a route's safe-area and back-swipe transitions remain self-contained.
 class MaidKitAppBackground extends ConsumerWidget {
-  const MaidKitAppBackground({super.key, required this.child});
+  const MaidKitAppBackground({
+    super.key,
+    required this.child,
+    required this.color,
+  });
 
   final Widget child;
+  final Color color;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final image = ref.watch(maidKitBackgroundImageProvider).asData?.value;
-    final scheme = Theme.of(context).colorScheme;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: scheme.surface,
+        color: color,
         image: image == null
             ? null
             : DecorationImage(
@@ -43,7 +47,7 @@ class MaidKitAppBackground extends ConsumerWidget {
                 fit: BoxFit.cover,
                 opacity: 0.08,
                 colorFilter: ColorFilter.mode(
-                  scheme.surface.withValues(alpha: 0.72),
+                  color.withValues(alpha: 0.72),
                   BlendMode.srcOver,
                 ),
               ),
@@ -72,6 +76,7 @@ class MaidKitAppScaffold extends StatelessWidget {
     this.endDrawer,
     this.extendBody = false,
     this.useSafeArea = true,
+    this.backgroundColor,
   });
 
   final PreferredSizeWidget? appBar;
@@ -84,12 +89,16 @@ class MaidKitAppScaffold extends StatelessWidget {
   final Widget? endDrawer;
   final bool extendBody;
   final bool useSafeArea;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final pageColor = backgroundColor ?? scheme.surface;
     final bodyContent = body == null
         ? const SizedBox.shrink()
         : MaidKitAppBackground(
+            color: pageColor,
             child: useSafeArea
                 ? SafeArea(
                     top: appBar == null,
@@ -100,7 +109,7 @@ class MaidKitAppScaffold extends StatelessWidget {
           );
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: pageColor,
       appBar: appBar,
       body: bodyContent,
       floatingActionButton: floatingActionButton,
