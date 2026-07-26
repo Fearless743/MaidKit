@@ -9,6 +9,7 @@ import 'package:styled_widget/styled_widget.dart';
 import 'package:super_context_menu/super_context_menu.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -168,8 +169,7 @@ class _ServersCatalog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return MaidKitAppScaffold(
       body: servers.when(
         data: (items) => items.isEmpty
             ? _EmptyServers(onAdd: onAdd)

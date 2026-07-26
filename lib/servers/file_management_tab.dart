@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:archive/archive_io.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -778,6 +780,113 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     return _FileDragData(side: _FileSide.remote, entries: selected);
   }
 
+  Future<void> _renameEntry(_ClipboardEntry entry) async {
+    if (_workingPath != null) return;
+    final name = await _showFileNameSheet(
+      context,
+      title: 'fileManagerRename'.tr(),
+      label: 'fileManagerName'.tr(),
+      initialName: entry.name,
+      actionLabel: 'fileManagerRename'.tr(),
+    );
+    if (name == null || name == entry.name || !mounted) return;
+
+    setState(() => _workingPath = entry.path);
+    try {
+      if (entry.side == _FileSide.local && entry.serverId == null) {
+        final destination =
+            '${File(entry.path).parent.path}${Platform.pathSeparator}$name';
+        if (entry.isDirectory) {
+          await Directory(entry.path).rename(destination);
+        } else {
+          await File(entry.path).rename(destination);
+        }
+        await _refreshLocal();
+      } else {
+        final sftp = entry.serverId == null ? await _sftp() : await _leftSftp();
+        final destination = _joinRemotePath(
+          _parentRemotePath(entry.path),
+          name,
+        );
+        await sftp.rename(entry.path, destination);
+        if (entry.serverId == null) {
+          await _refreshRemote();
+        } else {
+          await _refreshLeftRemote();
+        }
+      }
+      if (mounted) {
+        showStyledSnackBar(
+          message: name,
+          title: 'fileManagerRenamed'.tr(),
+          icon: Symbols.check_circle,
+          accentColor: Theme.of(context).colorScheme.primary,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: error.toString(),
+          title: 'fileManagerRenameFailed'.tr(),
+          icon: Symbols.error,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _workingPath = null);
+    }
+  }
+
+  Future<void> _createFolder(_FileSide side) async {
+    if (_workingPath != null) return;
+    final name = await _showFileNameSheet(
+      context,
+      title: 'fileManagerCreateFolder'.tr(),
+      label: 'fileManagerFolderName'.tr(),
+      actionLabel: 'fileManagerCreate'.tr(),
+    );
+    if (name == null || !mounted) return;
+
+    setState(() => _workingPath = name);
+    try {
+      if (side == _FileSide.local && !_leftIsRemote) {
+        await Directory(
+          '${_localDirectory.path}${Platform.pathSeparator}$name',
+        ).create();
+        await _refreshLocal();
+      } else {
+        final isLeftRemote = side == _FileSide.local;
+        final sftp = isLeftRemote ? await _leftSftp() : await _sftp();
+        final directory = isLeftRemote ? _leftRemotePath : _remotePath;
+        await sftp.mkdir(_joinRemotePath(directory, name));
+        if (isLeftRemote) {
+          await _refreshLeftRemote();
+        } else {
+          await _refreshRemote();
+        }
+      }
+      if (mounted) {
+        showStyledSnackBar(
+          message: name,
+          title: 'fileManagerFolderCreated'.tr(),
+          icon: Symbols.check_circle,
+          accentColor: Theme.of(context).colorScheme.primary,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: error.toString(),
+          title: 'fileManagerCreateFolderFailed'.tr(),
+          icon: Symbols.error,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _workingPath = null);
+    }
+  }
+
   void _setClipboard(_ClipboardMode mode) {
     final side = _focusedSide;
     if (side == null) return;
@@ -1351,6 +1460,24 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     bool notify = true,
     Future<void> Function()? onSuccess,
   }) async {
+    if (_isMobileLayout) {
+      if (entry.isDirectory) {
+        await _downloadDirectoryToDevice(
+          entry.path,
+          entry.name,
+          notify: notify,
+          onSuccess: onSuccess,
+        );
+      } else {
+        await _downloadToDevice(
+          entry.path,
+          entry.name,
+          notify: notify,
+          onSuccess: onSuccess,
+        );
+      }
+      return;
+    }
     if (entry.isDirectory) {
       await _downloadDirectory(
         entry.path,
@@ -1713,6 +1840,112 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       },
       onSuccess: onSuccess,
       onFinish: onFinish,
+    );
+  }
+
+  Future<void> _downloadToDevice(
+    String remotePath,
+    String filename, {
+    bool notify = true,
+    Future<void> Function()? onSuccess,
+  }) async {
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'maidkit-download-',
+    );
+    final temporaryFile = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}$filename',
+    );
+    await _runTransfer(
+      title: 'fileManagerDownloading'.tr(args: [filename]),
+      totalBytes: null,
+      notify: notify,
+      action: (controller, reportProgress) async {
+        final sftp = await _sftp();
+        final remoteFile = await sftp.open(
+          remotePath,
+          mode: SftpFileOpenMode.read,
+        );
+        final sink = temporaryFile.openWrite();
+        var transferredBytes = 0;
+        try {
+          await for (final chunk in remoteFile.read(
+            chunkSize: 64 * 1024,
+            maxPendingRequests: 4,
+          )) {
+            await controller.waitIfPaused();
+            sink.add(chunk);
+            transferredBytes += chunk.length;
+            reportProgress(transferredBytes);
+            if (transferredBytes % (1024 * 1024) < chunk.length) {
+              await sink.flush();
+            }
+          }
+        } finally {
+          await sink.close();
+          await remoteFile.close();
+        }
+        controller.throwIfCancelled();
+        await FileSaver.instance.saveAs(
+          name: filename,
+          filePath: temporaryFile.path,
+          includeExtension: false,
+          mimeType: MimeType.other,
+        );
+      },
+      onSuccess: onSuccess,
+      onFinish: () async {
+        try {
+          await temporaryDirectory.delete(recursive: true);
+        } catch (_) {}
+      },
+    );
+  }
+
+  Future<void> _downloadDirectoryToDevice(
+    String remotePath,
+    String name, {
+    bool notify = true,
+    Future<void> Function()? onSuccess,
+  }) async {
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'maidkit-download-',
+    );
+    final stagedDirectory = Directory(
+      '${temporaryDirectory.path}${Platform.pathSeparator}$name',
+    );
+    final archiveFile = File('${temporaryDirectory.path}/$name.zip');
+    await _runTransfer(
+      title: 'fileManagerDownloading'.tr(args: [name]),
+      totalBytes: null,
+      notify: notify,
+      action: (controller, reportProgress) async {
+        final sftp = await _sftp();
+        await _downloadRemoteDirectory(
+          sftp,
+          remotePath,
+          stagedDirectory,
+          controller: controller,
+          reportProgress: reportProgress,
+        );
+        controller.throwIfCancelled();
+        await ZipFileEncoder().zipDirectory(
+          stagedDirectory,
+          filename: archiveFile.path,
+        );
+        controller.throwIfCancelled();
+        await FileSaver.instance.saveAs(
+          name: '$name.zip',
+          filePath: archiveFile.path,
+          includeExtension: false,
+          mimeType: MimeType.zip,
+        );
+      },
+      onSuccess: onSuccess,
+      onFinish: () async {
+        try {
+          await temporaryDirectory.delete(recursive: true);
+        } catch (_) {}
+      },
     );
   }
 
@@ -2183,6 +2416,15 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           activator: const SingleActivator(LogicalKeyboardKey.keyV, meta: true),
           callback: () => _pasteInto(_FileSide.local),
         ),
+        if (onlyThis)
+          MenuAction(
+            title: 'fileManagerRename'.tr(),
+            attributes: MenuActionAttributes(disabled: busy),
+            callback: () {
+              _ensureLocalContextSelection(entry, index);
+              _renameEntry(_clipboardEntryForLocal(entry));
+            },
+          ),
         MenuSeparator(),
         MenuAction(
           title: entries.length == 1
@@ -2289,6 +2531,15 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           activator: const SingleActivator(LogicalKeyboardKey.keyV, meta: true),
           callback: () => _pasteInto(_FileSide.remote),
         ),
+        if (onlyThis)
+          MenuAction(
+            title: 'fileManagerRename'.tr(),
+            attributes: MenuActionAttributes(disabled: busy),
+            callback: () {
+              _ensureRemoteContextSelection(entry, index);
+              _renameEntry(_clipboardEntryForRemote(entry));
+            },
+          ),
         MenuSeparator(),
         MenuAction(
           title: entries.length == 1
@@ -2403,6 +2654,15 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           activator: const SingleActivator(LogicalKeyboardKey.keyV, meta: true),
           callback: () => _pasteInto(_FileSide.local),
         ),
+        if (onlyThis)
+          MenuAction(
+            title: 'fileManagerRename'.tr(),
+            attributes: MenuActionAttributes(disabled: busy),
+            callback: () {
+              _ensureLeftRemoteContextSelection(entry, index);
+              _renameEntry(_clipboardEntryForLeftRemote(entry));
+            },
+          ),
         MenuSeparator(),
         MenuAction(
           title: entries.length == 1
@@ -2429,6 +2689,11 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
         : _remotePath != '/';
     return Menu(
       children: [
+        MenuAction(
+          title: 'fileManagerCreateFolder'.tr(),
+          attributes: MenuActionAttributes(disabled: _workingPath != null),
+          callback: () => _createFolder(side),
+        ),
         MenuAction(
           title: 'fileManagerPaste'.tr(),
           attributes: MenuActionAttributes(disabled: !canPaste),
@@ -2551,6 +2816,16 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
             onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.local),
             headerActions: [
               IconButton(
+                tooltip: 'fileManagerCreateFolder'.tr(),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: _workingPath == null
+                    ? () => _createFolder(_FileSide.local)
+                    : null,
+                icon: const Icon(Symbols.create_new_folder, size: 18),
+              ),
+              IconButton(
                 tooltip: 'fileManagerUseAnotherServer'.tr(),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
@@ -2647,6 +2922,16 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       },
       onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.remote),
       headerActions: [
+        IconButton(
+          tooltip: 'fileManagerCreateFolder'.tr(),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          onPressed: _workingPath == null
+              ? () => _createFolder(_FileSide.remote)
+              : null,
+          icon: const Icon(Symbols.create_new_folder, size: 18),
+        ),
         if (_localCollapsed && !_isMobileLayout)
           IconButton(
             tooltip: 'fileManagerShowLocal'.tr(),
@@ -2717,15 +3002,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
                 ],
               );
             }
-            return Column(
-              children: [
-                if (showLocal) ...[
-                  SizedBox(height: constraints.maxHeight / 2, child: localPane),
-                  const Divider(height: 1),
-                ],
-                Expanded(child: remotePane),
-              ],
-            );
+            return remotePane;
           },
         );
       },
@@ -2837,6 +3114,16 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.local),
       headerActions: [
         IconButton(
+          tooltip: 'fileManagerCreateFolder'.tr(),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          onPressed: _workingPath == null
+              ? () => _createFolder(_FileSide.local)
+              : null,
+          icon: const Icon(Symbols.create_new_folder, size: 18),
+        ),
+        IconButton(
           tooltip: 'fileManagerChangeServer'.tr(),
           visualDensity: VisualDensity.compact,
           padding: EdgeInsets.zero,
@@ -2906,6 +3193,111 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
         : 'local';
     return '$verb $count from $source · paste here';
   }
+}
+
+Future<String?> _showFileNameSheet(
+  BuildContext context, {
+  required String title,
+  required String label,
+  required String actionLabel,
+  String initialName = '',
+}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (_) => _FileNameSheet(
+      title: title,
+      label: label,
+      actionLabel: actionLabel,
+      initialName: initialName,
+    ),
+  );
+}
+
+class _FileNameSheet extends StatefulWidget {
+  const _FileNameSheet({
+    required this.title,
+    required this.label,
+    required this.actionLabel,
+    required this.initialName,
+  });
+
+  final String title;
+  final String label;
+  final String actionLabel;
+  final String initialName;
+
+  @override
+  State<_FileNameSheet> createState() => _FileNameSheetState();
+}
+
+class _FileNameSheetState extends State<_FileNameSheet> {
+  late final TextEditingController _name = TextEditingController(
+    text: widget.initialName,
+  );
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(context, _name.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) => SheetScaffold(
+    titleText: widget.title,
+    heightFactor: 0.36,
+    child: Form(
+      key: _formKey,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _name,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _submit(),
+              decoration: InputDecoration(labelText: widget.label),
+              validator: _validateFileName,
+            ),
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('commonCancel'.tr()),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _submit,
+                  child: Text(widget.actionLabel),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+String? _validateFileName(String? value) {
+  final name = value?.trim() ?? '';
+  if (name.isEmpty) return 'fileManagerNameRequired'.tr();
+  if (name == '.' || name == '..' || name.contains('/')) {
+    return 'fileManagerInvalidName'.tr();
+  }
+  return null;
 }
 
 class _FilePane extends StatelessWidget {
@@ -3260,6 +3652,19 @@ class _DraggableFileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 900;
+    if (isMobile) {
+      return _FileRow(
+        icon: icon,
+        name: name,
+        detail: detail,
+        selected: selected,
+        dimmed: dimmed,
+        onTap: onTap,
+        onDoubleTap: onDoubleTap,
+        selectOnTapDown: false,
+      );
+    }
     final count = dragData.entries.length;
     final feedbackLabel = count == 1 ? name : '$count items';
     return Draggable<_FileDragData>(
@@ -3313,6 +3718,7 @@ class _FileRow extends StatelessWidget {
     required this.selected,
     required this.dimmed,
     required this.onTap,
+    this.selectOnTapDown = true,
     this.onDoubleTap,
     this.detail,
   });
@@ -3323,6 +3729,7 @@ class _FileRow extends StatelessWidget {
   final bool selected;
   final bool dimmed;
   final VoidCallback onTap;
+  final bool selectOnTapDown;
   final VoidCallback? onDoubleTap;
 
   @override
@@ -3334,10 +3741,10 @@ class _FileRow extends StatelessWidget {
           ? scheme.secondaryContainer.withValues(alpha: 0.55)
           : Colors.transparent,
       child: InkWell(
-        // Desktop file managers select on mouse-down. Waiting for the tap
-        // recognizer to resolve made selection feel sluggish, especially over
-        // SSH-backed panes.
-        onTapDown: (_) => onTap(),
+        // Desktop file managers select on mouse-down. On narrow layouts that
+        // would steal vertical drag gestures from the surrounding ListView.
+        onTapDown: selectOnTapDown ? (_) => onTap() : null,
+        onTap: selectOnTapDown ? null : onTap,
         onDoubleTap: onDoubleTap,
         child: Opacity(
           opacity: dimmed ? 0.45 : 1,

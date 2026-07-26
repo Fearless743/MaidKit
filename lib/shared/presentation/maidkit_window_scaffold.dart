@@ -36,57 +36,13 @@ class MaidKitWindowScaffold extends ConsumerWidget {
           title ?? 'MaidKit',
           style: Theme.of(context).textTheme.labelLarge,
         ),
-        // Desktop chrome owns the window edge; mobile must inset for notch /
-        // status bar / home indicator so every route respects safe area.
-        child: isDesktop
-            ? Column(
-                children: [
-                  Expanded(child: child),
-                  const TaskProgressBar(),
-                ],
-              )
-            : _MobileSafeAreaShell(
-                child: Column(
-                  children: [
-                    Expanded(child: child),
-                    const TaskProgressBar(),
-                  ],
-                ),
-              ),
-      ),
-    );
-  }
-}
-
-/// Applies [MediaQuery.paddingOf] on mobile and zeroes the consumed insets for
-/// descendants so nested scaffolds do not double-pad.
-///
-/// Bottom inset is left in [MediaQuery.padding] so [Scaffold.bottomNavigationBar]
-/// still clears the home indicator. Top/left/right are applied here once for
-/// every route under the window shell. The inset band is painted with
-/// [ColorScheme.surface] so the status bar / notch region matches the app.
-class _MobileSafeAreaShell extends StatelessWidget {
-  const _MobileSafeAreaShell({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final padding = MediaQuery.paddingOf(context);
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainer,
-      child: Padding(
-        padding: EdgeInsets.only(
-          top: padding.top,
-          left: padding.left,
-          right: padding.right,
-        ),
-        child: MediaQuery(
-          data: media.copyWith(
-            padding: padding.copyWith(top: 0, left: 0, right: 0),
-          ),
-          child: child,
+        // Routes own their safe areas. Consuming mobile insets here prevents
+        // page scaffolds from participating correctly in gesture-back.
+        child: Column(
+          children: [
+            Expanded(child: child),
+            const TaskProgressBar(),
+          ],
         ),
       ),
     );

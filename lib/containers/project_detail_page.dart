@@ -14,6 +14,7 @@ import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/servers/systemd_models.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/shared/presentation/cloud_file_picker.dart';
 import 'package:maid_kit/theme.dart';
 import 'container_models.dart';
@@ -247,8 +248,7 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
       for (final kind in DeploymentResourceKind.values) ...?grouped[kind],
     ];
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return MaidKitAppScaffold(
       appBar: AppBar(
         title: Text(widget.project.name),
         actions: [

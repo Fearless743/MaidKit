@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'server_connection_actions.dart';
 import 'server_detail_page.dart';
 import 'servers_page.dart';
@@ -33,8 +34,7 @@ class SessionsWorkspace extends ConsumerWidget {
     };
     final focusedSession = _sessionForTab(sessions, tabs.selectedTab);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return MaidKitAppScaffold(
       body: Column(
         children: [
           Expanded(

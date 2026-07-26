@@ -10,6 +10,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:styled_widget/styled_widget.dart';
 import 'snippet_repository.dart';
@@ -100,8 +101,7 @@ class SnippetsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snippets = ref.watch(scriptSnippetsProvider);
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return MaidKitAppScaffold(
       body: snippets.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text(error.toString())),

@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'port_forwarding_models.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';
@@ -53,8 +54,7 @@ class _ServerTabsShell extends ConsumerWidget {
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 768;
 
-        return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+        return MaidKitAppScaffold(
           body: isWide
               ? Row(
                   children: [

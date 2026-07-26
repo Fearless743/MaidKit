@@ -13,6 +13,7 @@ import 'package:super_context_menu/super_context_menu.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'deployment_project_models.dart';
 import 'project_repository.dart';
@@ -228,8 +229,7 @@ class _ProjectsPageState extends ConsumerState<ProjectsPage> {
     final theme = Theme.of(context);
     final serverNames = {for (final s in servers) s.id: s.name};
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return MaidKitAppScaffold(
       body: projects.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>

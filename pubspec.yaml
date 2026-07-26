@@ -32,12 +32,14 @@ dependencies:
     sdk: flutter
 
   auto_route: ^11.1.0
+  archive: ^4.0.9
   cryptography: ^2.9.0
   dartssh2: ^2.22.3
   desktop_drop: ^0.7.1
   drift: ^2.34.2
   drift_flutter: ^0.3.1
   file_picker: ^11.0.2
+  file_saver: ^0.4.0
   flutter_code_editor: ^0.3.5
   flutter_hooks: ^0.21.3+1
   flutter_secure_storage: ^10.3.1
@@ -69,6 +71,7 @@ dependencies:
   material_symbols_icons: ^4.2951.0
   styled_widget: ^0.4.1
   package_info_plus: ^9.0.1
+  path_provider: ^2.1.5
   toml: ^0.18.0
 
 dev_dependencies:
