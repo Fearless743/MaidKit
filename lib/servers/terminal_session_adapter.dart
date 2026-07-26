@@ -51,10 +51,13 @@ abstract interface class TerminalSessionAdapter {
   /// [readOnly] disables keyboard input when the surface is used for log
   /// playback rather than an interactive shell.
   /// [showCursor] hides the caret (useful for static log playback).
+  /// [transparentBackground] overrides the adapter's initial background
+  /// preference when a live terminal appearance setting changes.
   Widget buildView({
     bool autofocus = false,
     bool readOnly = false,
     bool showCursor = true,
+    bool? transparentBackground,
   });
 
   /// Finds all matches for [query] in the terminal buffer. Returns the count.
@@ -208,13 +211,19 @@ class TerminalSessionAdapterOption {
 
 class XtermTerminalSessionAdapterFactory
     implements TerminalSessionAdapterFactory {
-  const XtermTerminalSessionAdapterFactory({required this.colorScheme});
+  const XtermTerminalSessionAdapterFactory({
+    required this.colorScheme,
+    this.transparentBackground = false,
+  });
 
   final TerminalColorScheme colorScheme;
+  final bool transparentBackground;
 
   @override
-  TerminalSessionAdapter create() =>
-      XtermTerminalSessionAdapter(colorScheme: colorScheme);
+  TerminalSessionAdapter create() => XtermTerminalSessionAdapter(
+    colorScheme: colorScheme,
+    transparentBackground: transparentBackground,
+  );
 }
 
 class _BufferMatch {
@@ -227,8 +236,10 @@ class _BufferMatch {
 
 /// The production adapter backed by the xterm Flutter package.
 class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
-  XtermTerminalSessionAdapter({required this.colorScheme})
-    : _terminal = Terminal(maxLines: 10000) {
+  XtermTerminalSessionAdapter({
+    required this.colorScheme,
+    this.transparentBackground = false,
+  }) : _terminal = Terminal(maxLines: 10000) {
     _terminal.onOutput = (data) {
       if (!_disposed) {
         _activity.sentInput(data);
@@ -251,6 +262,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
 
   final Terminal _terminal;
   final TerminalColorScheme colorScheme;
+  final bool transparentBackground;
   final TerminalController _controller = TerminalController();
   final ScrollController _scrollController = ScrollController();
   final _outgoingBytes = StreamController<Uint8List>.broadcast();
@@ -429,6 +441,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
     bool autofocus = false,
     bool readOnly = false,
     bool showCursor = true,
+    bool? transparentBackground,
   }) {
     final theme = _xtermThemeFor(colorScheme, showCursor: showCursor);
     return KeyedSubtree(
@@ -445,7 +458,9 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
         hardwareKeyboardOnly: false,
         onKeyEvent: readOnly ? _handleReadOnlyKeyEvent : null,
         alwaysShowCursor: false,
-        backgroundOpacity: 0,
+        backgroundOpacity: (transparentBackground ?? this.transparentBackground)
+            ? 0
+            : 1,
         theme: theme,
         padding: const EdgeInsets.all(12),
         textStyle: const TerminalStyle(

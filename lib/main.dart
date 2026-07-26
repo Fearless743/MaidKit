@@ -5,6 +5,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
+import 'shared/presentation/app_scaffold.dart';
 import 'servers/server_providers.dart';
 import 'servers/metrics_refresh_preferences.dart';
 import 'servers/terminal_adapter_preferences.dart';
@@ -28,6 +29,7 @@ Future<void> main() async {
 
   if (DesktopWindowFrame.isPlatformDesktop) {
     await windowManager.ensureInitialized();
+    await windowManager.setOpacity(await loadMaidKitWindowOpacity());
     const windowOptions = WindowOptions(
       size: Size(1180, 760),
       minimumSize: Size(720, 520),

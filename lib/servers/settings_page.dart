@@ -29,6 +29,9 @@ class SettingsPage extends ConsumerWidget {
     final adapterOptions = ref.watch(terminalSessionAdapterOptionsProvider);
     final selectedAdapter = ref.watch(selectedTerminalSessionAdapterProvider);
     final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
+    final brandingEnvironmentEnabled = ref.watch(
+      terminalBrandingEnvironmentEnabledProvider,
+    );
     final terminalColorScheme = ref.watch(terminalColorSchemeProvider);
     final connectOnStartup = ref.watch(connectOnStartupProvider);
     final refreshInterval = ref.watch(serverMetricsRefreshIntervalProvider);
@@ -40,6 +43,10 @@ class SettingsPage extends ConsumerWidget {
     final backgroundImageEnabled = ref.watch(
       maidKitBackgroundImageEnabledProvider,
     );
+    final transparentTerminalBackground = ref.watch(
+      transparentTerminalBackgroundEnabledProvider,
+    );
+    final windowOpacity = ref.watch(maidKitWindowOpacityProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
@@ -144,6 +151,48 @@ class SettingsPage extends ConsumerWidget {
                             ),
                         ],
                       ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('settingsTerminalTransparent').tr(),
+                        subtitle: const Text(
+                          'settingsTerminalTransparentHint',
+                        ).tr(),
+                        value:
+                            transparentTerminalBackground.asData?.value ??
+                            false,
+                        onChanged:
+                            backgroundImage.asData?.value == null ||
+                                !(backgroundImageEnabled.asData?.value ?? true)
+                            ? null
+                            : (enabled) =>
+                                  setTransparentTerminalBackgroundEnabled(
+                                    ref,
+                                    enabled,
+                                  ),
+                      ),
+                    ],
+                    if (DesktopWindowFrame.isPlatformDesktop) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'settingsWindowOpacity',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ).tr(),
+                      const SizedBox(height: 4),
+                      Text(
+                        'settingsWindowOpacityHint',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ).tr(),
+                      Slider(
+                        value: windowOpacity.asData?.value ?? 1.0,
+                        min: 0.4,
+                        max: 1.0,
+                        divisions: 12,
+                        label:
+                            '${((windowOpacity.asData?.value ?? 1.0) * 100).round()}%',
+                        onChanged: (value) =>
+                            setMaidKitWindowOpacity(ref, value),
+                      ),
                     ],
                   ],
                 ),
@@ -229,6 +278,22 @@ class SettingsPage extends ConsumerWidget {
                                   .setEnabled(enabled);
                             }
                           : null,
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'settingsTerminalBrandingEnvironment',
+                      ).tr(),
+                      subtitle: const Text(
+                        'settingsTerminalBrandingEnvironmentHint',
+                      ).tr(),
+                      value: brandingEnvironmentEnabled,
+                      onChanged: (enabled) => ref
+                          .read(
+                            terminalBrandingEnvironmentEnabledProvider.notifier,
+                          )
+                          .setEnabled(enabled),
                     ),
                   ],
                 ),

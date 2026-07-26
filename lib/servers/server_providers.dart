@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'ghostty_terminal_session_adapter.dart';
 import 'metrics_refresh_preferences.dart';
 import 'port_forwarding_models.dart';
@@ -59,6 +60,9 @@ final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
       final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
       final colorScheme = ref.watch(terminalColorSchemeProvider);
+      final transparentBackground = ref.watch(
+        transparentTerminalBackgroundProvider,
+      );
       return [
         TerminalSessionAdapterOption(
           id: 'ghostty',
@@ -67,13 +71,17 @@ final terminalSessionAdapterOptionsProvider =
           factory: GhosttyTerminalSessionAdapterFactory(
             cursorAnimationEnabled: cursorAnimationEnabled,
             colorScheme: colorScheme,
+            transparentBackground: transparentBackground,
           ),
         ),
         TerminalSessionAdapterOption(
           id: 'xterm',
           label: 'xterm',
           description: 'The built-in Flutter fallback renderer.',
-          factory: XtermTerminalSessionAdapterFactory(colorScheme: colorScheme),
+          factory: XtermTerminalSessionAdapterFactory(
+            colorScheme: colorScheme,
+            transparentBackground: transparentBackground,
+          ),
         ),
       ];
     });
@@ -191,6 +199,24 @@ class CursorAnimationEnabledNotifier extends Notifier<bool> {
   }
 }
 
+final terminalBrandingEnvironmentEnabledProvider =
+    NotifierProvider<TerminalBrandingEnvironmentEnabledNotifier, bool>(
+      TerminalBrandingEnvironmentEnabledNotifier.new,
+    );
+
+class TerminalBrandingEnvironmentEnabledNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref.read(terminalAdapterPreferencesProvider).brandingEnvironmentEnabled;
+
+  Future<void> setEnabled(bool enabled) async {
+    await ref
+        .read(terminalAdapterPreferencesProvider)
+        .saveBrandingEnvironmentEnabled(enabled);
+    state = enabled;
+  }
+}
+
 final terminalColorSchemeProvider =
     NotifierProvider<TerminalColorSchemeNotifier, TerminalColorScheme>(
       TerminalColorSchemeNotifier.new,
@@ -225,6 +251,8 @@ final terminalSessionAdapterFactoryProvider =
 final connectionManagerProvider = Provider<SshConnectionManager>((ref) {
   final manager = SshConnectionManager(
     () => ref.read(terminalSessionAdapterFactoryProvider),
+    brandingEnvironmentEnabled: () =>
+        ref.read(terminalBrandingEnvironmentEnabledProvider),
   );
   ref.onDispose(manager.dispose);
   return manager;

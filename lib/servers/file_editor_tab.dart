@@ -31,6 +31,9 @@ import 'terminal_tabs_provider.dart';
 
 const maximumEditableBytes = 1024 * 1024;
 
+/// A stalled filesystem or SFTP write must not leave an editor tab locked.
+const fileSaveTimeout = Duration(seconds: 30);
+
 /// Offload parse/lint to a worker isolate above this size.
 const _lintIsolateThresholdBytes = 12 * 1024;
 
@@ -231,11 +234,10 @@ class _FileEditorTabViewState extends ConsumerState<FileEditorTabView> {
     _saving.value = true;
     try {
       final text = _controller.text;
-      await _writeFile(text);
+      await _writeFile(text).timeout(fileSaveTimeout);
       if (!mounted) return;
       _savedText = text;
       _dirty.value = false;
-      _saving.value = false;
       _status.value = 'fileManagerSaved'.tr();
       showStyledSnackBar(
         message: widget.tab.fileName,
@@ -250,6 +252,10 @@ class _FileEditorTabViewState extends ConsumerState<FileEditorTabView> {
         error,
         title: 'fileManagerCouldNotSave'.tr(args: [widget.tab.fileName]),
       );
+    } finally {
+      // A timeout only stops waiting for the write. Always release the UI so
+      // the user can close the tab or decide how to handle unsaved changes.
+      if (mounted) _saving.value = false;
     }
   }
 

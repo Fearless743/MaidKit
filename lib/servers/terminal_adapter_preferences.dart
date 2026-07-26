@@ -4,10 +4,12 @@ abstract interface class TerminalAdapterSettings {
   String get selectedAdapterId;
   bool get cursorAnimationEnabled;
   String get colorSchemeId;
+  bool get brandingEnvironmentEnabled;
 
   Future<void> saveSelectedAdapterId(String adapterId);
   Future<void> saveCursorAnimationEnabled(bool enabled);
   Future<void> saveColorSchemeId(String colorSchemeId);
+  Future<void> saveBrandingEnvironmentEnabled(bool enabled);
 }
 
 class TerminalAdapterPreferences implements TerminalAdapterSettings {
@@ -16,11 +18,14 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
     this.selectedAdapterId,
     this.cursorAnimationEnabled,
     this.colorSchemeId,
+    this.brandingEnvironmentEnabled,
   );
 
   static const _adapterIdKey = 'terminal_adapter_id';
   static const _cursorAnimationEnabledKey = 'cursor_animation_enabled';
   static const _colorSchemeIdKey = 'terminal_color_scheme_id';
+  static const _brandingEnvironmentEnabledKey =
+      'terminal_branding_environment_enabled';
 
   final SharedPreferencesAsync _preferences;
   @override
@@ -29,6 +34,8 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
   final bool cursorAnimationEnabled;
   @override
   final String colorSchemeId;
+  @override
+  final bool brandingEnvironmentEnabled;
 
   static Future<TerminalAdapterPreferences> load({
     SharedPreferencesAsync? preferences,
@@ -39,6 +46,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
       await store.getString(_adapterIdKey) ?? 'ghostty',
       await store.getBool(_cursorAnimationEnabledKey) ?? true,
       await store.getString(_colorSchemeIdKey) ?? 'default',
+      await store.getBool(_brandingEnvironmentEnabledKey) ?? true,
     );
   }
 
@@ -53,6 +61,10 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
   @override
   Future<void> saveColorSchemeId(String colorSchemeId) =>
       _preferences.setString(_colorSchemeIdKey, colorSchemeId);
+
+  @override
+  Future<void> saveBrandingEnvironmentEnabled(bool enabled) =>
+      _preferences.setBool(_brandingEnvironmentEnabledKey, enabled);
 }
 
 class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
@@ -60,6 +72,7 @@ class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
     this.selectedAdapterId = 'ghostty',
     this.cursorAnimationEnabled = true,
     this.colorSchemeId = 'default',
+    this.brandingEnvironmentEnabled = true,
   });
 
   @override
@@ -68,6 +81,8 @@ class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
   bool cursorAnimationEnabled;
   @override
   String colorSchemeId;
+  @override
+  bool brandingEnvironmentEnabled;
 
   @override
   Future<void> saveSelectedAdapterId(String adapterId) async {
@@ -82,5 +97,10 @@ class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
   @override
   Future<void> saveColorSchemeId(String colorSchemeId) async {
     this.colorSchemeId = colorSchemeId;
+  }
+
+  @override
+  Future<void> saveBrandingEnvironmentEnabled(bool enabled) async {
+    brandingEnvironmentEnabled = enabled;
   }
 }

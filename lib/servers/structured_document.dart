@@ -54,10 +54,96 @@ List<StructuredDocumentIssue> lintStructuredDocument(
 }
 
 String _formatJson(String text) {
-  final decoded = jsonDecode(text);
-  const encoder = JsonEncoder.withIndent('  ');
-  return '${encoder.convert(decoded)}\n';
+  // Validate first, then format the original tokens. Decoding and encoding
+  // through Dart objects loses duplicate keys and normalizes number/string
+  // representations, which is unsafe for a file editor formatter.
+  jsonDecode(text);
+  final tokens = _jsonTokens(text);
+  final buffer = StringBuffer();
+  var indent = 0;
+
+  for (var index = 0; index < tokens.length; index++) {
+    final token = tokens[index];
+    final previous = index == 0 ? null : tokens[index - 1];
+    final next = index + 1 == tokens.length ? null : tokens[index + 1];
+    switch (token) {
+      case '{' || '[':
+        buffer.write(token);
+        indent++;
+        if (next != '}' && next != ']') {
+          buffer
+            ..writeln()
+            ..write('  ' * indent);
+        }
+      case '}' || ']':
+        indent--;
+        if (previous != '{' && previous != '[') {
+          buffer
+            ..writeln()
+            ..write('  ' * indent);
+        }
+        buffer.write(token);
+      case ',':
+        buffer
+          ..write(',')
+          ..writeln()
+          ..write('  ' * indent);
+      case ':':
+        buffer.write(': ');
+      default:
+        buffer.write(token);
+    }
+  }
+  return '${buffer.toString().trimRight()}\n';
 }
+
+/// Splits valid JSON into its original syntax tokens without changing values.
+List<String> _jsonTokens(String text) {
+  final tokens = <String>[];
+  var index = 0;
+  while (index < text.length) {
+    final codeUnit = text.codeUnitAt(index);
+    if (_isJsonWhitespace(codeUnit)) {
+      index++;
+      continue;
+    }
+    if (codeUnit == 0x22) {
+      final start = index++;
+      while (index < text.length) {
+        final current = text.codeUnitAt(index++);
+        if (current == 0x5C) {
+          index++;
+        } else if (current == 0x22) {
+          break;
+        }
+      }
+      tokens.add(text.substring(start, index));
+      continue;
+    }
+    if ('{}[],:'.contains(String.fromCharCode(codeUnit))) {
+      tokens.add(String.fromCharCode(codeUnit));
+      index++;
+      continue;
+    }
+    final start = index;
+    while (index < text.length) {
+      final current = text.codeUnitAt(index);
+      if (_isJsonWhitespace(current) ||
+          '{}[],:'.contains(String.fromCharCode(current))) {
+        break;
+      }
+      index++;
+    }
+    tokens.add(text.substring(start, index));
+  }
+  return tokens;
+}
+
+bool _isJsonWhitespace(int codeUnit) =>
+    codeUnit == 0x20 ||
+    codeUnit == 0x09 ||
+    codeUnit == 0x0A ||
+    codeUnit == 0x0D;
 
 String _formatYaml(String text) {
   final node = loadYaml(text);

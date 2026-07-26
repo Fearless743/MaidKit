@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/gestures.dart' show kMiddleMouseButton;
@@ -29,7 +31,7 @@ class SessionsWorkspace extends ConsumerWidget {
     final sessions = ref.watch(sessionsProvider);
     final servers = ref.watch(serversProvider);
     final focusedTerminal = switch (tabs.selectedTab) {
-      TerminalTab(:final terminal) => terminal,
+      final TerminalTab terminal => terminal,
       _ => null,
     };
     final focusedSession = _sessionForTab(sessions, tabs.selectedTab);
@@ -51,7 +53,8 @@ class SessionsWorkspace extends ConsumerWidget {
           ),
           _AnimatedTerminalStatusBar(
             session: focusedSession,
-            terminal: focusedTerminal,
+            terminal: focusedTerminal?.terminal,
+            terminalId: focusedTerminal?.id,
           ),
         ],
       ),
@@ -766,14 +769,14 @@ class _AnimatedPaneTabContent extends StatelessWidget {
   );
 }
 
-class _SessionTabBody extends StatelessWidget {
+class _SessionTabBody extends ConsumerWidget {
   const _SessionTabBody({required this.tab, required this.autofocus});
 
   final SessionTab tab;
   final bool autofocus;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // GlobalKey reparents State when this tab moves across the layout tree
     // (split creation, drag between panes, etc.).
     final key = sessionTabViewKey(tab.id);
@@ -798,12 +801,17 @@ class _SessionTabBody extends StatelessWidget {
     }
     final terminalTab = tab as TerminalTab;
     return ColoredBox(
-      color: const Color(0xFF111315),
+      color: ref.watch(transparentTerminalBackgroundProvider)
+          ? Colors.transparent
+          : const Color(0xFF111315),
       child: ClipRect(
         child: TerminalFindHost(
           key: key,
           adapter: terminalTab.terminal,
           autofocus: autofocus,
+          transparentBackground: ref.watch(
+            transparentTerminalBackgroundProvider,
+          ),
         ),
       ),
     );
@@ -833,10 +841,12 @@ class _AnimatedTerminalStatusBar extends StatelessWidget {
   const _AnimatedTerminalStatusBar({
     required this.session,
     required this.terminal,
+    required this.terminalId,
   });
 
   final SshSessionInfo? session;
   final TerminalSessionAdapter? terminal;
+  final String? terminalId;
 
   @override
   Widget build(BuildContext context) {
@@ -866,20 +876,60 @@ class _AnimatedTerminalStatusBar extends StatelessWidget {
               key: ValueKey(activeTerminal),
               session: session,
               terminal: activeTerminal,
+              terminalId: terminalId!,
             ),
     );
   }
 }
 
-class _TerminalStatusBar extends StatelessWidget {
+class _TerminalStatusBar extends ConsumerStatefulWidget {
   const _TerminalStatusBar({
     required this.session,
     required this.terminal,
+    required this.terminalId,
     super.key,
   });
 
   final SshSessionInfo? session;
   final TerminalSessionAdapter terminal;
+  final String terminalId;
+
+  @override
+  ConsumerState<_TerminalStatusBar> createState() => _TerminalStatusBarState();
+}
+
+class _TerminalStatusBarState extends ConsumerState<_TerminalStatusBar> {
+  static const _pingInterval = Duration(seconds: 5);
+
+  Timer? _pingTimer;
+  Duration? _latency;
+  var _measuringLatency = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _measureLatency();
+    _pingTimer = Timer.periodic(_pingInterval, (_) => _measureLatency());
+  }
+
+  @override
+  void dispose() {
+    _pingTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _measureLatency() async {
+    if (_measuringLatency) return;
+    _measuringLatency = true;
+    try {
+      final latency = await ref
+          .read(connectionManagerProvider)
+          .measureTerminalLatency(widget.terminalId);
+      if (mounted) setState(() => _latency = latency);
+    } finally {
+      _measuringLatency = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -894,7 +944,7 @@ class _TerminalStatusBar extends StatelessWidget {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
-    final stats = session?.stats;
+    final stats = widget.session?.stats;
     final memoryTotalKb = stats?.memoryTotalKb;
     final memoryAvailableKb = stats?.memoryAvailableKb;
     final usedMemoryKb = memoryTotalKb == null || memoryAvailableKb == null
@@ -905,13 +955,22 @@ class _TerminalStatusBar extends StatelessWidget {
         ? null
         : (usedMemoryKb / memoryTotalKb).clamp(0.0, 1.0);
     final systemLabel = [
-      session?.systemInfo?.distribution,
-      session?.systemInfo?.kernel,
+      widget.session?.systemInfo?.distribution,
+      widget.session?.systemInfo?.kernel,
     ].whereType<String>().join(' · ');
 
     final segments = <Widget>[
-      if (session case final activeSession?)
+      if (widget.session case final activeSession?)
         _StatusBarIdentity(session: activeSession),
+      if (_latency case final latency?)
+        _StatusBarMetric(
+          icon: Symbols.network_ping,
+          tooltip: 'terminalSshPing'.tr(),
+          value: '${latency.inMilliseconds} ms',
+          valueColor: _statusBarPingColor(latency, scheme),
+          mutedStyle: mutedStyle,
+          valueStyle: valueStyle,
+        ),
       if (stats?.loadAverage case final load?)
         _StatusBarMetric(
           icon: Symbols.speed,
@@ -964,7 +1023,7 @@ class _TerminalStatusBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (MediaQuery.sizeOf(context).width <= 768)
-                _TerminalQuickKeys(terminal: terminal),
+                _TerminalQuickKeys(terminal: widget.terminal),
               if (segments.isNotEmpty)
                 SizedBox(
                   height: 28,
@@ -1128,6 +1187,12 @@ Color? _statusBarMemoryColor(double? ratio, ColorScheme scheme) {
   if (ratio == null) return null;
   if (ratio >= 0.9) return scheme.error;
   if (ratio >= 0.75) return scheme.tertiary;
+  return null;
+}
+
+Color? _statusBarPingColor(Duration latency, ColorScheme scheme) {
+  if (latency >= const Duration(milliseconds: 250)) return scheme.error;
+  if (latency >= const Duration(milliseconds: 100)) return scheme.tertiary;
   return null;
 }
 

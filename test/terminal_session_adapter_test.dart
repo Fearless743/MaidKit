@@ -66,6 +66,25 @@ void main() {
     },
   );
 
+  test('persists the terminal branding environment preference', () async {
+    final settings = InMemoryTerminalAdapterSettings();
+    final container = ProviderContainer(
+      overrides: [
+        terminalAdapterPreferencesProvider.overrideWithValue(settings),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(terminalBrandingEnvironmentEnabledProvider), isTrue);
+
+    await container
+        .read(terminalBrandingEnvironmentEnabledProvider.notifier)
+        .setEnabled(false);
+
+    expect(container.read(terminalBrandingEnvironmentEnabledProvider), isFalse);
+    expect(settings.brandingEnvironmentEnabled, isFalse);
+  });
+
   test('applies the selected palette to both terminal renderers', () async {
     final scheme = TerminalColorSchemes.catppuccinMocha;
     final xtermAdapter = XtermTerminalSessionAdapter(colorScheme: scheme);
@@ -268,6 +287,7 @@ class _FakeTerminalSessionAdapter implements TerminalSessionAdapter {
     bool autofocus = false,
     bool readOnly = false,
     bool showCursor = true,
+    bool? transparentBackground,
   }) => const SizedBox();
 
   @override

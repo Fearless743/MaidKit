@@ -2,9 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// File name used for an optional user-provided workspace background image.
 ///
@@ -12,6 +15,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// and avoids making a large image part of the app bundle.
 const kMaidKitBackgroundImagePath = 'maidkit_app_background';
 const _maidKitBackgroundImageEnabledKey = 'maidkit_background_image_enabled';
+const _maidKitTransparentTerminalKey = 'maidkit_transparent_terminal';
+const _maidKitWindowOpacityKey = 'maidkit_window_opacity';
 
 final maidKitBackgroundImageProvider = FutureProvider<File?>((ref) async {
   if (kIsWeb) return null;
@@ -28,6 +33,37 @@ final maidKitBackgroundImageEnabledProvider = FutureProvider<bool>((ref) async {
       true;
 });
 
+final transparentTerminalBackgroundEnabledProvider = FutureProvider<bool>((
+  ref,
+) async {
+  return await SharedPreferencesAsync().getBool(
+        _maidKitTransparentTerminalKey,
+      ) ??
+      false;
+});
+
+final transparentTerminalBackgroundProvider = Provider<bool>((ref) {
+  final hasImage =
+      ref.watch(maidKitBackgroundImageProvider).asData?.value != null;
+  final imageEnabled =
+      ref.watch(maidKitBackgroundImageEnabledProvider).asData?.value ?? true;
+  final preference =
+      ref.watch(transparentTerminalBackgroundEnabledProvider).asData?.value ??
+      false;
+  return hasImage && imageEnabled && preference;
+});
+
+final maidKitWindowOpacityProvider = FutureProvider<double>((ref) async {
+  return await loadMaidKitWindowOpacity();
+});
+
+Future<double> loadMaidKitWindowOpacity() async {
+  final value = await SharedPreferencesAsync().getDouble(
+    _maidKitWindowOpacityKey,
+  );
+  return (value ?? 1.0).clamp(0.4, 1.0).toDouble();
+}
+
 Future<void> setMaidKitBackgroundImageEnabled(
   WidgetRef ref,
   bool enabled,
@@ -37,6 +73,36 @@ Future<void> setMaidKitBackgroundImageEnabled(
     enabled,
   );
   ref.invalidate(maidKitBackgroundImageEnabledProvider);
+}
+
+Future<void> setTransparentTerminalBackgroundEnabled(
+  WidgetRef ref,
+  bool enabled,
+) async {
+  await SharedPreferencesAsync().setBool(
+    _maidKitTransparentTerminalKey,
+    enabled,
+  );
+  // A terminal tab can be building while this preference finishes writing.
+  // Defer the notification in that case so Riverpod does not mark its scope
+  // dirty during Flutter's build phase.
+  if (SchedulerBinding.instance.schedulerPhase ==
+      SchedulerPhase.persistentCallbacks) {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => ref.invalidate(transparentTerminalBackgroundEnabledProvider),
+    );
+  } else {
+    ref.invalidate(transparentTerminalBackgroundEnabledProvider);
+  }
+}
+
+Future<void> setMaidKitWindowOpacity(WidgetRef ref, double opacity) async {
+  final value = opacity.clamp(0.4, 1.0).toDouble();
+  await SharedPreferencesAsync().setDouble(_maidKitWindowOpacityKey, value);
+  if (DesktopWindowFrame.isPlatformDesktop) {
+    await windowManager.setOpacity(value);
+  }
+  ref.invalidate(maidKitWindowOpacityProvider);
 }
 
 Future<void> saveMaidKitBackgroundImage(WidgetRef ref, File source) async {

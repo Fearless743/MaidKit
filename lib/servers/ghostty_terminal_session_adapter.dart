@@ -17,15 +17,18 @@ class GhosttyTerminalSessionAdapterFactory
   const GhosttyTerminalSessionAdapterFactory({
     required this.cursorAnimationEnabled,
     required this.colorScheme,
+    this.transparentBackground = false,
   });
 
   final bool cursorAnimationEnabled;
   final TerminalColorScheme colorScheme;
+  final bool transparentBackground;
 
   @override
   TerminalSessionAdapter create() => GhosttyTerminalSessionAdapter(
     cursorAnimationEnabled: cursorAnimationEnabled,
     colorScheme: colorScheme,
+    transparentBackground: transparentBackground,
   );
 }
 
@@ -33,6 +36,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   GhosttyTerminalSessionAdapter({
     this.cursorAnimationEnabled = true,
     this.colorScheme = TerminalColorSchemes.defaultScheme,
+    this.transparentBackground = false,
   }) : _controller = flterm.TerminalController(
          config: flterm.TerminalConfig(
            scrollbackLimit: 10 * 1024 * 1024,
@@ -50,6 +54,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
 
   final bool cursorAnimationEnabled;
   final TerminalColorScheme colorScheme;
+  final bool transparentBackground;
   final flterm.TerminalController _controller;
   final flterm.TerminalScrollController _scrollController =
       flterm.TerminalScrollController();
@@ -124,6 +129,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
     bool autofocus = false,
     bool readOnly = false,
     bool showCursor = true,
+    bool? transparentBackground,
   }) {
     if (!showCursor) {
       _controller.modeSet(flterm.TerminalMode.cursorVisible(), value: false);
@@ -137,6 +143,9 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
       theme: flterm.TerminalTheme(
         palette: flterm.ColorPalette(
           ansiColors: colorScheme.ansiColors,
+          // Keep an opaque palette color for libghostty's color resolution.
+          // Transparency belongs to TerminalTheme.backgroundOpacity; passing
+          // an alpha-zero palette color is flattened to black by the renderer.
           background: colorScheme.background,
           foreground: colorScheme.foreground,
         ),
@@ -149,6 +158,9 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
         selection: flterm.SelectionTheme(
           background: flterm.DynamicColor.fixed(colorScheme.selection),
         ),
+        backgroundOpacity: (transparentBackground ?? this.transparentBackground)
+            ? 0
+            : 1,
         fontFamily: 'IBM Plex Mono',
       ),
     );

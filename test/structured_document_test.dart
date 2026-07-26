@@ -21,6 +21,23 @@ void main() {
       expect(formatted, '{\n  "b": 1,\n  "a": [\n    2,\n    3\n  ]\n}\n');
     });
 
+    test('formats JSON without changing duplicate keys or value tokens', () {
+      final formatted = formatStructuredDocument(
+        '{"key":1,"key":2,"number":1.2300e+04,"text":"\\u0041"}',
+        StructuredDocumentKind.json,
+      );
+
+      expect(
+        formatted,
+        '{\n'
+        '  "key": 1,\n'
+        '  "key": 2,\n'
+        '  "number": 1.2300e+04,\n'
+        '  "text": "\\u0041"\n'
+        '}\n',
+      );
+    });
+
     test('pretty-prints YAML', () {
       final formatted = formatStructuredDocument(
         'b: 1\na: [2, 3]',

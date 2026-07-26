@@ -25,10 +25,13 @@ typedef HostKeyApproval = Future<bool> Function(HostKeyPrompt prompt);
 class SshConnectionManager {
   SshConnectionManager(
     this._terminalAdapterFactory, {
+    bool Function()? brandingEnvironmentEnabled,
     ServerMetricsCollector? metricsCollector,
-  }) : _metricsCollector = metricsCollector ?? AutoServerMetricsCollector();
+  }) : _brandingEnvironmentEnabled = brandingEnvironmentEnabled ?? (() => true),
+       _metricsCollector = metricsCollector ?? AutoServerMetricsCollector();
 
   final TerminalSessionAdapterFactory Function() _terminalAdapterFactory;
+  final bool Function() _brandingEnvironmentEnabled;
   final ServerMetricsCollector _metricsCollector;
 
   /// These clients are used exclusively for collecting server information.
@@ -214,6 +217,16 @@ class SshConnectionManager {
       (_) => _closeTerminalAfterShellEnds(terminalId, shell),
       onError: (_, _) => _closeTerminalAfterShellEnds(terminalId, shell),
     );
+    if (_brandingEnvironmentEnabled()) {
+      // Neofetch prioritizes SSH_CONNECTION/SSH_TTY over TERM_PROGRAM. Keep
+      // this scoped to the interactive shell so it can identify MaidKit
+      // instead of displaying the server's allocated /dev/pts/* path.
+      shell.write(
+        utf8.encode(
+          'export TERM_PROGRAM=MaidKit; unset SSH_CONNECTION SSH_TTY\n',
+        ),
+      );
+    }
     final directory = initialDirectory?.trim();
     if (directory != null && directory.isNotEmpty) {
       // Move into the requested remote folder after the shell starts. Quote the
@@ -244,6 +257,27 @@ class SshConnectionManager {
       await terminal.binding.close();
     } catch (_) {}
     terminal.client.close();
+  }
+
+  /// Measures an SSH command round trip for an open terminal connection.
+  ///
+  /// Using the existing authenticated transport makes this work when ICMP is
+  /// unavailable and avoids opening an additional socket just for the status
+  /// bar.
+  Future<Duration?> measureTerminalLatency(String terminalId) async {
+    final terminal = _terminals[terminalId];
+    if (terminal == null || terminal.client.isClosed) return null;
+
+    final stopwatch = Stopwatch()..start();
+    try {
+      final session = await terminal.client.execute(':');
+      await session.done;
+      return identical(_terminals[terminalId], terminal)
+          ? stopwatch.elapsed
+          : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _closeTerminalAfterShellEnds(String terminalId, SSHSession shell) {

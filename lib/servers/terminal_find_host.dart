@@ -13,12 +13,14 @@ class TerminalFindHost extends StatefulWidget {
     this.autofocus = false,
     this.readOnly = false,
     this.showCursor = true,
+    this.transparentBackground,
   });
 
   final TerminalSessionAdapter adapter;
   final bool autofocus;
   final bool readOnly;
   final bool showCursor;
+  final bool? transparentBackground;
 
   @override
   State<TerminalFindHost> createState() => _TerminalFindHostState();
@@ -189,6 +191,7 @@ class _TerminalFindHostState extends State<TerminalFindHost> {
                 autofocus: widget.autofocus,
                 readOnly: widget.readOnly,
                 showCursor: widget.showCursor,
+                transparentBackground: widget.transparentBackground,
               ),
             ),
           ],
