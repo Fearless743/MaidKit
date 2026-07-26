@@ -21,6 +21,7 @@ import 'container_models.dart';
 import 'container_list_tile.dart';
 import 'compose_project_actions.dart';
 import 'deployment_project_models.dart';
+import 'image_actions.dart';
 import 'project_repository.dart';
 
 /// Detail view for a stored deployment project — a collection of resources.
@@ -776,6 +777,11 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
           enabled: _composeReady,
         ),
         _QuickActionSpec(
+          id: 'prune_images',
+          label: 'deploymentCleanUpImages'.tr(),
+          icon: Symbols.cleaning_services,
+        ),
+        _QuickActionSpec(
           id: 'compose_stop',
           label: 'deploymentQuickActionStop'.tr(),
           icon: Symbols.stop,
@@ -794,6 +800,11 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
           label: 'deploymentQuickActionLogs'.tr(),
           icon: Symbols.terminal,
           enabled: _containerRef.isNotEmpty,
+        ),
+        _QuickActionSpec(
+          id: 'prune_images',
+          label: 'deploymentCleanUpImages'.tr(),
+          icon: Symbols.cleaning_services,
         ),
         _QuickActionSpec(
           id: 'container_start',
@@ -872,6 +883,8 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
           await _runCompose(ComposeProjectAction.stop);
         case 'compose_logs':
           await _showComposeLogs();
+        case 'prune_images':
+          await _pruneImages();
         case 'container_start':
           await _runContainer(ContainerAction.start);
         case 'container_stop':
@@ -947,6 +960,25 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     }
   }
 
+  Future<void> _pruneImages() async {
+    final host = server!;
+    await runImagePruneWithTerminal(
+      ref: ref,
+      serverId: host.id,
+      serverName: host.name,
+      runtime: _runtime,
+      scope: _scope,
+      sudoPassword: await _sudoPassword(),
+    );
+    if (mounted) {
+      showStyledSnackBar(
+        message: 'deploymentCleanUpImagesHint'.tr(),
+        title: 'deploymentCleanUpImagesDone'.tr(),
+        icon: Symbols.check_circle,
+      );
+    }
+  }
+
   Future<void> _runSystemd(SystemdUnitAction action) async {
     final host = server!;
     final unit = _systemdUnit;
@@ -1004,20 +1036,14 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
 
   Future<void> _showContainerLogs() async {
     final host = server!;
-    await _showRemoteText(
-      title: 'deploymentLogsTitle'.tr(args: [_containerRef]),
-      load: () async {
-        final sudo = await _sudoPassword();
-        return ref
-            .read(connectionManagerProvider)
-            .readContainerLogs(
-              host.id,
-              runtime: _runtime,
-              scope: _scope,
-              containerId: _containerRef,
-              sudoPassword: sudo,
-            );
-      },
+    await context.router.root.push(
+      ContainerDetailRoute(
+        server: host,
+        runtime: _runtime,
+        scope: _scope,
+        containerId: _containerRef,
+        containerName: _containerRef,
+      ),
     );
   }
 
@@ -1071,6 +1097,43 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
       useRootNavigator: true,
       builder: (_) => _RemoteTextSheet(title: title, load: load),
     );
+  }
+
+  Future<void> _editConfiguration() async {
+    final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
+    final draft = await showModalBottomSheet<_ResourceDraft>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (_) => _LinkResourceSheet(
+        servers: servers,
+        initialDraft: _ResourceDraft(
+          kind: kind,
+          name: resource.name,
+          serverId: resource.serverId,
+          configuration: effectiveConfig,
+        ),
+      ),
+    );
+    if (draft == null) return;
+
+    await ref
+        .read(projectRepositoryProvider)
+        .updateResource(
+          resourceId: resource.id,
+          kind: draft.kind.name,
+          name: draft.name,
+          serverId: draft.serverId,
+          configuration: draft.configuration,
+        );
+    if (mounted) {
+      showStyledSnackBar(
+        message: resource.name,
+        title: 'deploymentConfigSaved'.tr(),
+        icon: Symbols.check_circle,
+      );
+    }
   }
 
   void _openOnServer() {
@@ -1256,9 +1319,19 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                       ),
                     ),
                   if (effectiveConfig.isNotEmpty) ...[
-                    Text(
-                      'deploymentConfigTitle'.tr(),
-                      style: theme.textTheme.labelMedium,
+                    Row(
+                      children: [
+                        Text(
+                          'deploymentConfigTitle'.tr(),
+                          style: theme.textTheme.labelMedium,
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'deploymentEditConfiguration'.tr(),
+                          icon: const Icon(Symbols.edit, size: 18),
+                          onPressed: _editConfiguration,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     ...effectiveConfig.entries.map(
@@ -1288,9 +1361,15 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
                     ),
                     const SizedBox(height: 8),
                   ] else
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text('deploymentConfigEmpty'.tr()),
+                    Row(
+                      children: [
+                        Expanded(child: Text('deploymentConfigEmpty'.tr())),
+                        IconButton(
+                          tooltip: 'deploymentEditConfiguration'.tr(),
+                          icon: const Icon(Symbols.edit, size: 18),
+                          onPressed: _editConfiguration,
+                        ),
+                      ],
                     ),
                   if (server != null)
                     Align(
@@ -1573,24 +1652,13 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
   }
 
   Future<void> _containerLogs(ServerContainer container) async {
-    final sudo = await _sudoPassword();
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      useRootNavigator: true,
-      builder: (_) => _RemoteTextSheet(
-        title: 'deploymentLogsTitle'.tr(args: [container.name]),
-        load: () => ref
-            .read(connectionManagerProvider)
-            .readContainerLogs(
-              widget.server.id,
-              runtime: _runtime,
-              scope: _scope,
-              containerId: container.id,
-              sudoPassword: sudo,
-            ),
+    await context.router.root.push(
+      ContainerDetailRoute(
+        server: widget.server,
+        runtime: _runtime,
+        scope: _scope,
+        containerId: container.id,
+        containerName: container.name,
       ),
     );
   }
@@ -1761,8 +1829,9 @@ class _ResourceDraft {
 }
 
 class _LinkResourceSheet extends ConsumerStatefulWidget {
-  const _LinkResourceSheet({required this.servers});
+  const _LinkResourceSheet({required this.servers, this.initialDraft});
   final List<Server> servers;
+  final _ResourceDraft? initialDraft;
 
   @override
   ConsumerState<_LinkResourceSheet> createState() => _LinkResourceSheetState();
@@ -1780,6 +1849,8 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
   var _loadingSuggestions = false;
   String? _suggestionError;
 
+  bool get _isEditing => widget.initialDraft != null;
+
   static const _linkableKinds = [
     DeploymentResourceKind.compose,
     DeploymentResourceKind.container,
@@ -1787,6 +1858,31 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
     DeploymentResourceKind.firewallRule,
     DeploymentResourceKind.systemdService,
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialDraft;
+    if (initial == null) return;
+
+    _kind = initial.kind;
+    _serverId = initial.serverId;
+    _name = initial.name;
+    final configuration = initial.configuration;
+    _location = switch (_kind) {
+      DeploymentResourceKind.serverFolder => '${configuration['path'] ?? ''}',
+      DeploymentResourceKind.container => '${configuration['container'] ?? ''}',
+      DeploymentResourceKind.compose =>
+        '${configuration['compose_project'] ?? ''}',
+      DeploymentResourceKind.firewallRule => '${configuration['rule'] ?? ''}',
+      DeploymentResourceKind.systemdService =>
+        '${configuration['unit'] ?? configuration['service_unit'] ?? ''}',
+      _ => '',
+    };
+    _directory = '${configuration['directory'] ?? ''}';
+    _runtime = _runtimeFrom(configuration);
+    _scope = _scopeFrom(configuration);
+  }
 
   String get _locationLabel => switch (_kind) {
     DeploymentResourceKind.serverFolder => 'deploymentLocationFolder'.tr(),
@@ -1808,7 +1904,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
     },
     DeploymentResourceKind.firewallRule => {'rule': _location.trim()},
     DeploymentResourceKind.systemdService => {'unit': _location.trim()},
-    _ => const {},
+    _ => widget.initialDraft?.configuration ?? const {},
   };
 
   Future<void> _loadSuggestions() async {
@@ -1934,13 +2030,15 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             _directory.trim().isNotEmpty);
 
     return SheetScaffold(
-      titleText: 'deploymentSheetTitle'.tr(),
+      titleText:
+          (_isEditing ? 'deploymentEditResource' : 'deploymentSheetTitle').tr(),
       heightFactor: 0.72,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           Text(
-            'deploymentSheetInfo'.tr(),
+            (_isEditing ? 'deploymentEditResourceInfo' : 'deploymentSheetInfo')
+                .tr(),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -1952,7 +2050,10 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
               labelText: 'deploymentResourceType'.tr(),
             ),
             items: [
-              for (final kind in _linkableKinds)
+              for (final kind in [
+                ..._linkableKinds,
+                if (_isEditing && !_linkableKinds.contains(_kind)) _kind,
+              ])
                 DropdownMenuItem(
                   value: kind,
                   child: Row(
@@ -1997,6 +2098,7 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
             ),
           const SizedBox(height: 12),
           TextFormField(
+            initialValue: _name,
             decoration: InputDecoration(
               labelText: 'deploymentDisplayName'.tr(),
               helperText: 'deploymentDisplayNameHelper'.tr(),
@@ -2125,8 +2227,10 @@ class _LinkResourceSheetState extends ConsumerState<_LinkResourceSheet> {
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: canSubmit ? _submit : null,
-            icon: const Icon(Symbols.add),
-            label: Text('deploymentAddToProject'.tr()),
+            icon: Icon(_isEditing ? Symbols.save : Symbols.add),
+            label: Text(
+              (_isEditing ? 'commonSave' : 'deploymentAddToProject').tr(),
+            ),
           ),
         ],
       ),

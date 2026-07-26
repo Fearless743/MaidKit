@@ -143,6 +143,37 @@ class ProjectRepository {
         .write(DeploymentProjectsCompanion(updatedAt: Value(now)));
   }
 
+  Future<void> updateResource({
+    required int resourceId,
+    required String kind,
+    required String name,
+    required int? serverId,
+    required Map<String, Object?> configuration,
+  }) async {
+    final resource = await (_database.select(
+      _database.deploymentResources,
+    )..where((table) => table.id.equals(resourceId))).getSingleOrNull();
+    if (resource == null) return;
+
+    final now = DateTime.now().toUtc();
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.deploymentResources,
+      )..where((table) => table.id.equals(resourceId))).write(
+        DeploymentResourcesCompanion(
+          kind: Value(kind),
+          name: Value(name.trim()),
+          serverId: Value(serverId),
+          configuration: Value(jsonEncode(configuration)),
+          updatedAt: Value(now),
+        ),
+      );
+      await (_database.update(_database.deploymentProjects)
+            ..where((table) => table.id.equals(resource.projectId)))
+          .write(DeploymentProjectsCompanion(updatedAt: Value(now)));
+    });
+  }
+
   Future<void> deleteProject(int projectId) async {
     await _database.transaction(() async {
       await (_database.delete(

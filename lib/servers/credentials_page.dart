@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
@@ -83,9 +84,11 @@ class CredentialsPage extends ConsumerWidget {
   }
 
   Future<void> _addCredential(BuildContext context, WidgetRef ref) async {
-    final draft = await showDialog<SavedCredentialDraft>(
+    final draft = await showModalBottomSheet<SavedCredentialDraft>(
       context: context,
-      builder: (_) => const _CredentialEditorDialog(),
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _CredentialEditorSheet(),
     );
     if (draft == null) return;
     try {
@@ -105,9 +108,11 @@ class CredentialsPage extends ConsumerWidget {
           .read(serverRepositoryProvider)
           .decryptCredential(credential);
       if (!context.mounted) return;
-      final draft = await showDialog<SavedCredentialDraft>(
+      final draft = await showModalBottomSheet<SavedCredentialDraft>(
         context: context,
-        builder: (_) => _CredentialEditorDialog(
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => _CredentialEditorSheet(
           initial: SavedCredentialDraft(
             name: credential.name,
             credential: value,
@@ -155,17 +160,16 @@ class CredentialsPage extends ConsumerWidget {
   }
 }
 
-class _CredentialEditorDialog extends StatefulWidget {
-  const _CredentialEditorDialog({this.initial});
+class _CredentialEditorSheet extends StatefulWidget {
+  const _CredentialEditorSheet({this.initial});
 
   final SavedCredentialDraft? initial;
 
   @override
-  State<_CredentialEditorDialog> createState() =>
-      _CredentialEditorDialogState();
+  State<_CredentialEditorSheet> createState() => _CredentialEditorSheetState();
 }
 
-class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
+class _CredentialEditorSheetState extends State<_CredentialEditorSheet> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _secret = TextEditingController();
@@ -218,18 +222,17 @@ class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      widget.initial == null
+  Widget build(BuildContext context) => SizedBox(
+    width: 560,
+    child: SheetScaffold(
+      titleText: widget.initial == null
           ? 'settingsCredentialAdd'.tr()
           : 'settingsCredentialEdit'.tr(),
-    ),
-    content: SizedBox(
-      width: 440,
+      heightFactor: 0.62,
       child: Form(
         key: _form,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
             TextFormField(
               controller: _name,
@@ -239,7 +242,7 @@ class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
               ),
               validator: _required,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SegmentedButton<CredentialType>(
               segments: [
                 ButtonSegment(
@@ -255,7 +258,7 @@ class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
               onSelectionChanged: (value) =>
                   setState(() => _type = value.first),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             if (_type == CredentialType.password)
               TextFormField(
                 controller: _secret,
@@ -288,17 +291,22 @@ class _CredentialEditorDialogState extends State<_CredentialEditorDialog> {
                 ),
               ),
             ],
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('commonCancel'.tr()),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _save, child: Text('commonSave'.tr())),
+              ],
+            ),
           ],
         ),
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('commonCancel').tr(),
-      ),
-      FilledButton(onPressed: _save, child: const Text('commonSave').tr()),
-    ],
   );
 }
 
