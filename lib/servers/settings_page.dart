@@ -46,6 +46,8 @@ class SettingsPage extends ConsumerWidget {
       transparentTerminalBackgroundEnabledProvider,
     );
     final windowOpacity = ref.watch(maidKitWindowOpacityProvider);
+    final activeVaultFile = ref.watch(activeVaultFileProvider);
+    final vaultFiles = ref.watch(vaultFilesProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
@@ -388,6 +390,29 @@ class SettingsPage extends ConsumerWidget {
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                       ),
+                      leading: const Icon(Symbols.lock),
+                      title: Text('vaultDefaultName'.tr()),
+                      trailing: activeVaultFile == null
+                          ? const Icon(Symbols.check)
+                          : null,
+                    ),
+                    ...vaultFiles.map(
+                      (path) => ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
+                        leading: const Icon(Symbols.lock),
+                        title: Text(path.split(Platform.pathSeparator).last),
+                        trailing: activeVaultFile == path
+                            ? const Icon(Symbols.check)
+                            : null,
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
                       leading: const Icon(Symbols.file_download),
                       title: const Text('settingsExportData').tr(),
                       subtitle: const Text('settingsExportDataHint').tr(),
@@ -569,21 +594,12 @@ class SettingsPage extends ConsumerWidget {
       return;
     }
 
-    final vaultPath = await FilePicker.saveFile(
-      dialogTitle: 'vaultChooseFile'.tr(),
-      fileName: 'Imported MaidKit vault.maidkit',
-      type: FileType.custom,
-      allowedExtensions: const ['maidkit'],
-    );
-    if (vaultPath == null || !context.mounted) return;
-    if (await File(vaultPath).exists()) {
-      if (context.mounted) _showMessage('vaultFileAlreadyExists'.tr());
-      return;
-    }
-    if (!context.mounted) return;
-
     final vaultPassword = await _newVaultPasswordDialog(context);
     if (vaultPassword == null || !context.mounted) return;
+
+    final vaultPath = await ref
+        .read(vaultFileStorageProvider)
+        .createVaultPath(name: path);
 
     final database = AppDatabase(filePath: vaultPath);
     final vault = VaultService(database, vaultId: vaultPath);

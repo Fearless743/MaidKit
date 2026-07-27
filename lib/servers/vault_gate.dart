@@ -90,7 +90,15 @@ class _VaultGateState extends ConsumerState<VaultGate> {
     );
     final path = selection?.files.singleOrNull?.path;
     if (path == null) return;
-    await ref.read(activeVaultFileProvider.notifier).select(path);
+    try {
+      final managedPath = await ref
+          .read(vaultFileStorageProvider)
+          .importVault(path);
+      await ref.read(activeVaultFileProvider.notifier).select(managedPath);
+    } on FileSystemException catch (error) {
+      if (mounted) setState(() => _error = _friendlyError(error));
+      return;
+    }
     if (mounted) {
       setState(() {
         _error = null;
@@ -102,17 +110,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
 
   Future<void> _createVaultFile() async {
     if (_busy) return;
-    final path = await FilePicker.saveFile(
-      dialogTitle: 'vaultChooseFile'.tr(),
-      fileName: 'MaidKit vault.maidkit',
-      type: FileType.custom,
-      allowedExtensions: const ['maidkit'],
-    );
-    if (path == null) return;
-    if (await File(path).exists()) {
-      if (mounted) setState(() => _error = 'vaultFileAlreadyExists'.tr());
-      return;
-    }
+    final path = await ref.read(vaultFileStorageProvider).createVaultPath();
     await ref.read(activeVaultFileProvider.notifier).select(path);
     if (mounted) {
       setState(() {

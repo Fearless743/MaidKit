@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +18,11 @@ import 'terminal_adapter_preferences.dart';
 import 'terminal_color_scheme.dart';
 import 'startup_connection_preferences.dart';
 import 'vault_service.dart';
+import 'vault_file_storage.dart';
+
+final vaultFileStorageProvider = Provider<VaultFileStorage>(
+  (ref) => VaultFileStorage(),
+);
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase(filePath: ref.watch(activeVaultFileProvider));
@@ -44,8 +51,16 @@ class ActiveVaultFileNotifier extends Notifier<String?> {
     final preferences = await SharedPreferences.getInstance();
     final path = preferences.getString(_activeVaultFilePreference);
     if (path != null && path.isNotEmpty) {
-      await ref.read(vaultFilesProvider.notifier).remember(path);
-      state = path;
+      try {
+        final managedPath = await ref
+            .read(vaultFileStorageProvider)
+            .importVault(path);
+        await ref.read(vaultFilesProvider.notifier).remember(managedPath);
+        state = managedPath;
+        await preferences.setString(_activeVaultFilePreference, managedPath);
+      } on FileSystemException {
+        await preferences.remove(_activeVaultFilePreference);
+      }
     }
   }
 
@@ -79,7 +94,22 @@ class VaultFilesNotifier extends Notifier<List<String>> {
   Future<void> _restore() async {
     final preferences = await SharedPreferences.getInstance();
     final stored = preferences.getStringList(_vaultFilesPreference) ?? const [];
-    state = [...stored, ...state.where((path) => !stored.contains(path))];
+    final managedPaths = <String>[];
+    for (final path in stored) {
+      try {
+        final managedPath = await ref
+            .read(vaultFileStorageProvider)
+            .importVault(path);
+        if (!managedPaths.contains(managedPath)) managedPaths.add(managedPath);
+      } on FileSystemException {
+        // Missing external files from older versions are no longer selectable.
+      }
+    }
+    state = [
+      ...managedPaths,
+      ...state.where((path) => !managedPaths.contains(path)),
+    ];
+    await preferences.setStringList(_vaultFilesPreference, state);
   }
 
   Future<void> remember(String path) async {
