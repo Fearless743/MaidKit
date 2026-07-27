@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'ghostty_terminal_session_adapter.dart';
+import 'cloud_sync_service.dart';
 import 'metrics_refresh_preferences.dart';
 import 'port_forwarding_models.dart';
 import 'server_repository.dart';
@@ -23,6 +24,40 @@ import 'vault_file_storage.dart';
 final vaultFileStorageProvider = Provider<VaultFileStorage>(
   (ref) => VaultFileStorage(),
 );
+
+final cloudSyncServiceForVaultProvider =
+    Provider.family<CloudSyncService, String>((ref, vaultId) {
+      return CloudSyncService(vaultId: vaultId);
+    });
+
+final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
+  return ref.watch(
+    cloudSyncServiceForVaultProvider(
+      ref.watch(activeVaultFileProvider) ?? 'maid_kit',
+    ),
+  );
+});
+
+final cloudSyncConfigurationProvider = FutureProvider<CloudSyncConfiguration?>((
+  ref,
+) {
+  return ref.watch(cloudSyncServiceProvider).configuration();
+});
+
+final cloudSyncConfigurationForVaultProvider =
+    FutureProvider.family<CloudSyncConfiguration?, String>((ref, vaultId) {
+      return ref
+          .watch(cloudSyncServiceForVaultProvider(vaultId))
+          .configuration();
+    });
+
+final cloudUserProvider = FutureProvider<CloudUser?>((ref) {
+  return ref.watch(cloudSyncServiceProvider).currentUser();
+});
+
+final cloudWorkspacesProvider = FutureProvider<List<CloudWorkspace>>((ref) {
+  return ref.watch(cloudSyncServiceProvider).listWorkspaces();
+});
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase(filePath: ref.watch(activeVaultFileProvider));

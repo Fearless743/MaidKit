@@ -34,7 +34,9 @@ dependencies:
   auto_route: ^11.1.0
   archive: ^4.0.9
   cryptography: ^2.9.0
+  crypto: ^3.0.7
   dartssh2: ^2.22.3
+  dio: ^5.10.0
   desktop_drop: ^0.7.1
   drift: ^2.34.2
   drift_flutter: ^0.3.1
@@ -43,6 +45,7 @@ dependencies:
   flutter_code_editor: ^0.3.5
   flutter_hooks: ^0.21.3+1
   flutter_secure_storage: ^10.3.1
+  flutter_web_auth_2: ^5.0.3
   hooks_riverpod: ^3.3.2
   highlight: ^0.7.0
   island_ui_foundation:

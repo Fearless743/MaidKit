@@ -1307,7 +1307,10 @@ class _LogsPane extends StatelessWidget {
                   onAction: () async => onRefresh(),
                 )
               : showTerminal
-              ? AnsiLogView(text: logs ?? '', streaming: true)
+              ? MediaQuery.removePadding(
+                  context: context,
+                  child: AnsiLogView(text: logs ?? '', streaming: true),
+                )
               : _EmptyBody(
                   icon: Symbols.terminal,
                   message: 'containerNoLogsYet'.tr(),

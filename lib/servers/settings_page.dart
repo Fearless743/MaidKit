@@ -14,6 +14,7 @@ import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'database_backup_service.dart';
+import 'cloud_sync_service.dart';
 import 'server_providers.dart';
 import 'terminal_color_scheme.dart';
 import 'vault_service.dart';
@@ -48,6 +49,7 @@ class SettingsPage extends ConsumerWidget {
     final windowOpacity = ref.watch(maidKitWindowOpacityProvider);
     final activeVaultFile = ref.watch(activeVaultFileProvider);
     final vaultFiles = ref.watch(vaultFilesProvider);
+    final cloudUser = ref.watch(cloudUserProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
@@ -382,51 +384,62 @@ class SettingsPage extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
               _SettingsSection(
-                titleKey: 'settingsData',
+                titleKey: 'settingsAccount',
+                padding: EdgeInsets.zero,
+                child: cloudUser.when(
+                  loading: () => const ListTile(
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                    leading: CircleAvatar(child: Icon(Symbols.person)),
+                    title: Text('…'),
+                  ),
+                  error: (_, _) => _cloudLoginTile(context, ref),
+                  data: (user) => user == null
+                      ? _cloudLoginTile(context, ref)
+                      : Column(
+                          children: [
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              leading: _CloudAvatar(user: user),
+                              title: Text(user.name),
+                              subtitle: user.handle.isEmpty
+                                  ? null
+                                  : Text(user.handle),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsVaults',
                 padding: EdgeInsets.zero,
                 child: Column(
                   children: [
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
-                      leading: const Icon(Symbols.lock),
-                      title: Text('vaultDefaultName'.tr()),
-                      trailing: activeVaultFile == null
-                          ? const Icon(Symbols.check)
+                    _VaultCloudBindingTile(
+                      vaultId: 'maid_kit',
+                      title: 'vaultDefaultName'.tr(),
+                      active: activeVaultFile == null,
+                      onExport: activeVaultFile == null
+                          ? () => _exportDatabase(context, ref)
+                          : null,
+                      onImport: activeVaultFile == null
+                          ? () => _importDatabase(context, ref)
                           : null,
                     ),
                     ...vaultFiles.map(
-                      (path) => ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                        ),
-                        leading: const Icon(Symbols.lock),
-                        title: Text(path.split(Platform.pathSeparator).last),
-                        trailing: activeVaultFile == path
-                            ? const Icon(Symbols.check)
+                      (path) => _VaultCloudBindingTile(
+                        vaultId: path,
+                        title: path.split(Platform.pathSeparator).last,
+                        active: activeVaultFile == path,
+                        onExport: activeVaultFile == path
+                            ? () => _exportDatabase(context, ref)
+                            : null,
+                        onImport: activeVaultFile == path
+                            ? () => _importDatabase(context, ref)
                             : null,
                       ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
-                      leading: const Icon(Symbols.file_download),
-                      title: const Text('settingsExportData').tr(),
-                      subtitle: const Text('settingsExportDataHint').tr(),
-                      onTap: () => _exportDatabase(context, ref),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
-                      leading: const Icon(Symbols.file_upload),
-                      title: const Text('settingsImportData').tr(),
-                      subtitle: const Text('settingsImportDataHint').tr(),
-                      onTap: () => _importDatabase(context, ref),
                     ),
                   ],
                 ),
@@ -452,6 +465,30 @@ class SettingsPage extends ConsumerWidget {
       await saveMaidKitBackgroundImage(ref, File(path));
     } catch (error) {
       if (context.mounted) _showMessage(error.toString());
+    }
+  }
+
+  ListTile _cloudLoginTile(BuildContext context, WidgetRef ref) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+    leading: const CircleAvatar(child: Icon(Symbols.person)),
+    title: const Text('settingsCloudSignIn').tr(),
+    subtitle: const Text('settingsCloudSignInHint').tr(),
+    trailing: FilledButton(
+      onPressed: () => _signInToCloud(context, ref),
+      child: const Text('settingsCloudSignInAction').tr(),
+    ),
+    onTap: () => _signInToCloud(context, ref),
+  );
+
+  Future<void> _signInToCloud(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(cloudSyncServiceProvider).signIn();
+      ref.invalidate(cloudUserProvider);
+      ref.invalidate(cloudWorkspacesProvider);
+    } on CloudSyncException catch (error) {
+      if (context.mounted) _showMessage(error.message);
+    } catch (_) {
+      if (context.mounted) _showMessage('commonSomethingWentWrong'.tr());
     }
   }
 
@@ -757,6 +794,153 @@ class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
 
 void _showMessage(String message) {
   showSnackBar(message);
+}
+
+class _CloudAvatar extends StatelessWidget {
+  const _CloudAvatar({required this.user});
+
+  final CloudUser user;
+
+  @override
+  Widget build(BuildContext context) => CircleAvatar(
+    foregroundImage: user.avatarUrl == null
+        ? null
+        : NetworkImage(user.avatarUrl!),
+    child: Text(user.initials),
+  );
+}
+
+class _VaultCloudBindingTile extends ConsumerWidget {
+  const _VaultCloudBindingTile({
+    required this.vaultId,
+    required this.title,
+    required this.active,
+    this.onExport,
+    this.onImport,
+  });
+
+  final String vaultId;
+  final String title;
+  final bool active;
+  final Future<void> Function()? onExport;
+  final Future<void> Function()? onImport;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final binding = ref.watch(cloudSyncConfigurationForVaultProvider(vaultId));
+    final configuration = binding.asData?.value;
+    final workspace = configuration == null
+        ? 'settingsVaultWorkspaceUnbound'.tr()
+        : 'settingsVaultWorkspaceBound'.tr(args: [configuration.workspaceName]);
+    final syncStatus = configuration == null
+        ? 'settingsVaultSyncDisabled'.tr()
+        : 'settingsVaultLastSync'.tr(args: ['settingsVaultNotYet'.tr()]);
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: const Icon(Symbols.lock),
+          title: Text(title),
+          subtitle: Text('$workspace\n$syncStatus'),
+          isThreeLine: true,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (active) const Icon(Symbols.check),
+              const SizedBox(width: 8),
+              const Icon(Symbols.chevron_right),
+            ],
+          ),
+          onTap: () => _bindWorkspace(context, ref),
+        ),
+        if (active)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onExport == null ? null : () => onExport!(),
+                  icon: const Icon(Symbols.file_download),
+                  label: const Text('settingsExportData').tr(),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: onImport == null ? null : () => onImport!(),
+                  icon: const Icon(Symbols.file_upload),
+                  label: const Text('settingsImportData').tr(),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _bindWorkspace(BuildContext context, WidgetRef ref) async {
+    try {
+      final service = ref.read(cloudSyncServiceForVaultProvider(vaultId));
+      final workspaces = await service.signInAndListWorkspaces();
+      if (!context.mounted) return;
+      final selected = ref
+          .read(cloudSyncConfigurationForVaultProvider(vaultId))
+          .asData
+          ?.value;
+      final workspace = await showDialog<CloudWorkspace>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 440,
+            child: workspaces.isEmpty
+                ? const Text('settingsCloudSyncNoWorkspaces').tr()
+                : ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final workspace in workspaces)
+                        ListTile(
+                          enabled: workspace.supportsSync,
+                          title: Text(workspace.name),
+                          subtitle: Text(
+                            workspace.supportsSync
+                                ? 'settingsCloudSyncWorkspaceEligible'.tr()
+                                : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
+                          ),
+                          trailing: selected?.workspaceId == workspace.id
+                              ? const Icon(Symbols.check)
+                              : null,
+                          onTap: workspace.supportsSync
+                              ? () => Navigator.of(context).pop(workspace)
+                              : null,
+                        ),
+                    ],
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('commonCancel').tr(),
+            ),
+          ],
+        ),
+      );
+      if (workspace == null) return;
+      await service.enable(workspace);
+      ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
+      ref.invalidate(cloudUserProvider);
+    } on CloudSyncException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('commonSomethingWentWrong'.tr())),
+        );
+      }
+    }
+  }
 }
 
 class _SettingsSection extends StatelessWidget {

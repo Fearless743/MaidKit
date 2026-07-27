@@ -76,6 +76,10 @@ class _ServerTabsShell extends ConsumerWidget {
                             const _PortForwardRailIndicator(),
                             const SizedBox(height: 8),
                             const DeploySessionsRailButton(),
+                            const SizedBox(height: 8),
+                            _CloudAccountRailButton(
+                              onPressed: () => tabsRouter.setActiveIndex(4),
+                            ),
                             IconButton(
                               tooltip: 'tabSettings'.tr(),
                               onPressed: () => tabsRouter.setActiveIndex(4),
@@ -164,6 +168,35 @@ class _ServerTabsShell extends ConsumerWidget {
                 ),
         );
       },
+    );
+  }
+}
+
+class _CloudAccountRailButton extends ConsumerWidget {
+  const _CloudAccountRailButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(cloudUserProvider).asData?.value;
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: 'settingsAccount'.tr(),
+      onPressed: onPressed,
+      icon: CircleAvatar(
+        radius: 14,
+        backgroundColor: scheme.surfaceContainerHighest,
+        foregroundImage: user?.avatarUrl == null
+            ? null
+            : NetworkImage(user!.avatarUrl!),
+        child: user == null
+            ? const Icon(Symbols.person, size: 18)
+            : Text(
+                user.initials,
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+      ),
     );
   }
 }
