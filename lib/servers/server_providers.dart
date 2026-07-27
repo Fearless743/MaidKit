@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -59,7 +60,7 @@ final cloudWorkspacesProvider = FutureProvider<List<CloudWorkspace>>((ref) {
   return ref.watch(cloudSyncServiceProvider).listWorkspaces();
 });
 
-final databaseProvider = Provider<AppDatabase>((ref) {
+final databaseProvider = Provider.autoDispose<AppDatabase>((ref) {
   final database = AppDatabase(filePath: ref.watch(activeVaultFileProvider));
   ref.onDispose(database.close);
   return database;
@@ -67,6 +68,51 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 const _activeVaultFilePreference = 'active_vault_file';
 const _vaultFilesPreference = 'vault_files';
+const _vaultLabelsPreference = 'vault_labels';
+
+final vaultLabelsProvider =
+    NotifierProvider<VaultLabelsNotifier, Map<String, String>>(
+      VaultLabelsNotifier.new,
+    );
+
+class VaultLabelsNotifier extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() {
+    _restore();
+    return const {};
+  }
+
+  Future<void> _restore() async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString(_vaultLabelsPreference);
+    if (raw == null) return;
+    try {
+      final values = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      state = values.map((key, value) => MapEntry(key, value.toString()));
+    } catch (_) {
+      await preferences.remove(_vaultLabelsPreference);
+    }
+  }
+
+  Future<void> rename(String vaultId, String name) async {
+    final normalized = name.trim();
+    final updated = {...state};
+    if (normalized.isEmpty) {
+      updated.remove(vaultId);
+    } else {
+      updated[vaultId] = normalized;
+    }
+    state = updated;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_vaultLabelsPreference, jsonEncode(state));
+  }
+
+  Future<void> remove(String vaultId) async {
+    state = {...state}..remove(vaultId);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_vaultLabelsPreference, jsonEncode(state));
+  }
+}
 
 /// The database file backing the currently selected vault. A null value keeps
 /// using the original MaidKit database so existing users migrate seamlessly.
@@ -149,6 +195,12 @@ class VaultFilesNotifier extends Notifier<List<String>> {
 
   Future<void> remember(String path) async {
     state = [path, ...state.where((value) => value != path)];
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(_vaultFilesPreference, state);
+  }
+
+  Future<void> forget(String path) async {
+    state = state.where((value) => value != path).toList();
     final preferences = await SharedPreferences.getInstance();
     await preferences.setStringList(_vaultFilesPreference, state);
   }

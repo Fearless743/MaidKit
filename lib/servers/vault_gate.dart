@@ -5,9 +5,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:styled_widget/styled_widget.dart';
 
 import 'server_providers.dart';
+import 'cloud_sync_service.dart';
+import 'database_backup_service.dart';
 
 class VaultGate extends ConsumerStatefulWidget {
   const VaultGate({super.key, required this.child});
@@ -120,6 +121,88 @@ class _VaultGateState extends ConsumerState<VaultGate> {
       });
     }
   }
+
+  Future<void> _createCloudVault() async {
+    if (_busy) return;
+    if (_password.text != _confirmation.text) {
+      setState(() => _error = 'vaultPasswordsDontMatch'.tr());
+      return;
+    }
+    setState(() {
+      _error = null;
+      _busy = true;
+    });
+    try {
+      final path = await ref
+          .read(vaultFileStorageProvider)
+          .createVaultPath(name: 'Solarpass vault');
+      await ref.read(activeVaultFileProvider.notifier).select(path);
+      final vault = ref.read(vaultServiceProvider);
+      await vault.create(_password.text);
+
+      final service = ref.read(cloudSyncServiceForVaultProvider(path));
+      final workspaces = await service.signInAndListWorkspaces();
+      if (!mounted) return;
+      final workspace = await _selectCloudWorkspace(workspaces);
+      if (workspace == null) {
+        if (mounted) setState(() => _unlocked = true);
+        return;
+      }
+      await service.enable(workspace);
+      final backup = DatabaseBackupService(
+        ref.read(databaseProvider),
+        ref.read(vaultServiceProvider),
+      );
+      await service.sync(
+        archive: await backup.exportArchive(_password.text),
+        applyArchive: (archive) => backup.importArchive(archive, _password.text),
+      );
+      ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
+      if (mounted) setState(() => _unlocked = true);
+    } catch (error) {
+      if (mounted) setState(() => _error = _friendlyError(error));
+    } finally {
+      if (mounted && !_unlocked) setState(() => _busy = false);
+    }
+  }
+
+  Future<CloudWorkspace?> _selectCloudWorkspace(
+    List<CloudWorkspace> workspaces,
+  ) => showDialog<CloudWorkspace>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('vaultCloudWorkspaceTitle'.tr()),
+      content: SizedBox(
+        width: 440,
+        child: workspaces.isEmpty
+            ? Text('settingsCloudSyncNoWorkspaces'.tr())
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final workspace in workspaces)
+                    ListTile(
+                      enabled: workspace.supportsSync,
+                      title: Text(workspace.name),
+                      subtitle: Text(
+                        workspace.supportsSync
+                            ? 'settingsCloudSyncWorkspaceEligible'.tr()
+                            : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
+                      ),
+                      onTap: workspace.supportsSync
+                          ? () => Navigator.of(context).pop(workspace)
+                          : null,
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('commonCancel'.tr()),
+        ),
+      ],
+    ),
+  );
 
   Future<void> _selectVault(String? path) async {
     if (_busy) return;
@@ -251,6 +334,18 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                             onSubmitted: (_) => _submit(hasVault),
                             decoration: InputDecoration(
                               labelText: 'vaultPasswordLabel'.tr(),
+                              suffix: showBiometricUnlock
+                                  ? IconButton(
+                                      icon: const Icon(Symbols.fingerprint),
+                                      onPressed: _busy
+                                          ? null
+                                          : _unlockWithBiometrics,
+                                      tooltip: 'vaultBiometricAction'.tr(),
+                                      constraints: const BoxConstraints(),
+                                      padding: const EdgeInsets.all(0),
+                                      iconSize: 20,
+                                    )
+                                  : null,
                             ),
                           ),
                           if (!hasVault) ...[
@@ -292,11 +387,14 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                                         : 'vaultCreateAction'.tr(),
                                   ),
                           ),
-                          if (hasVault && showBiometricUnlock)
-                            TextButton(
-                              onPressed: _busy ? null : _unlockWithBiometrics,
-                              child: Text('vaultBiometricAction'.tr()),
-                            ).padding(top: 8),
+                          if (!hasVault) ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : _createCloudVault,
+                              icon: const Icon(Symbols.cloud_download),
+                              label: Text('vaultCreateFromCloudAction'.tr()),
+                            ),
+                          ],
                           const SizedBox(height: 8),
                           OutlinedButton.icon(
                             onPressed: _busy ? null : _openVaultFile,

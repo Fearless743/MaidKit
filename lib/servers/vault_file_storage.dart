@@ -34,6 +34,18 @@ class VaultFileStorage {
     return target.path;
   }
 
+  Future<void> deleteVault(String path) async {
+    final directory = await _vaultDirectory();
+    if (!_isInDirectory(path, directory.path)) {
+      throw FileSystemException(
+        'Only managed vault files can be deleted.',
+        path,
+      );
+    }
+    final file = File(path);
+    if (await file.exists()) await file.delete();
+  }
+
   Future<Directory> _vaultDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
     return Directory(

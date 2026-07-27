@@ -58,6 +58,7 @@ dependencies:
       path: packages/window_manager
       ref: 6fae92d21b4c80ce1b8f71c1190d7970cf722bd4
   local_auth: ^3.0.2
+  openmls: ^1.4.2
   flterm:
     path: packages/flterm
   shared_preferences: ^2.5.5
@@ -93,6 +94,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
 
 dependency_overrides:
+  hooks: ^2.0.2
   libghostty:
     git:
       url: https://github.com/elias8/libghostty.git

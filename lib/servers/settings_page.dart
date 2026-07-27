@@ -49,6 +49,7 @@ class SettingsPage extends ConsumerWidget {
     final windowOpacity = ref.watch(maidKitWindowOpacityProvider);
     final activeVaultFile = ref.watch(activeVaultFileProvider);
     final vaultFiles = ref.watch(vaultFilesProvider);
+    final vaultLabels = ref.watch(vaultLabelsProvider);
     final cloudUser = ref.watch(cloudUserProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
@@ -427,19 +428,60 @@ class SettingsPage extends ConsumerWidget {
                       onImport: activeVaultFile == null
                           ? () => _importDatabase(context, ref)
                           : null,
+                      onSync: activeVaultFile == null
+                          ? () => _syncVault(context, ref, 'maid_kit')
+                          : null,
+                      onUpload: activeVaultFile == null
+                          ? () => _syncVault(
+                              context,
+                              ref,
+                              'maid_kit',
+                              uploadOnly: true,
+                            )
+                          : null,
                     ),
                     ...vaultFiles.map(
                       (path) => _VaultCloudBindingTile(
                         vaultId: path,
-                        title: path.split(Platform.pathSeparator).last,
+                        title:
+                            vaultLabels[path] ??
+                            path.split(Platform.pathSeparator).last,
                         active: activeVaultFile == path,
                         onExport: activeVaultFile == path
                             ? () => _exportDatabase(context, ref)
                             : null,
+                        onRename: () => _renameVault(
+                          context,
+                          ref,
+                          path,
+                          vaultLabels[path] ??
+                              path.split(Platform.pathSeparator).last,
+                        ),
+                        onDelete: () => _deleteVault(context, ref, path),
                         onImport: activeVaultFile == path
                             ? () => _importDatabase(context, ref)
                             : null,
+                        onSync: activeVaultFile == path
+                            ? () => _syncVault(context, ref, path)
+                            : null,
+                        onUpload: activeVaultFile == path
+                            ? () => _syncVault(
+                                context,
+                                ref,
+                                path,
+                                uploadOnly: true,
+                              )
+                            : null,
                       ),
+                    ),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
+                      leading: const Icon(Symbols.add),
+                      title: const Text('settingsVaultCreate').tr(),
+                      trailing: const Icon(Symbols.chevron_right),
+                      onTap: () => _showVaultOnboarding(context, ref),
                     ),
                   ],
                 ),
@@ -677,9 +719,252 @@ class SettingsPage extends ConsumerWidget {
       }
     }
   }
+
+  Future<void> _createLocalVault(BuildContext context, WidgetRef ref) async {
+    final password = await _newVaultPasswordDialog(context);
+    if (password == null || !context.mounted) return;
+    final path = await ref.read(vaultFileStorageProvider).createVaultPath();
+    try {
+      await ref.read(activeVaultFileProvider.notifier).select(path);
+      await ref.read(vaultServiceProvider).create(password);
+      if (context.mounted) _showMessage('settingsVaultCreated'.tr());
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
+      }
+    }
+  }
+
+  Future<void> _renameVault(
+    BuildContext context,
+    WidgetRef ref,
+    String vaultId,
+    String currentName,
+  ) async {
+    final controller = TextEditingController(text: currentName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('settingsVaultRename').tr(),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('commonCancel').tr(),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('commonSave').tr(),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name != null) {
+      await ref.read(vaultLabelsProvider.notifier).rename(vaultId, name);
+    }
+  }
+
+  Future<void> _deleteVault(
+    BuildContext context,
+    WidgetRef ref,
+    String vaultId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('settingsVaultDelete').tr(),
+        content: const Text('settingsVaultDeleteHint').tr(),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('commonCancel').tr(),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('commonDelete').tr(),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (ref.read(activeVaultFileProvider) == vaultId) {
+      await ref.read(activeVaultFileProvider.notifier).select(null);
+    }
+    await ref.read(vaultFileStorageProvider).deleteVault(vaultId);
+    await ref.read(vaultFilesProvider.notifier).forget(vaultId);
+    await ref.read(vaultLabelsProvider.notifier).remove(vaultId);
+  }
+
+  Future<void> _showVaultOnboarding(BuildContext context, WidgetRef ref) async {
+    final choice = await showDialog<_VaultOnboardingChoice>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('settingsVaultCreate').tr(),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Symbols.lock),
+                title: const Text('settingsVaultCreateLocal').tr(),
+                subtitle: const Text('settingsVaultCreateLocalHint').tr(),
+                onTap: () =>
+                    Navigator.of(context).pop(_VaultOnboardingChoice.local),
+              ),
+              ListTile(
+                leading: const Icon(Symbols.cloud_download),
+                title: const Text('settingsVaultDownloadCloud').tr(),
+                subtitle: const Text('settingsVaultDownloadCloudHint').tr(),
+                onTap: () =>
+                    Navigator.of(context).pop(_VaultOnboardingChoice.cloud),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('commonCancel').tr(),
+          ),
+        ],
+      ),
+    );
+    if (choice == _VaultOnboardingChoice.local && context.mounted) {
+      await _createLocalVault(context, ref);
+    } else if (choice == _VaultOnboardingChoice.cloud && context.mounted) {
+      await _downloadCloudVault(context, ref);
+    }
+  }
+
+  Future<void> _downloadCloudVault(BuildContext context, WidgetRef ref) async {
+    final password = await _newVaultPasswordDialog(context);
+    if (password == null || !context.mounted) return;
+    try {
+      final accountService = ref.read(cloudSyncServiceProvider);
+      final workspaces = await accountService.signInAndListWorkspaces();
+      if (!context.mounted) return;
+      final workspace = await _chooseCloudWorkspace(context, workspaces);
+      if (workspace == null || !context.mounted) return;
+
+      final path = await ref
+          .read(vaultFileStorageProvider)
+          .createVaultPath(name: workspace.name);
+      await ref.read(activeVaultFileProvider.notifier).select(path);
+      final vault = ref.read(vaultServiceProvider);
+      await vault.create(password);
+      final sync = ref.read(cloudSyncServiceForVaultProvider(path));
+      await sync.enable(workspace);
+      final backup = DatabaseBackupService(ref.read(databaseProvider), vault);
+      await sync.sync(
+        archive: await backup.exportArchive(password),
+        applyArchive: (archive) => backup.importArchive(archive, password),
+      );
+      ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
+      if (context.mounted) _showMessage('settingsVaultDownloadComplete'.tr());
+    } on CloudSyncException catch (error) {
+      if (context.mounted) _showMessage(error.message);
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
+      }
+    }
+  }
+
+  Future<CloudWorkspace?> _chooseCloudWorkspace(
+    BuildContext context,
+    List<CloudWorkspace> workspaces,
+  ) => showDialog<CloudWorkspace>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('vaultCloudWorkspaceTitle').tr(),
+      content: SizedBox(
+        width: 440,
+        child: workspaces.isEmpty
+            ? const Text('settingsCloudSyncNoWorkspaces').tr()
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final workspace in workspaces)
+                    ListTile(
+                      enabled: workspace.supportsSync,
+                      title: Text(workspace.name),
+                      subtitle: Text(
+                        workspace.supportsSync
+                            ? 'settingsCloudSyncWorkspaceEligible'.tr()
+                            : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
+                      ),
+                      onTap: workspace.supportsSync
+                          ? () => Navigator.of(context).pop(workspace)
+                          : null,
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('commonCancel').tr(),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _syncVault(
+    BuildContext context,
+    WidgetRef ref,
+    String vaultId, {
+    bool uploadOnly = false,
+  }) async {
+    try {
+      final password = await _backupPasswordDialog(context, confirm: false);
+      if (password == null) return;
+      final backup = DatabaseBackupService(
+        ref.read(databaseProvider),
+        ref.read(vaultServiceProvider),
+      );
+      await ref
+          .read(cloudSyncServiceForVaultProvider(vaultId))
+          .sync(
+            archive: await backup.exportArchive(password),
+            applyArchive: (archive) => backup.importArchive(archive, password),
+            pullRemote: !uploadOnly,
+          );
+      ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('settingsVaultSyncComplete'.tr())),
+        );
+      }
+    } on CloudSyncException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('settingsBackupError'.tr(args: [error.toString()])),
+          ),
+        );
+      }
+    }
+  }
 }
 
 enum _ImportDestination { newVault, replaceCurrent }
+
+enum _VaultOnboardingChoice { local, cloud }
+
+enum _VaultTileAction { rename, delete }
 
 Future<String?> _backupPasswordDialog(
   BuildContext context, {
@@ -817,6 +1102,10 @@ class _VaultCloudBindingTile extends ConsumerWidget {
     required this.active,
     this.onExport,
     this.onImport,
+    this.onSync,
+    this.onUpload,
+    this.onRename,
+    this.onDelete,
   });
 
   final String vaultId;
@@ -824,6 +1113,10 @@ class _VaultCloudBindingTile extends ConsumerWidget {
   final bool active;
   final Future<void> Function()? onExport;
   final Future<void> Function()? onImport;
+  final Future<void> Function()? onSync;
+  final Future<void> Function()? onUpload;
+  final Future<void> Function()? onRename;
+  final Future<void> Function()? onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -834,45 +1127,90 @@ class _VaultCloudBindingTile extends ConsumerWidget {
         : 'settingsVaultWorkspaceBound'.tr(args: [configuration.workspaceName]);
     final syncStatus = configuration == null
         ? 'settingsVaultSyncDisabled'.tr()
-        : 'settingsVaultLastSync'.tr(args: ['settingsVaultNotYet'.tr()]);
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          leading: const Icon(Symbols.lock),
-          title: Text(title),
-          subtitle: Text('$workspace\n$syncStatus'),
-          isThreeLine: true,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (active) const Icon(Symbols.check),
-              const SizedBox(width: 8),
-              const Icon(Symbols.chevron_right),
+        : 'settingsVaultLastSync'.tr(
+            args: [
+              configuration.lastSyncedAt == null
+                  ? 'settingsVaultNotYet'.tr()
+                  : DateFormat.yMMMd().add_jm().format(
+                      configuration.lastSyncedAt!,
+                    ),
             ],
-          ),
-          onTap: () => _bindWorkspace(context, ref),
-        ),
-        if (active)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Row(
+          );
+    return Container(
+      color: active ? Theme.of(context).colorScheme.secondaryContainer : null,
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            leading: const Icon(Symbols.lock),
+            title: Text(title),
+            subtitle: Text('$workspace\n$syncStatus'),
+            isThreeLine: true,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                OutlinedButton.icon(
-                  onPressed: onExport == null ? null : () => onExport!(),
-                  icon: const Icon(Symbols.file_download),
-                  label: const Text('settingsExportData').tr(),
-                ),
+                if (onRename != null || onDelete != null)
+                  PopupMenuButton<_VaultTileAction>(
+                    onSelected: (action) {
+                      if (action == _VaultTileAction.rename) onRename?.call();
+                      if (action == _VaultTileAction.delete) onDelete?.call();
+                    },
+                    itemBuilder: (context) => [
+                      if (onRename != null)
+                        PopupMenuItem(
+                          value: _VaultTileAction.rename,
+                          child: Text('settingsVaultRename'.tr()),
+                        ),
+                      if (onDelete != null)
+                        PopupMenuItem(
+                          value: _VaultTileAction.delete,
+                          child: Text('settingsVaultDelete'.tr()),
+                        ),
+                    ],
+                  ),
                 const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: onImport == null ? null : () => onImport!(),
-                  icon: const Icon(Symbols.file_upload),
-                  label: const Text('settingsImportData').tr(),
-                ),
+                const Icon(Symbols.chevron_right),
               ],
             ),
+            onTap: () => _bindWorkspace(context, ref),
           ),
-      ],
+          if (active)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onExport == null ? null : () => onExport!(),
+                    icon: const Icon(Symbols.file_download),
+                    label: const Text('settingsExportData').tr(),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: onImport == null ? null : () => onImport!(),
+                    icon: const Icon(Symbols.file_upload),
+                    label: const Text('settingsImportData').tr(),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: configuration == null || onSync == null
+                        ? null
+                        : () => onSync!(),
+                    icon: const Icon(Symbols.sync),
+                    label: const Text('settingsVaultSyncNow').tr(),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: configuration == null || onUpload == null
+                        ? null
+                        : () => onUpload!(),
+                    icon: const Icon(Symbols.cloud_upload),
+                    label: const Text('settingsVaultUpload').tr(),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
