@@ -24,6 +24,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
   final _confirmation = TextEditingController();
   bool _unlocked = false;
   bool _busy = false;
+  bool _preservePasswordDuringVaultSwitch = false;
   String? _error;
 
   @override
@@ -52,10 +53,35 @@ class _VaultGateState extends ConsumerState<VaultGate> {
           throw StateError('vaultInvalidPassword'.tr());
         }
       } else {
-        if (_password.text != _confirmation.text) {
+        final sync = ref.read(cloudSyncServiceProvider);
+        final configuration = await sync.configuration();
+        final isCloudDownload = configuration?.pendingDownload == true;
+        if (!isCloudDownload && _password.text != _confirmation.text) {
           throw StateError('vaultPasswordsDontMatch'.tr());
         }
         await vault.create(_password.text);
+        if (isCloudDownload) {
+          final backup = DatabaseBackupService(
+            ref.read(databaseProvider),
+            vault,
+          );
+          try {
+            await sync.sync(
+              archive: await backup.exportArchive(_password.text),
+              applyArchive: (archive) =>
+                  backup.importArchive(archive, _password.text),
+              conflictResolution: CloudSyncConflictResolution.downloadRemote,
+            );
+            await sync.completePendingDownload();
+            ref.invalidate(cloudSyncConfigurationProvider);
+          } on CloudSyncException {
+            await vault.discardNewVault();
+            rethrow;
+          } catch (_) {
+            await vault.discardNewVault();
+            throw StateError('vaultDownloadedPasswordInvalid'.tr());
+          }
+        }
       }
       if (mounted) setState(() => _unlocked = true);
     } catch (error) {
@@ -136,9 +162,11 @@ class _VaultGateState extends ConsumerState<VaultGate> {
       final path = await ref
           .read(vaultFileStorageProvider)
           .createVaultPath(name: 'Solarpass vault');
+      _preservePasswordDuringVaultSwitch = true;
       await ref.read(activeVaultFileProvider.notifier).select(path);
       final vault = ref.read(vaultServiceProvider);
       await vault.create(_password.text);
+      _preservePasswordDuringVaultSwitch = false;
 
       final service = ref.read(cloudSyncServiceForVaultProvider(path));
       final workspaces = await service.signInAndListWorkspaces();
@@ -155,13 +183,15 @@ class _VaultGateState extends ConsumerState<VaultGate> {
       );
       await service.sync(
         archive: await backup.exportArchive(_password.text),
-        applyArchive: (archive) => backup.importArchive(archive, _password.text),
+        applyArchive: (archive) =>
+            backup.importArchive(archive, _password.text),
       );
       ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
       if (mounted) setState(() => _unlocked = true);
     } catch (error) {
       if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
+      _preservePasswordDuringVaultSwitch = false;
       if (mounted && !_unlocked) setState(() => _busy = false);
     }
   }
@@ -218,18 +248,29 @@ class _VaultGateState extends ConsumerState<VaultGate> {
   @override
   Widget build(BuildContext context) {
     ref.listen<String?>(activeVaultFileProvider, (previous, next) {
-      if (previous != next && _unlocked && mounted) {
-        setState(() => _unlocked = false);
+      if (previous != next && mounted) {
+        setState(() {
+          _unlocked = false;
+          _error = null;
+          if (!_preservePasswordDuringVaultSwitch) {
+            _busy = false;
+            _password.clear();
+            _confirmation.clear();
+          }
+        });
       }
     });
     if (_unlocked) return widget.child;
 
     final exists = ref.watch(vaultExistsProvider);
     final biometricEnabled = ref.watch(biometricUnlockEnabledProvider);
+    final cloudConfiguration = ref.watch(cloudSyncConfigurationProvider);
     final activeFile = ref.watch(activeVaultFileProvider);
     final vaultFiles = ref.watch(vaultFilesProvider);
     final theme = Theme.of(context);
     final showBiometricUnlock = biometricEnabled.asData?.value ?? false;
+    final isCloudDownload =
+        cloudConfiguration.asData?.value?.pendingDownload == true;
 
     return exists.when(
       loading: () =>
@@ -280,6 +321,8 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                           Text(
                             hasVault
                                 ? 'vaultUnlockTitle'.tr()
+                                : isCloudDownload
+                                ? 'vaultDownloadedTitle'.tr()
                                 : 'vaultCreateTitle'.tr(),
                             style: theme.textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.w600,
@@ -290,6 +333,8 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                           Text(
                             hasVault
                                 ? 'vaultUnlockSubtitle'.tr()
+                                : isCloudDownload
+                                ? 'vaultDownloadedSubtitle'.tr()
                                 : 'vaultCreateSubtitle'.tr(),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
@@ -342,13 +387,13 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                                           : _unlockWithBiometrics,
                                       tooltip: 'vaultBiometricAction'.tr(),
                                       constraints: const BoxConstraints(),
-                                      padding: const EdgeInsets.all(0),
+                                      padding: const EdgeInsets.all(4),
                                       iconSize: 20,
                                     )
                                   : null,
                             ),
                           ),
-                          if (!hasVault) ...[
+                          if (!hasVault && !isCloudDownload) ...[
                             const SizedBox(height: 12),
                             TextField(
                               controller: _confirmation,
@@ -384,6 +429,8 @@ class _VaultGateState extends ConsumerState<VaultGate> {
                                 : Text(
                                     hasVault
                                         ? 'vaultUnlockAction'.tr()
+                                        : isCloudDownload
+                                        ? 'vaultDownloadedAction'.tr()
                                         : 'vaultCreateAction'.tr(),
                                   ),
                           ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -24,19 +25,50 @@ class VaultService {
     this._database, {
     FlutterSecureStorage? secureStorage,
     String vaultId = 'maid_kit',
-  }) : _biometricKey =
+  }) : _vaultId = vaultId,
+       _biometricKey =
            '${_biometricKeyPrefix}_${base64UrlEncode(utf8.encode(vaultId))}',
        _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _biometricKeyPrefix = 'maidkit_vault_data_key';
+  static const _syncPassphraseKeyPrefix = 'maidkit_vault_sync_passphrase';
   static const _iterations = 310000;
+  static final Map<String, String> _syncPassphrases = {};
   final AppDatabase _database;
   final FlutterSecureStorage _secureStorage;
+  final String _vaultId;
   final String _biometricKey;
   final AesGcm _cipher = AesGcm.with256bits();
   SecretKey? _dataKey;
 
   bool get isUnlocked => _dataKey != null;
+  String get _syncPassphraseKey =>
+      '${_syncPassphraseKeyPrefix}_${base64UrlEncode(utf8.encode(_vaultId))}';
+
+  Future<String?> syncPassphrase() async {
+    final cached = _syncPassphrases[_vaultId];
+    if (cached != null) return cached;
+    final dataKey = _dataKey;
+    if (dataKey == null) return null;
+    final raw = await _secureStorage.read(key: _syncPassphraseKey);
+    if (raw == null) return null;
+    try {
+      final value = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      final passphrase = utf8.decode(
+        await _decryptBytes(
+          _decode(value['ciphertext'] as String),
+          _decode(value['nonce'] as String),
+          dataKey,
+          'sync-passphrase',
+        ),
+      );
+      _syncPassphrases[_vaultId] = passphrase;
+      return passphrase;
+    } catch (_) {
+      await _secureStorage.delete(key: _syncPassphraseKey);
+      return null;
+    }
+  }
 
   Future<bool> hasVault() async =>
       (await _database.select(_database.vaultMetadata).get()).isNotEmpty;
@@ -69,6 +101,7 @@ class VaultService {
           ),
         );
     _dataKey = dataKey;
+    await _cacheSyncPassphrase(password);
   }
 
   Future<bool> unlockWithPassword(String password) async {
@@ -89,6 +122,7 @@ class VaultService {
         'verifier',
       );
       _dataKey = candidate;
+      await _cacheSyncPassphrase(password);
       return true;
     } on SecretBoxAuthenticationError {
       return false;
@@ -165,7 +199,56 @@ class VaultService {
   Future<void> disableBiometricUnlock() =>
       _secureStorage.delete(key: _biometricKey);
 
-  Future<void> lock() async => _dataKey = null;
+  Future<void> lock() async {
+    _dataKey = null;
+    _syncPassphrases.remove(_vaultId);
+  }
+
+  /// Rewraps the existing data key with [newPassword]. Stored vault data and
+  /// biometric access stay valid because the data key itself does not change.
+  Future<void> changePassword(String newPassword) async {
+    final dataKey = _requireKey();
+    final metadata = await _metadata();
+    final salt = _randomBytes(16);
+    final wrappingKey = await _deriveKey(newPassword, salt);
+    final wrapped = await _encryptBytes(
+      await dataKey.extractBytes(),
+      wrappingKey,
+      'vault-key',
+    );
+    await (_database.update(
+      _database.vaultMetadata,
+    )..where((table) => table.id.equals(metadata.id))).write(
+      VaultMetadataCompanion(
+        salt: Value(_encode(salt)),
+        wrappedDataKey: Value(_encode(_pack(wrapped))),
+        wrappedDataKeyNonce: Value(_encode(wrapped.nonce)),
+      ),
+    );
+    await _cacheSyncPassphrase(newPassword);
+  }
+
+  Future<void> discardNewVault() async {
+    await _database.delete(_database.vaultMetadata).go();
+    await _secureStorage.delete(key: _syncPassphraseKey);
+    await lock();
+  }
+
+  Future<void> _cacheSyncPassphrase(String passphrase) async {
+    final box = await _encryptBytes(
+      utf8.encode(passphrase),
+      _requireKey(),
+      'sync-passphrase',
+    );
+    _syncPassphrases[_vaultId] = passphrase;
+    await _secureStorage.write(
+      key: _syncPassphraseKey,
+      value: jsonEncode({
+        'ciphertext': _encode(_pack(box)),
+        'nonce': _encode(box.nonce),
+      }),
+    );
+  }
 
   Future<EncryptedValue> encrypt(
     String value, {

@@ -1,14 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
-import 'package:openmls/openmls.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 /// Configuration is deliberately opt-in and scoped to one local vault.
@@ -19,7 +15,7 @@ class CloudSyncConfiguration {
     required this.workspaceSlug,
     required this.blobId,
     required this.revision,
-    required this.cursor,
+    this.pendingDownload = false,
     this.lastSyncedAt,
   });
 
@@ -28,7 +24,7 @@ class CloudSyncConfiguration {
   final String workspaceSlug;
   final String blobId;
   final int revision;
-  final int cursor;
+  final bool pendingDownload;
   final DateTime? lastSyncedAt;
 
   Map<String, Object?> toJson() => {
@@ -37,7 +33,7 @@ class CloudSyncConfiguration {
     'workspaceSlug': workspaceSlug,
     'blobId': blobId,
     'revision': revision,
-    'cursor': cursor,
+    'pendingDownload': pendingDownload,
     'lastSyncedAt': lastSyncedAt?.toUtc().toIso8601String(),
   };
 
@@ -48,8 +44,10 @@ class CloudSyncConfiguration {
         workspaceSlug: json['workspaceSlug'] as String,
         blobId: json['blobId'] as String? ?? const Uuid().v4(),
         revision: (json['revision'] as num?)?.toInt() ?? 0,
-        cursor: (json['cursor'] as num?)?.toInt() ?? 0,
-        lastSyncedAt: DateTime.tryParse(json['lastSyncedAt'] as String? ?? ''),
+        pendingDownload: json['pendingDownload'] == true,
+        lastSyncedAt: DateTime.tryParse(
+          json['lastSyncedAt'] as String? ?? '',
+        )?.toLocal(),
       );
 }
 
@@ -72,6 +70,29 @@ class CloudWorkspace {
     slug: json['slug']?.toString() ?? '',
     name: json['name']?.toString() ?? 'Untitled workspace',
     plan: (json['plan'] as num?)?.toInt() ?? 0,
+  );
+}
+
+class CloudVaultBlob {
+  const CloudVaultBlob({
+    required this.id,
+    required this.revision,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final int revision;
+  final DateTime? updatedAt;
+
+  factory CloudVaultBlob.fromJson(Map<String, dynamic> json) => CloudVaultBlob(
+    id: json['blob_id']?.toString() ?? json['blobId']?.toString() ?? '',
+    revision:
+        (json['current_revision'] as num?)?.toInt() ??
+        (json['currentRevision'] as num?)?.toInt() ??
+        0,
+    updatedAt: DateTime.tryParse(
+      json['updated_at']?.toString() ?? json['updatedAt']?.toString() ?? '',
+    )?.toLocal(),
   );
 }
 
@@ -124,6 +145,16 @@ class CloudSyncException implements Exception {
   String toString() => message;
 }
 
+enum CloudSyncConflictResolution { downloadRemote, overwriteRemote }
+
+/// Raised before either copy is changed when Flywheel has a newer revision.
+class CloudSyncConflictException extends CloudSyncException {
+  const CloudSyncConflictException({this.remoteRevision})
+    : super('This vault has a newer cloud version.');
+
+  final int? remoteRevision;
+}
+
 String _apiErrorMessage(DioException error) {
   final data = error.response?.data;
   if (data is Map) {
@@ -139,7 +170,7 @@ String _apiErrorMessage(DioException error) {
       : 'Solarpass request failed (HTTP $status).';
 }
 
-/// Solarpass authorization, encrypted MLS state, and Flywheel transport.
+/// Solarpass authorization and Flywheel encrypted-blob transport.
 class CloudSyncService {
   CloudSyncService({
     required String vaultId,
@@ -156,18 +187,12 @@ class CloudSyncService {
   static const _redirectUri = '$_callbackScheme://oauth/callback';
   static const _sessionKey = 'maidkit_solar_network_oauth_session';
   static const _schemeVersion = 1;
-  static const _ciphersuite =
-      MlsCiphersuite.mls128DhkemX25519Aes128GcmSha256Ed25519;
 
   final String _vaultKey;
   final FlutterSecureStorage _storage;
   final Dio _dio;
 
   String get _configurationKey => 'maidkit_cloud_sync_$_vaultKey';
-  String get _deviceIdKey => 'maidkit_mls_device_$_vaultKey';
-  String get _databaseKey => 'maidkit_mls_database_key_$_vaultKey';
-  String get _signerPrivateKey => 'maidkit_mls_signer_private_$_vaultKey';
-  String get _signerPublicKey => 'maidkit_mls_signer_public_$_vaultKey';
 
   Future<CloudSyncConfiguration?> configuration() async {
     final raw = await _storage.read(key: _configurationKey);
@@ -236,7 +261,39 @@ class CloudSyncService {
         .toList(growable: false);
   }
 
-  Future<CloudSyncConfiguration> enable(CloudWorkspace workspace) async {
+  Future<List<CloudVaultBlob>> listVaultBlobs(CloudWorkspace workspace) async {
+    try {
+      final session = await _validSession();
+      if (session == null) {
+        throw const CloudSyncException(
+          'Sign in is required to list cloud vaults.',
+        );
+      }
+      final response = await _authorizedGet(
+        '/flywheel/workspaces/${workspace.id}/apps/$appId/blobs',
+        session,
+      );
+      final entries = response.data;
+      if (entries is! List) {
+        throw const CloudSyncException('Invalid cloud vault response.');
+      }
+      return entries
+          .whereType<Map>()
+          .map(
+            (value) =>
+                CloudVaultBlob.fromJson(Map<String, dynamic>.from(value)),
+          )
+          .where((blob) => blob.id.isNotEmpty && blob.revision > 0)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throw CloudSyncException(_apiErrorMessage(error));
+    }
+  }
+
+  Future<CloudSyncConfiguration> enable(
+    CloudWorkspace workspace, {
+    CloudVaultBlob? existingBlob,
+  }) async {
     try {
       final session = await _validSession();
       if (session == null) {
@@ -254,16 +311,18 @@ class CloudSyncService {
           'Cloud sync requires a Pro or Enterprise workspace.',
         );
       }
-      // Start from the beginning. A newly linked device needs the most recent
-      // encrypted snapshot already in the stream, not just future updates.
-      final cursor = 0;
+      final previous = await this.configuration();
+      final reuseCurrentBlob =
+          existingBlob == null && previous?.workspaceId == workspace.id;
       final configuration = CloudSyncConfiguration(
         workspaceId: workspace.id,
         workspaceName: workspace.name,
         workspaceSlug: workspace.slug,
-        blobId: const Uuid().v4(),
-        revision: 0,
-        cursor: cursor,
+        blobId:
+            existingBlob?.id ??
+            (reuseCurrentBlob ? previous!.blobId : const Uuid().v4()),
+        revision: reuseCurrentBlob ? previous!.revision : 0,
+        pendingDownload: existingBlob != null,
       );
       await _storage.write(
         key: _configurationKey,
@@ -275,51 +334,27 @@ class CloudSyncService {
     }
   }
 
+  Future<void> completePendingDownload() async {
+    final configuration = await this.configuration();
+    if (configuration == null || !configuration.pendingDownload) return;
+    await _saveConfiguration(
+      CloudSyncConfiguration(
+        workspaceId: configuration.workspaceId,
+        workspaceName: configuration.workspaceName,
+        workspaceSlug: configuration.workspaceSlug,
+        blobId: configuration.blobId,
+        revision: configuration.revision,
+        lastSyncedAt: configuration.lastSyncedAt,
+      ),
+    );
+  }
+
   /// Uploads/downloads a client-encrypted archive. Flywheel never decrypts it.
   Future<CloudSyncConfiguration> sync({
     required String archive,
     required Future<void> Function(String archive) applyArchive,
-    bool pullRemote = true,
-  }) async {
-    final configuration = await this.configuration();
-    if (configuration == null) throw const CloudSyncException('Link this vault to a cloud workspace first.');
-    try {
-      final session = await _validSession();
-      if (session == null) throw const CloudSyncException('Sign in is required to sync this vault.');
-      var revision = configuration.revision;
-      if (pullRemote) {
-        var remoteRevision = 0;
-        try {
-          final metadata = await _authorizedGet('/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/blobs/${configuration.blobId}', session);
-          remoteRevision = ((metadata.data as Map?)?['current_revision'] as num?)?.toInt() ?? 0;
-        } on DioException catch (error) {
-          if (error.response?.statusCode != 404) rethrow;
-        }
-        if (remoteRevision > revision) {
-          final content = await _dio.get<List<int>>('$apiBase/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/blobs/${configuration.blobId}/content', options: Options(headers: {'Authorization': 'Bearer ${session.accessToken}'}, responseType: ResponseType.bytes));
-          final remoteArchive = utf8.decode(content.data ?? const []);
-          await applyArchive(remoteArchive);
-          final updated = CloudSyncConfiguration(workspaceId: configuration.workspaceId, workspaceName: configuration.workspaceName, workspaceSlug: configuration.workspaceSlug, blobId: configuration.blobId, revision: remoteRevision, cursor: configuration.cursor, lastSyncedAt: DateTime.now());
-          await _storage.write(key: _configurationKey, value: jsonEncode(updated.toJson()));
-          return updated;
-        }
-      }
-      final response = await _dio.put<Map<String, dynamic>>('$apiBase/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/blobs/${configuration.blobId}', data: FormData.fromMap({'file': MultipartFile.fromBytes(utf8.encode(archive), filename: 'vault.mkb'), 'scheme_version': _schemeVersion, 'expected_revision': revision}), options: Options(headers: {'Authorization': 'Bearer ${session.accessToken}'}));
-      revision = (response.data?['revision'] as num?)?.toInt() ?? (revision + 1);
-      final updated = CloudSyncConfiguration(workspaceId: configuration.workspaceId, workspaceName: configuration.workspaceName, workspaceSlug: configuration.workspaceSlug, blobId: configuration.blobId, revision: revision, cursor: configuration.cursor, lastSyncedAt: DateTime.now());
-      await _storage.write(key: _configurationKey, value: jsonEncode(updated.toJson()));
-      return updated;
-    } on DioException catch (error) { throw CloudSyncException(_apiErrorMessage(error)); }
-  }
-
-  /// Legacy MLS implementation retained temporarily for migration testing.
-  /// Pulls remote MLS messages, applies their newest vault snapshot, and then
-  /// uploads this device's current snapshot. [applyPayload] is invoked only
-  /// after OpenMLS authenticates and decrypts an application message.
-  Future<CloudSyncConfiguration> syncMlsLegacy({
-    required String payload,
-    required Future<void> Function(String payload) applyPayload,
-    bool pullRemote = true,
+    CloudSyncConflictResolution? conflictResolution,
+    int conflictRetryCount = 0,
   }) async {
     final configuration = await this.configuration();
     if (configuration == null) {
@@ -334,323 +369,106 @@ class CloudSyncService {
           'Sign in is required to sync this vault.',
         );
       }
-      final deviceId = await _deviceId();
-      await _authorizedPost(
-        '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/devices',
-        session,
-        data: {'device_id': deviceId, 'label': Platform.operatingSystem},
-      );
-      await Openmls.init();
-      final engine = await _engine();
+      var revision = configuration.revision;
+      var remoteRevision = 0;
       try {
-        final signer = await _signer();
-        final groupId = 'flywheel:${configuration.workspaceId}:$appId';
-        final groupIdBytes = Uint8List.fromList(utf8.encode(groupId));
-        final canUploadSnapshot = await _ensureGroup(
-          engine: engine,
-          signer: signer,
-          groupId: groupId,
-          groupIdBytes: groupIdBytes,
-          deviceId: deviceId,
-          configuration: configuration,
-          session: session,
+        final metadata = await _authorizedGet(
+          '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/'
+          'blobs/${configuration.blobId}',
+          session,
         );
-
-        var cursor = configuration.cursor;
-        while (pullRemote) {
-          final response = await _authorizedGet(
-            '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/'
-            'operations?after=$cursor&limit=100',
-            session,
-          );
-          final records = response.data is List
-              ? List<Map<String, dynamic>>.from(
-                  (response.data as List).whereType<Map>().map(
-                    Map<String, dynamic>.from,
-                  ),
-                )
-              : const <Map<String, dynamic>>[];
-          if (records.isEmpty) break;
-          for (final record in records) {
-            cursor = (record['cursor'] as num?)?.toInt() ?? cursor;
-            if (record['device_id']?.toString() == deviceId) continue;
-            final ciphertext = record['ciphertext'];
-            if (ciphertext is! String) continue;
-            try {
-              final processed = await engine.processMessage(
-                groupIdBytes: groupIdBytes,
-                messageBytes: base64Decode(ciphertext),
-              );
-              if (processed.hasStagedCommit) {
-                await engine.mergePendingCommit(groupIdBytes: groupIdBytes);
-              }
-              final message = processed.applicationMessage;
-              if (message == null) continue;
-              final envelope = jsonDecode(utf8.decode(message));
-              if (envelope is Map && envelope['type'] == 'vault-snapshot') {
-                final remotePayload = envelope['payload'];
-                if (remotePayload is String) await applyPayload(remotePayload);
-              }
-            } catch (_) {
-              // MLS intentionally cannot decrypt messages from before this
-              // device joined the group. Later operations remain valid.
-            }
-          }
-          if (records.length < 100) break;
-        }
-        if (canUploadSnapshot) {
-          final ciphertext = await engine.createMessage(
-            groupIdBytes: groupIdBytes,
-            signerBytes: signer.bytes,
-            message: utf8.encode(
-              jsonEncode({'type': 'vault-snapshot', 'payload': payload}),
+        final data = metadata.data as Map?;
+        remoteRevision =
+            ((data?['current_revision'] ?? data?['currentRevision']) as num?)
+                ?.toInt() ??
+            0;
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 404) rethrow;
+      }
+      if (remoteRevision > revision) {
+        if (conflictResolution == CloudSyncConflictResolution.downloadRemote) {
+          final content = await _dio.get<List<int>>(
+            '$apiBase/flywheel/workspaces/${configuration.workspaceId}/apps/'
+            '$appId/blobs/${configuration.blobId}/content',
+            options: Options(
+              headers: {'Authorization': 'Bearer ${session.accessToken}'},
+              responseType: ResponseType.bytes,
             ),
           );
-          await _authorizedPost(
-            '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/operations',
-            session,
-            data: {
-              'device_id': deviceId,
-              'operations': [
-                {
-                  'operation_id': const Uuid().v4(),
-                  'scheme_version': _schemeVersion,
-                  'ciphertext': base64Encode(ciphertext.ciphertext),
-                },
-              ],
-            },
+          final remoteArchive = utf8.decode(content.data ?? const []);
+          await applyArchive(remoteArchive);
+          final updated = _updatedConfiguration(
+            configuration,
+            revision: remoteRevision,
           );
+          await _saveConfiguration(updated);
+          return updated;
         }
-        if (cursor > configuration.cursor) {
-          await _authorizedPost(
-            '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/acknowledgements',
-            session,
-            data: {'device_id': deviceId, 'cursor': cursor},
-          );
-        }
-        final updated = CloudSyncConfiguration(
-          workspaceId: configuration.workspaceId,
-          workspaceName: configuration.workspaceName,
-          workspaceSlug: configuration.workspaceSlug,
-          blobId: configuration.blobId,
-          revision: configuration.revision,
-          cursor: cursor,
-          lastSyncedAt: DateTime.now(),
-        );
-        await _storage.write(
-          key: _configurationKey,
-          value: jsonEncode(updated.toJson()),
-        );
-        return updated;
-      } finally {
-        await engine.close();
+        // Normal sync is local-authoritative. It keeps this vault's stable
+        // blob ID and creates the next revision from the latest remote one.
+        revision = remoteRevision;
       }
-    } on DioException catch (error) {
-      throw CloudSyncException(_apiErrorMessage(error));
-    } on CloudSyncException {
-      rethrow;
-    } catch (error) {
-      throw CloudSyncException('Unable to encrypt or sync this vault: $error');
-    }
-  }
-
-  Future<bool> _ensureGroup({
-    required MlsEngine engine,
-    required _StoredSigner signer,
-    required String groupId,
-    required Uint8List groupIdBytes,
-    required String deviceId,
-    required CloudSyncConfiguration configuration,
-    required _Session session,
-  }) async {
-    // OpenMLS throws "No group found in storage" for a first sync rather than
-    // returning false. That is the normal new-device path, not a failure.
-    try {
-      if (await engine.groupIsActive(groupIdBytes: groupIdBytes)) return true;
-    } catch (_) {
-      // Create or externally join below.
-    }
-    try {
-      // Padlock gates group-info access on a device membership. Bootstrap only
-      // creates the group state; it deliberately does not add this device.
-      await _registerMlsMembership(session, deviceId, groupId, epoch: 0);
-      final response = await _authorizedE2eeGet(
-        '/padlock/e2ee/mls/groups/$groupId/groupinfo',
-        session,
-        deviceId,
+      final response = await _dio.put<Map<String, dynamic>>(
+        '$apiBase/flywheel/workspaces/${configuration.workspaceId}/apps/'
+        '$appId/blobs/${configuration.blobId}',
+        data: FormData.fromMap({
+          // Flywheel binds these multipart fields to its C# [FromForm]
+          // properties. JSON's snake_case convention does not apply here.
+          'File': MultipartFile.fromBytes(
+            utf8.encode(archive),
+            filename: 'vault.mkb',
+          ),
+          'SchemeVersion': _schemeVersion,
+          'ExpectedRevision': revision,
+        }),
+        options: Options(
+          headers: {'Authorization': 'Bearer ${session.accessToken}'},
+        ),
       );
-      final data = Map<String, dynamic>.from(response.data as Map);
-      final groupInfo = data['group_info']?.toString();
-      if (groupInfo == null || groupInfo.isEmpty) {
+      revision =
+          (response.data?['revision'] as num?)?.toInt() ?? (revision + 1);
+      final updated = _updatedConfiguration(configuration, revision: revision);
+      await _saveConfiguration(updated);
+      return updated;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 409 && conflictRetryCount < 1) {
+        // Another device won the race after metadata was read. Re-read its
+        // revision and retry the local-authoritative upload once through the
+        // same normal sync path.
+        return sync(
+          archive: archive,
+          applyArchive: applyArchive,
+          conflictResolution: CloudSyncConflictResolution.overwriteRemote,
+          conflictRetryCount: conflictRetryCount + 1,
+        );
+      }
+      if (error.response?.statusCode == 409) {
         throw const CloudSyncException(
-          'Cloud MLS group information is missing.',
+          'This cloud vault changed again while syncing. Try once more.',
         );
       }
-      final external = await engine.joinGroupExternalCommit(
-        config: MlsGroupConfig.defaultConfig(ciphersuite: _ciphersuite),
-        groupInfoBytes: base64Decode(groupInfo),
-        ratchetTreeBytes: data['ratchet_tree'] == null
-            ? null
-            : base64Decode(data['ratchet_tree'].toString()),
-        signerBytes: signer.bytes,
-        credentialIdentity: utf8.encode(deviceId),
-        signerPublicKey: signer.publicKey,
-      );
-      // An external join is itself an MLS commit. Distribute it through the
-      // opaque Flywheel stream before merging local state, so existing devices
-      // advance to the same epoch before they see later application messages.
-      await _authorizedPost(
-        '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/operations',
-        session,
-        data: {
-          'device_id': deviceId,
-          'operations': [
-            {
-              'operation_id': const Uuid().v4(),
-              'scheme_version': _schemeVersion,
-              'ciphertext': base64Encode(external.commit),
-            },
-          ],
-        },
-      );
-      await engine.mergePendingCommit(groupIdBytes: external.groupId);
-      final epoch = await engine.groupEpoch(groupIdBytes: groupIdBytes);
-      await _registerMlsMembership(
-        session,
-        deviceId,
-        groupId,
-        epoch: epoch.toInt(),
-      );
-      await _uploadGroupInfo(
-        engine,
-        signer,
-        groupId,
-        groupIdBytes,
-        session,
-        deviceId,
-      );
-      // A joining device must wait for an existing device to publish a new
-      // snapshot after it processes the commit. It cannot read old MLS data.
-      return false;
-    } on DioException catch (error) {
-      if (error.response?.statusCode != 404) rethrow;
-      await _authorizedE2eePost(
-        '/padlock/e2ee/mls/groups/$groupId/bootstrap',
-        session,
-        deviceId,
-        data: {
-          'epoch': 0,
-          'state_version': 1,
-          'meta': {'bootstrap_device_id': deviceId},
-        },
-      );
-      await engine.createGroup(
-        config: MlsGroupConfig.defaultConfig(ciphersuite: _ciphersuite),
-        signerBytes: signer.bytes,
-        credentialIdentity: utf8.encode(deviceId),
-        signerPublicKey: signer.publicKey,
-        groupId: groupIdBytes,
-      );
-      await _registerMlsMembership(session, deviceId, groupId, epoch: 0);
-      await _uploadGroupInfo(
-        engine,
-        signer,
-        groupId,
-        groupIdBytes,
-        session,
-        deviceId,
-      );
-      return true;
+      throw CloudSyncException(_apiErrorMessage(error));
     }
   }
 
-  Future<void> _registerMlsMembership(
-    _Session session,
-    String deviceId,
-    String groupId, {
-    required int epoch,
-  }) => _authorizedE2eePost(
-    '/padlock/e2ee/mls/devices/$deviceId/membership',
-    session,
-    deviceId,
-    data: {'group_id': groupId, 'epoch': epoch},
+  CloudSyncConfiguration _updatedConfiguration(
+    CloudSyncConfiguration configuration, {
+    required int revision,
+  }) => CloudSyncConfiguration(
+    workspaceId: configuration.workspaceId,
+    workspaceName: configuration.workspaceName,
+    workspaceSlug: configuration.workspaceSlug,
+    blobId: configuration.blobId,
+    revision: revision,
+    pendingDownload: configuration.pendingDownload,
+    lastSyncedAt: DateTime.now(),
   );
 
-  Future<void> _uploadGroupInfo(
-    MlsEngine engine,
-    _StoredSigner signer,
-    String groupId,
-    Uint8List groupIdBytes,
-    _Session session,
-    String deviceId,
-  ) async {
-    final groupInfo = await engine.exportGroupInfo(
-      groupIdBytes: groupIdBytes,
-      signerBytes: signer.bytes,
-    );
-    final ratchetTree = await engine.exportRatchetTree(
-      groupIdBytes: groupIdBytes,
-    );
-    final epoch = await engine.groupEpoch(groupIdBytes: groupIdBytes);
-    await _authorizedE2eePut(
-      '/padlock/e2ee/mls/groups/$groupId/groupinfo',
-      session,
-      deviceId,
-      data: {
-        'group_info': base64Encode(groupInfo),
-        'ratchet_tree': base64Encode(ratchetTree),
-        'epoch': epoch.toInt(),
-      },
-    );
-  }
-
-  Future<String> _deviceId() async {
-    final existing = await _storage.read(key: _deviceIdKey);
-    if (existing != null && existing.isNotEmpty) return existing;
-    final value = const Uuid().v4();
-    await _storage.write(key: _deviceIdKey, value: value);
-    return value;
-  }
-
-  Future<MlsEngine> _engine() async {
-    var encodedKey = await _storage.read(key: _databaseKey);
-    if (encodedKey == null) {
-      encodedKey = base64Encode(
-        List<int>.generate(32, (_) => Random.secure().nextInt(256)),
+  Future<void> _saveConfiguration(CloudSyncConfiguration configuration) =>
+      _storage.write(
+        key: _configurationKey,
+        value: jsonEncode(configuration.toJson()),
       );
-      await _storage.write(key: _databaseKey, value: encodedKey);
-    }
-    final directory = await getApplicationSupportDirectory();
-    final mlsDirectory = Directory(
-      '${directory.path}${Platform.pathSeparator}mls',
-    );
-    if (!await mlsDirectory.exists()) {
-      await mlsDirectory.create(recursive: true);
-    }
-    return MlsEngine.create(
-      dbPath: '${mlsDirectory.path}${Platform.pathSeparator}$_vaultKey.db',
-      encryptionKey: base64Decode(encodedKey),
-    );
-  }
-
-  Future<_StoredSigner> _signer() async {
-    final privateEncoded = await _storage.read(key: _signerPrivateKey);
-    final publicEncoded = await _storage.read(key: _signerPublicKey);
-    if (privateEncoded != null && publicEncoded != null) {
-      final privateKey = base64Decode(privateEncoded);
-      final publicKey = base64Decode(publicEncoded);
-      return _StoredSigner(privateKey, publicKey);
-    }
-    final pair = MlsSignatureKeyPair.generate(ciphersuite: _ciphersuite);
-    final privateKey = pair.privateKey();
-    final publicKey = pair.publicKey();
-    await _storage.write(
-      key: _signerPrivateKey,
-      value: base64Encode(privateKey),
-    );
-    await _storage.write(key: _signerPublicKey, value: base64Encode(publicKey));
-    return _StoredSigner(privateKey, publicKey);
-  }
 
   Future<_Session> _signIn() async {
     final configuration = await _discover();
@@ -742,64 +560,6 @@ class CloudSyncService {
         ),
       );
 
-  Future<Response<dynamic>> _authorizedPost(
-    String path,
-    _Session session, {
-    Object? data,
-  }) => _dio.post<dynamic>(
-    '$apiBase$path',
-    data: data,
-    options: Options(
-      headers: {'Authorization': 'Bearer ${session.accessToken}'},
-    ),
-  );
-
-  Future<Response<dynamic>> _authorizedE2eeGet(
-    String path,
-    _Session session,
-    String deviceId,
-  ) => _dio.get<dynamic>(
-    '$apiBase$path',
-    options: Options(
-      headers: {
-        'Authorization': 'Bearer ${session.accessToken}',
-        'X-Device-Id': deviceId,
-      },
-    ),
-  );
-
-  Future<Response<dynamic>> _authorizedE2eePost(
-    String path,
-    _Session session,
-    String deviceId, {
-    Object? data,
-  }) => _dio.post<dynamic>(
-    '$apiBase$path',
-    data: data,
-    options: Options(
-      headers: {
-        'Authorization': 'Bearer ${session.accessToken}',
-        'X-Device-Id': deviceId,
-      },
-    ),
-  );
-
-  Future<Response<dynamic>> _authorizedE2eePut(
-    String path,
-    _Session session,
-    String deviceId, {
-    required Object data,
-  }) => _dio.put<dynamic>(
-    '$apiBase$path',
-    data: data,
-    options: Options(
-      headers: {
-        'Authorization': 'Bearer ${session.accessToken}',
-        'X-Device-Id': deviceId,
-      },
-    ),
-  );
-
   Future<_Session> _exchange(
     Uri endpoint,
     Map<String, String> fields, {
@@ -883,18 +643,5 @@ class _Session {
     expiresAt: DateTime.tryParse(
       json['expires_at'] as String? ?? '',
     )?.toLocal(),
-  );
-}
-
-class _StoredSigner {
-  const _StoredSigner(this.privateKey, this.publicKey);
-
-  final List<int> privateKey;
-  final List<int> publicKey;
-
-  Uint8List get bytes => serializeSigner(
-    ciphersuite: CloudSyncService._ciphersuite,
-    privateKey: privateKey,
-    publicKey: publicKey,
   );
 }

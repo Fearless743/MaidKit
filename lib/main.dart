@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -13,6 +14,9 @@ import 'servers/startup_connection_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Each selected vault uses its own SQLite file and executor. Drift's debug
+  // warning is type-based, so it cannot distinguish these independent files.
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   await EasyLocalization.ensureInitialized();
   EasyLocalization.logger.enableBuildModes = [];
 

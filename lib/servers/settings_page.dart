@@ -360,13 +360,33 @@ class SettingsPage extends ConsumerWidget {
                       'settingsBiometricError'.tr(args: [error.toString()]),
                     ),
                   ),
-                  data: (enabled) => SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    title: const Text('settingsBiometricUnlock').tr(),
-                    subtitle: const Text('settingsBiometricUnlockHint').tr(),
-                    value: enabled,
-                    onChanged: (value) =>
-                        _setBiometricUnlock(context, ref, value),
+                  data: (enabled) => Column(
+                    children: [
+                      SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
+                        title: const Text('settingsBiometricUnlock').tr(),
+                        subtitle: const Text(
+                          'settingsBiometricUnlockHint',
+                        ).tr(),
+                        value: enabled,
+                        onChanged: (value) =>
+                            _setBiometricUnlock(context, ref, value),
+                      ),
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
+                        leading: const Icon(Symbols.password),
+                        title: const Text('settingsVaultChangePassword').tr(),
+                        subtitle: const Text(
+                          'settingsVaultChangePasswordHint',
+                        ).tr(),
+                        trailing: const Icon(Symbols.chevron_right),
+                        onTap: () => _changeVaultPassword(context, ref),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -422,6 +442,9 @@ class SettingsPage extends ConsumerWidget {
                       vaultId: 'maid_kit',
                       title: 'vaultDefaultName'.tr(),
                       active: activeVaultFile == null,
+                      onSelect: () => ref
+                          .read(activeVaultFileProvider.notifier)
+                          .select(null),
                       onExport: activeVaultFile == null
                           ? () => _exportDatabase(context, ref)
                           : null,
@@ -431,14 +454,6 @@ class SettingsPage extends ConsumerWidget {
                       onSync: activeVaultFile == null
                           ? () => _syncVault(context, ref, 'maid_kit')
                           : null,
-                      onUpload: activeVaultFile == null
-                          ? () => _syncVault(
-                              context,
-                              ref,
-                              'maid_kit',
-                              uploadOnly: true,
-                            )
-                          : null,
                     ),
                     ...vaultFiles.map(
                       (path) => _VaultCloudBindingTile(
@@ -447,6 +462,9 @@ class SettingsPage extends ConsumerWidget {
                             vaultLabels[path] ??
                             path.split(Platform.pathSeparator).last,
                         active: activeVaultFile == path,
+                        onSelect: () => ref
+                            .read(activeVaultFileProvider.notifier)
+                            .select(path),
                         onExport: activeVaultFile == path
                             ? () => _exportDatabase(context, ref)
                             : null,
@@ -463,14 +481,6 @@ class SettingsPage extends ConsumerWidget {
                             : null,
                         onSync: activeVaultFile == path
                             ? () => _syncVault(context, ref, path)
-                            : null,
-                        onUpload: activeVaultFile == path
-                            ? () => _syncVault(
-                                context,
-                                ref,
-                                path,
-                                uploadOnly: true,
-                              )
                             : null,
                       ),
                     ),
@@ -565,6 +575,21 @@ class SettingsPage extends ConsumerWidget {
       }
     } finally {
       ref.invalidate(biometricUnlockEnabledProvider);
+    }
+  }
+
+  Future<void> _changeVaultPassword(BuildContext context, WidgetRef ref) async {
+    final password = await _changeVaultPasswordDialog(context);
+    if (password == null || !context.mounted) return;
+    try {
+      await ref.read(vaultServiceProvider).changePassword(password);
+      if (context.mounted) {
+        _showMessage('settingsVaultPasswordChanged'.tr());
+      }
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
+      }
     }
   }
 
@@ -721,13 +746,13 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _createLocalVault(BuildContext context, WidgetRef ref) async {
-    final password = await _newVaultPasswordDialog(context);
-    if (password == null || !context.mounted) return;
-    final path = await ref.read(vaultFileStorageProvider).createVaultPath();
+    final name = await _chooseVaultName(context);
+    if (name == null || !context.mounted) return;
+    final path = await ref
+        .read(vaultFileStorageProvider)
+        .createVaultPath(name: name);
     try {
       await ref.read(activeVaultFileProvider.notifier).select(path);
-      await ref.read(vaultServiceProvider).create(password);
-      if (context.mounted) _showMessage('settingsVaultCreated'.tr());
     } catch (error) {
       if (context.mounted) {
         _showMessage('settingsBackupError'.tr(args: [error.toString()]));
@@ -844,30 +869,29 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _downloadCloudVault(BuildContext context, WidgetRef ref) async {
-    final password = await _newVaultPasswordDialog(context);
-    if (password == null || !context.mounted) return;
     try {
       final accountService = ref.read(cloudSyncServiceProvider);
       final workspaces = await accountService.signInAndListWorkspaces();
       if (!context.mounted) return;
       final workspace = await _chooseCloudWorkspace(context, workspaces);
       if (workspace == null || !context.mounted) return;
+      final blobs = await accountService.listVaultBlobs(workspace);
+      if (!context.mounted) return;
+      final blob = await _chooseCloudVault(context, blobs);
+      if (blob == null || !context.mounted) return;
+      final name = await _chooseVaultName(
+        context,
+        initialValue: workspace.name,
+      );
+      if (name == null || !context.mounted) return;
 
       final path = await ref
           .read(vaultFileStorageProvider)
-          .createVaultPath(name: workspace.name);
-      await ref.read(activeVaultFileProvider.notifier).select(path);
-      final vault = ref.read(vaultServiceProvider);
-      await vault.create(password);
+          .createVaultPath(name: name);
       final sync = ref.read(cloudSyncServiceForVaultProvider(path));
-      await sync.enable(workspace);
-      final backup = DatabaseBackupService(ref.read(databaseProvider), vault);
-      await sync.sync(
-        archive: await backup.exportArchive(password),
-        applyArchive: (archive) => backup.importArchive(archive, password),
-      );
+      await sync.enable(workspace, existingBlob: blob);
       ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
-      if (context.mounted) _showMessage('settingsVaultDownloadComplete'.tr());
+      await ref.read(activeVaultFileProvider.notifier).select(path);
     } on CloudSyncException catch (error) {
       if (context.mounted) _showMessage(error.message);
     } catch (error) {
@@ -916,26 +940,64 @@ class SettingsPage extends ConsumerWidget {
     ),
   );
 
+  Future<CloudVaultBlob?> _chooseCloudVault(
+    BuildContext context,
+    List<CloudVaultBlob> blobs,
+  ) => showDialog<CloudVaultBlob>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('settingsVaultDownloadCloud').tr(),
+      content: SizedBox(
+        width: 440,
+        child: blobs.isEmpty
+            ? const Text('settingsVaultNoCloudVaults').tr()
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final blob in blobs)
+                    ListTile(
+                      leading: const Icon(Symbols.lock),
+                      title: Text(
+                        'settingsVaultCloudVault'.tr(
+                          args: [blob.revision.toString()],
+                        ),
+                      ),
+                      subtitle: Text(blob.id),
+                      onTap: () => Navigator.of(context).pop(blob),
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('commonCancel').tr(),
+        ),
+      ],
+    ),
+  );
+
   Future<void> _syncVault(
     BuildContext context,
     WidgetRef ref,
-    String vaultId, {
-    bool uploadOnly = false,
-  }) async {
+    String vaultId,
+  ) async {
     try {
-      final password = await _backupPasswordDialog(context, confirm: false);
-      if (password == null) return;
-      final backup = DatabaseBackupService(
-        ref.read(databaseProvider),
-        ref.read(vaultServiceProvider),
+      final vault = ref.read(vaultServiceProvider);
+      final password = await vault.syncPassphrase();
+      if (password == null) {
+        if (context.mounted) {
+          _showMessage('settingsVaultSyncPasswordRequired'.tr());
+        }
+        return;
+      }
+      final backup = DatabaseBackupService(ref.read(databaseProvider), vault);
+      final service = ref.read(cloudSyncServiceForVaultProvider(vaultId));
+      final archive = await backup.exportArchive(password);
+      await service.sync(
+        archive: archive,
+        applyArchive: (archive) => backup.importArchive(archive, password),
       );
-      await ref
-          .read(cloudSyncServiceForVaultProvider(vaultId))
-          .sync(
-            archive: await backup.exportArchive(password),
-            applyArchive: (archive) => backup.importArchive(archive, password),
-            pullRemote: !uploadOnly,
-          );
       ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -964,7 +1026,7 @@ enum _ImportDestination { newVault, replaceCurrent }
 
 enum _VaultOnboardingChoice { local, cloud }
 
-enum _VaultTileAction { rename, delete }
+enum _VaultTileAction { changeCloudBinding, rename, delete }
 
 Future<String?> _backupPasswordDialog(
   BuildContext context, {
@@ -984,6 +1046,74 @@ Future<String?> _newVaultPasswordDialog(BuildContext context) =>
         actionKey: 'vaultCreateAction',
       ),
     );
+
+Future<String?> _changeVaultPasswordDialog(BuildContext context) =>
+    showDialog<String>(
+      context: context,
+      builder: (context) => const _BackupPasswordDialog(
+        confirm: true,
+        titleKey: 'settingsVaultChangePassword',
+        hintKey: 'settingsVaultChangePasswordHint',
+        actionKey: 'commonSave',
+      ),
+    );
+
+Future<String?> _chooseVaultName(
+  BuildContext context, {
+  String? initialValue,
+}) => showDialog<String>(
+  context: context,
+  builder: (context) => _VaultNameDialog(
+    initialValue: initialValue ?? 'settingsVaultCreate'.tr(),
+  ),
+);
+
+class _VaultNameDialog extends StatefulWidget {
+  const _VaultNameDialog({required this.initialValue});
+
+  final String initialValue;
+
+  @override
+  State<_VaultNameDialog> createState() => _VaultNameDialogState();
+}
+
+class _VaultNameDialogState extends State<_VaultNameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('settingsVaultName').tr(),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
+      onSubmitted: (_) => _submit(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('commonCancel').tr(),
+      ),
+      FilledButton(
+        onPressed: _submit,
+        child: const Text('commonContinue').tr(),
+      ),
+    ],
+  );
+}
 
 class _BackupPasswordDialog extends StatefulWidget {
   const _BackupPasswordDialog({
@@ -1100,10 +1230,10 @@ class _VaultCloudBindingTile extends ConsumerWidget {
     required this.vaultId,
     required this.title,
     required this.active,
+    required this.onSelect,
     this.onExport,
     this.onImport,
     this.onSync,
-    this.onUpload,
     this.onRename,
     this.onDelete,
   });
@@ -1111,10 +1241,10 @@ class _VaultCloudBindingTile extends ConsumerWidget {
   final String vaultId;
   final String title;
   final bool active;
+  final Future<void> Function() onSelect;
   final Future<void> Function()? onExport;
   final Future<void> Function()? onImport;
   final Future<void> Function()? onSync;
-  final Future<void> Function()? onUpload;
   final Future<void> Function()? onRename;
   final Future<void> Function()? onDelete;
 
@@ -1136,7 +1266,7 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                     ),
             ],
           );
-    return Container(
+    return Material(
       color: active ? Theme.of(context).colorScheme.secondaryContainer : null,
       child: Column(
         children: [
@@ -1149,30 +1279,36 @@ class _VaultCloudBindingTile extends ConsumerWidget {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (onRename != null || onDelete != null)
-                  PopupMenuButton<_VaultTileAction>(
-                    onSelected: (action) {
-                      if (action == _VaultTileAction.rename) onRename?.call();
-                      if (action == _VaultTileAction.delete) onDelete?.call();
-                    },
-                    itemBuilder: (context) => [
-                      if (onRename != null)
-                        PopupMenuItem(
-                          value: _VaultTileAction.rename,
-                          child: Text('settingsVaultRename'.tr()),
-                        ),
-                      if (onDelete != null)
-                        PopupMenuItem(
-                          value: _VaultTileAction.delete,
-                          child: Text('settingsVaultDelete'.tr()),
-                        ),
-                    ],
-                  ),
+                PopupMenuButton<_VaultTileAction>(
+                  onSelected: (action) {
+                    if (action == _VaultTileAction.changeCloudBinding) {
+                      _bindWorkspace(context, ref);
+                    }
+                    if (action == _VaultTileAction.rename) onRename?.call();
+                    if (action == _VaultTileAction.delete) onDelete?.call();
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: _VaultTileAction.changeCloudBinding,
+                      child: Text('settingsVaultChangeCloudBinding'.tr()),
+                    ),
+                    if (onRename != null)
+                      PopupMenuItem(
+                        value: _VaultTileAction.rename,
+                        child: Text('settingsVaultRename'.tr()),
+                      ),
+                    if (onDelete != null)
+                      PopupMenuItem(
+                        value: _VaultTileAction.delete,
+                        child: Text('settingsVaultDelete'.tr()),
+                      ),
+                  ],
+                ),
                 const SizedBox(width: 8),
                 const Icon(Symbols.chevron_right),
               ],
             ),
-            onTap: () => _bindWorkspace(context, ref),
+            onTap: () => onSelect(),
           ),
           if (active)
             Padding(
@@ -1197,14 +1333,6 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                         : () => onSync!(),
                     icon: const Icon(Symbols.sync),
                     label: const Text('settingsVaultSyncNow').tr(),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: configuration == null || onUpload == null
-                        ? null
-                        : () => onUpload!(),
-                    icon: const Icon(Symbols.cloud_upload),
-                    label: const Text('settingsVaultUpload').tr(),
                   ),
                 ],
               ),

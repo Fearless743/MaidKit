@@ -23,10 +23,9 @@ class DatabaseBackupService {
     return _vault.encryptPortable(await exportPayload(), password);
   }
 
-  /// Produces the clear-text, versioned database payload used inside an
-  /// already authenticated encryption channel (MLS cloud sync). It must never
-  /// be persisted or sent over the network without an additional encryption
-  /// layer.
+  /// Produces the clear-text, versioned database payload before it is encrypted
+  /// with the vault passphrase. It must never be persisted or sent over the
+  /// network without [exportArchive].
   Future<String> exportPayload() async {
     final servers = await _database.select(_database.servers).get();
     final credentials = await _database
@@ -99,7 +98,7 @@ class DatabaseBackupService {
     await importPayload(clearText);
   }
 
-  /// Replaces the syncable database content using an MLS-decrypted payload.
+  /// Replaces the syncable database content after archive decryption.
   Future<void> importPayload(String clearText) async {
     final payload = jsonDecode(clearText);
     if (payload is! Map<String, dynamic> ||
