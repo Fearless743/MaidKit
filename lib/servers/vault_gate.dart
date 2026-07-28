@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -18,20 +19,62 @@ class VaultGate extends ConsumerStatefulWidget {
   ConsumerState<VaultGate> createState() => _VaultGateState();
 }
 
-class _VaultGateState extends ConsumerState<VaultGate> {
+class _VaultGateState extends ConsumerState<VaultGate>
+    with WidgetsBindingObserver {
   static const _defaultVaultOption = '__default_vault__';
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
   bool _unlocked = false;
   bool _busy = false;
   bool _preservePasswordDuringVaultSwitch = false;
+  Timer? _autoSyncTimer;
+  bool _autoSyncing = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _autoSyncTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _autoSync(),
+    );
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoSyncTimer?.cancel();
     _password.dispose();
     _confirmation.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _autoSync();
+  }
+
+  Future<void> _autoSync() async {
+    if (!_unlocked || _autoSyncing || !mounted) return;
+    _autoSyncing = true;
+    try {
+      final vault = ref.read(vaultServiceProvider);
+      final password = await vault.syncPassphrase();
+      if (password == null || !mounted) return;
+      final sync = ref.read(cloudSyncServiceProvider);
+      if (await sync.configuration() == null || !mounted) return;
+      final backup = DatabaseBackupService(ref.read(databaseProvider), vault);
+      await sync.sync(
+        archive: await backup.exportArchive(password),
+        applyArchive: (archive) => backup.importArchive(archive, password),
+      );
+      if (mounted) ref.invalidate(cloudSyncConfigurationProvider);
+    } catch (_) {
+      // Auto-sync is best effort. Manual sync remains available for errors.
+    } finally {
+      _autoSyncing = false;
+    }
   }
 
   String _friendlyError(Object error) => error.toString().replaceFirst(
@@ -47,6 +90,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
     });
     final vault = ref.read(vaultServiceProvider);
     try {
+      var downloadedCloudVault = false;
       if (exists) {
         final ok = await vault.unlockWithPassword(_password.text);
         if (!ok) {
@@ -74,6 +118,7 @@ class _VaultGateState extends ConsumerState<VaultGate> {
             );
             await sync.completePendingDownload();
             ref.invalidate(cloudSyncConfigurationProvider);
+            downloadedCloudVault = true;
           } on CloudSyncException {
             await vault.discardNewVault();
             rethrow;
@@ -83,7 +128,10 @@ class _VaultGateState extends ConsumerState<VaultGate> {
           }
         }
       }
-      if (mounted) setState(() => _unlocked = true);
+      if (mounted) {
+        setState(() => _unlocked = true);
+        if (!downloadedCloudVault) unawaited(_autoSync());
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
@@ -101,7 +149,10 @@ class _VaultGateState extends ConsumerState<VaultGate> {
       final unlocked = await ref
           .read(vaultServiceProvider)
           .unlockWithBiometrics();
-      if (unlocked && mounted) setState(() => _unlocked = true);
+      if (unlocked && mounted) {
+        setState(() => _unlocked = true);
+        unawaited(_autoSync());
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
