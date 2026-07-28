@@ -232,6 +232,10 @@ class CloudSyncService {
     }
   }
 
+  Future<void> signOut() async {
+    await _storage.delete(key: _sessionKey);
+  }
+
   Future<List<CloudWorkspace>> listWorkspaces() async {
     final session = await _validSession();
     return session == null ? const [] : _listWorkspaces(session);

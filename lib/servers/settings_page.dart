@@ -498,6 +498,12 @@ class SettingsPage extends ConsumerWidget {
                               subtitle: user.handle.isEmpty
                                   ? null
                                   : Text(user.handle),
+                              trailing: IconButton(
+                                icon: const Icon(Symbols.logout),
+                                tooltip: 'settingsCloudSignOut'.tr(),
+                                onPressed: () =>
+                                    _signOutFromCloud(context, ref),
+                              ),
                             ),
                           ],
                         ),
@@ -623,6 +629,54 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
+  Future<void> _signOutFromCloud(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'settingsCloudSignOut'.tr(),
+        heightFactor: 0.32,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text('settingsCloudSignOutHint'.tr()),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('commonCancel').tr(),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  child: const Text('settingsCloudSignOut').tr(),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(cloudSyncServiceProvider).signOut();
+      ref.invalidate(cloudUserProvider);
+      ref.invalidate(cloudWorkspacesProvider);
+      for (final vaultId in ['maid_kit', ...ref.read(vaultFilesProvider)]) {
+        ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
+      }
+      if (context.mounted) _showMessage('settingsCloudSignOutSuccess'.tr());
+    } on CloudSyncException catch (error) {
+      if (context.mounted) _showMessage(error.message);
+    } catch (_) {
+      if (context.mounted) _showMessage('commonSomethingWentWrong'.tr());
+    }
+  }
+
   Future<void> _clearBackgroundImage(
     BuildContext context,
     WidgetRef ref,
@@ -658,7 +712,7 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _changeVaultPassword(BuildContext context, WidgetRef ref) async {
-    final password = await _changeVaultPasswordDialog(context);
+    final password = await _changeVaultPasswordSheet(context);
     if (password == null || !context.mounted) return;
     try {
       await ref.read(vaultServiceProvider).changePassword(password);
@@ -673,7 +727,7 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _exportDatabase(BuildContext context, WidgetRef ref) async {
-    final password = await _backupPasswordDialog(context, confirm: true);
+    final password = await _backupPasswordSheet(context, confirm: true);
     if (password == null || !context.mounted) return;
 
     final vault = ref.read(vaultServiceProvider);
@@ -716,60 +770,89 @@ class SettingsPage extends ConsumerWidget {
     final path = selection?.files.singleOrNull?.path;
     if (path == null || !context.mounted) return;
 
-    final password = await _backupPasswordDialog(context, confirm: false);
+    final password = await _backupPasswordSheet(context, confirm: false);
     if (password == null || !context.mounted) return;
 
-    final destination = await showDialog<_ImportDestination>(
+    final destination = await showModalBottomSheet<_ImportDestination>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('settingsImportDestinationTitle').tr(),
-        content: RadioGroup<_ImportDestination>(
-          groupValue: _ImportDestination.newVault,
-          onChanged: (value) {
-            if (value != null) Navigator.of(context).pop(value);
-          },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RadioListTile<_ImportDestination>(
-                value: _ImportDestination.newVault,
-                title: const Text('settingsImportNewVault').tr(),
-                subtitle: const Text('settingsImportNewVaultHint').tr(),
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'settingsImportDestinationTitle'.tr(),
+        heightFactor: 0.44,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            RadioGroup<_ImportDestination>(
+              groupValue: _ImportDestination.newVault,
+              onChanged: (value) {
+                if (value != null) Navigator.of(sheetContext).pop(value);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<_ImportDestination>(
+                    value: _ImportDestination.newVault,
+                    title: const Text('settingsImportNewVault').tr(),
+                    subtitle: const Text('settingsImportNewVaultHint').tr(),
+                  ),
+                  RadioListTile<_ImportDestination>(
+                    value: _ImportDestination.replaceCurrent,
+                    title: const Text('settingsImportReplaceCurrent').tr(),
+                    subtitle: const Text(
+                      'settingsImportReplaceCurrentHint',
+                    ).tr(),
+                  ),
+                ],
               ),
-              RadioListTile<_ImportDestination>(
-                value: _ImportDestination.replaceCurrent,
-                title: const Text('settingsImportReplaceCurrent').tr(),
-                subtitle: const Text('settingsImportReplaceCurrentHint').tr(),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('commonCancel').tr(),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('commonCancel').tr(),
-          ),
-        ],
       ),
     );
     if (destination == null || !context.mounted) return;
 
     if (destination == _ImportDestination.replaceCurrent) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showModalBottomSheet<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('settingsImportConfirmTitle').tr(),
-          content: const Text('settingsImportConfirmDescription').tr(),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('commonCancel').tr(),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('settingsImportReplaceCurrent').tr(),
-            ),
-          ],
+        isScrollControlled: true,
+        useSafeArea: true,
+        useRootNavigator: true,
+        builder: (sheetContext) => SheetScaffold(
+          titleText: 'settingsImportConfirmTitle'.tr(),
+          heightFactor: 0.34,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              const Text('settingsImportConfirmDescription').tr(),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(false),
+                    child: const Text('commonCancel').tr(),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(true),
+                    child: const Text('settingsImportReplaceCurrent').tr(),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       );
       if (confirmed != true || !context.mounted) return;
@@ -777,7 +860,7 @@ class SettingsPage extends ConsumerWidget {
       return;
     }
 
-    final vaultPassword = await _newVaultPasswordDialog(context);
+    final vaultPassword = await _newVaultPasswordSheet(context);
     if (vaultPassword == null || !context.mounted) return;
 
     final vaultPath = await ref
@@ -825,7 +908,7 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _createLocalVault(BuildContext context, WidgetRef ref) async {
-    final name = await _chooseVaultName(context);
+    final name = await _chooseVaultNameSheet(context);
     if (name == null || !context.mounted) return;
     final path = await ref
         .read(vaultFileStorageProvider)
@@ -846,26 +929,40 @@ class SettingsPage extends ConsumerWidget {
     String currentName,
   ) async {
     final controller = TextEditingController(text: currentName);
-    final name = await showDialog<String>(
+    final name = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('settingsVaultRename').tr(),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'settingsVaultRename'.tr(),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
+              onSubmitted: (value) => Navigator.of(sheetContext).pop(value),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('commonCancel').tr(),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.of(sheetContext).pop(controller.text),
+                  child: const Text('commonSave').tr(),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('commonCancel').tr(),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('commonSave').tr(),
-          ),
-        ],
       ),
     );
     controller.dispose();
@@ -879,21 +976,35 @@ class SettingsPage extends ConsumerWidget {
     WidgetRef ref,
     String vaultId,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('settingsVaultDelete').tr(),
-        content: const Text('settingsVaultDeleteHint').tr(),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('commonCancel').tr(),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('commonDelete').tr(),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'settingsVaultDelete'.tr(),
+        heightFactor: 0.34,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            const Text('settingsVaultDeleteHint').tr(),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(false),
+                  child: const Text('commonCancel').tr(),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(true),
+                  child: const Text('commonDelete').tr(),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;
@@ -906,38 +1017,43 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _showVaultOnboarding(BuildContext context, WidgetRef ref) async {
-    final choice = await showDialog<_VaultOnboardingChoice>(
+    final choice = await showModalBottomSheet<_VaultOnboardingChoice>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('settingsVaultCreate').tr(),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Symbols.lock),
-                title: const Text('settingsVaultCreateLocal').tr(),
-                subtitle: const Text('settingsVaultCreateLocalHint').tr(),
-                onTap: () =>
-                    Navigator.of(context).pop(_VaultOnboardingChoice.local),
-              ),
-              ListTile(
-                leading: const Icon(Symbols.cloud_download),
-                title: const Text('settingsVaultDownloadCloud').tr(),
-                subtitle: const Text('settingsVaultDownloadCloudHint').tr(),
-                onTap: () =>
-                    Navigator.of(context).pop(_VaultOnboardingChoice.cloud),
-              ),
-            ],
-          ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'settingsVaultCreate'.tr(),
+        heightFactor: 0.46,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            ListTile(
+              leading: const Icon(Symbols.lock),
+              title: const Text('settingsVaultCreateLocal').tr(),
+              subtitle: const Text('settingsVaultCreateLocalHint').tr(),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(_VaultOnboardingChoice.local),
+            ),
+            ListTile(
+              leading: const Icon(Symbols.cloud_download),
+              title: const Text('settingsVaultDownloadCloud').tr(),
+              subtitle: const Text('settingsVaultDownloadCloudHint').tr(),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(_VaultOnboardingChoice.cloud),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('commonCancel').tr(),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('commonCancel').tr(),
-          ),
-        ],
       ),
     );
     if (choice == _VaultOnboardingChoice.local && context.mounted) {
@@ -958,7 +1074,7 @@ class SettingsPage extends ConsumerWidget {
       if (!context.mounted) return;
       final blob = await _chooseCloudVault(context, blobs);
       if (blob == null || !context.mounted) return;
-      final name = await _chooseVaultName(
+      final name = await _chooseVaultNameSheet(
         context,
         initialValue: workspace.name,
       );
@@ -983,76 +1099,72 @@ class SettingsPage extends ConsumerWidget {
   Future<CloudWorkspace?> _chooseCloudWorkspace(
     BuildContext context,
     List<CloudWorkspace> workspaces,
-  ) => showDialog<CloudWorkspace>(
+  ) => showModalBottomSheet<CloudWorkspace>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('vaultCloudWorkspaceTitle').tr(),
-      content: SizedBox(
-        width: 440,
-        child: workspaces.isEmpty
-            ? const Text('settingsCloudSyncNoWorkspaces').tr()
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final workspace in workspaces)
-                    ListTile(
-                      enabled: workspace.supportsSync,
-                      title: Text(workspace.name),
-                      subtitle: Text(
-                        workspace.supportsSync
-                            ? 'settingsCloudSyncWorkspaceEligible'.tr()
-                            : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
-                      ),
-                      onTap: workspace.supportsSync
-                          ? () => Navigator.of(context).pop(workspace)
-                          : null,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (sheetContext) => SheetScaffold(
+      titleText: 'vaultCloudWorkspaceTitle'.tr(),
+      heightFactor: 0.6,
+      child: workspaces.isEmpty
+          ? ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              children: [const Text('settingsCloudSyncNoWorkspaces').tr()],
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              children: [
+                for (final workspace in workspaces)
+                  ListTile(
+                    enabled: workspace.supportsSync,
+                    title: Text(workspace.name),
+                    subtitle: Text(
+                      workspace.supportsSync
+                          ? 'settingsCloudSyncWorkspaceEligible'.tr()
+                          : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
                     ),
-                ],
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('commonCancel').tr(),
-        ),
-      ],
+                    onTap: workspace.supportsSync
+                        ? () => Navigator.of(sheetContext).pop(workspace)
+                        : null,
+                  ),
+              ],
+            ),
     ),
   );
 
   Future<CloudVaultBlob?> _chooseCloudVault(
     BuildContext context,
     List<CloudVaultBlob> blobs,
-  ) => showDialog<CloudVaultBlob>(
+  ) => showModalBottomSheet<CloudVaultBlob>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('settingsVaultDownloadCloud').tr(),
-      content: SizedBox(
-        width: 440,
-        child: blobs.isEmpty
-            ? const Text('settingsVaultNoCloudVaults').tr()
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final blob in blobs)
-                    ListTile(
-                      leading: const Icon(Symbols.lock),
-                      title: Text(
-                        'settingsVaultCloudVault'.tr(
-                          args: [blob.revision.toString()],
-                        ),
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (sheetContext) => SheetScaffold(
+      titleText: 'settingsVaultDownloadCloud'.tr(),
+      heightFactor: 0.6,
+      child: blobs.isEmpty
+          ? ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              children: [const Text('settingsVaultNoCloudVaults').tr()],
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              children: [
+                for (final blob in blobs)
+                  ListTile(
+                    leading: const Icon(Symbols.lock),
+                    title: Text(
+                      'settingsVaultCloudVault'.tr(
+                        args: [blob.revision.toString()],
                       ),
-                      subtitle: Text(blob.id),
-                      onTap: () => Navigator.of(context).pop(blob),
                     ),
-                ],
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('commonCancel').tr(),
-        ),
-      ],
+                    subtitle: Text(blob.id),
+                    onTap: () => Navigator.of(sheetContext).pop(blob),
+                  ),
+              ],
+            ),
     ),
   );
 
@@ -1079,23 +1191,13 @@ class SettingsPage extends ConsumerWidget {
       );
       ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('settingsVaultSyncComplete'.tr())),
-        );
+        showSnackBar('settingsVaultSyncComplete'.tr());
       }
     } on CloudSyncException catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
+      if (context.mounted) showSnackBar(error.message);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('settingsBackupError'.tr(args: [error.toString()])),
-          ),
-        );
+        showSnackBar('settingsBackupError'.tr(args: [error.toString()]));
       }
     }
   }
@@ -1137,18 +1239,24 @@ BorderRadius _sectionTileBorderRadius(_SettingsTilePosition position) {
   );
 }
 
-Future<String?> _backupPasswordDialog(
+Future<String?> _backupPasswordSheet(
   BuildContext context, {
   required bool confirm,
-}) => showDialog<String>(
+}) => showModalBottomSheet<String>(
   context: context,
-  builder: (context) => _BackupPasswordDialog(confirm: confirm),
+  isScrollControlled: true,
+  useSafeArea: true,
+  useRootNavigator: true,
+  builder: (context) => _BackupPasswordSheet(confirm: confirm),
 );
 
-Future<String?> _newVaultPasswordDialog(BuildContext context) =>
-    showDialog<String>(
+Future<String?> _newVaultPasswordSheet(BuildContext context) =>
+    showModalBottomSheet<String>(
       context: context,
-      builder: (context) => const _BackupPasswordDialog(
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (context) => const _BackupPasswordSheet(
         confirm: true,
         titleKey: 'settingsImportNewVaultPasswordTitle',
         hintKey: 'settingsImportNewVaultPasswordHint',
@@ -1156,10 +1264,13 @@ Future<String?> _newVaultPasswordDialog(BuildContext context) =>
       ),
     );
 
-Future<String?> _changeVaultPasswordDialog(BuildContext context) =>
-    showDialog<String>(
+Future<String?> _changeVaultPasswordSheet(BuildContext context) =>
+    showModalBottomSheet<String>(
       context: context,
-      builder: (context) => const _BackupPasswordDialog(
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (context) => const _BackupPasswordSheet(
         confirm: true,
         titleKey: 'settingsVaultChangePassword',
         hintKey: 'settingsVaultChangePasswordHint',
@@ -1167,26 +1278,28 @@ Future<String?> _changeVaultPasswordDialog(BuildContext context) =>
       ),
     );
 
-Future<String?> _chooseVaultName(
+Future<String?> _chooseVaultNameSheet(
   BuildContext context, {
   String? initialValue,
-}) => showDialog<String>(
+}) => showModalBottomSheet<String>(
   context: context,
-  builder: (context) => _VaultNameDialog(
-    initialValue: initialValue ?? 'settingsVaultCreate'.tr(),
-  ),
+  isScrollControlled: true,
+  useSafeArea: true,
+  useRootNavigator: true,
+  builder: (context) =>
+      _VaultNameSheet(initialValue: initialValue ?? 'settingsVaultCreate'.tr()),
 );
 
-class _VaultNameDialog extends StatefulWidget {
-  const _VaultNameDialog({required this.initialValue});
+class _VaultNameSheet extends StatefulWidget {
+  const _VaultNameSheet({required this.initialValue});
 
   final String initialValue;
 
   @override
-  State<_VaultNameDialog> createState() => _VaultNameDialogState();
+  State<_VaultNameSheet> createState() => _VaultNameSheetState();
 }
 
-class _VaultNameDialogState extends State<_VaultNameDialog> {
+class _VaultNameSheetState extends State<_VaultNameSheet> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initialValue,
   );
@@ -1203,29 +1316,39 @@ class _VaultNameDialogState extends State<_VaultNameDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('settingsVaultName').tr(),
-    content: TextField(
-      controller: _controller,
-      autofocus: true,
-      decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
-      onSubmitted: (_) => _submit(),
+  Widget build(BuildContext context) => SheetScaffold(
+    titleText: 'settingsVaultName'.tr(),
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
+          onSubmitted: (_) => _submit(),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('commonCancel').tr(),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _submit,
+              child: const Text('commonContinue').tr(),
+            ),
+          ],
+        ),
+      ],
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('commonCancel').tr(),
-      ),
-      FilledButton(
-        onPressed: _submit,
-        child: const Text('commonContinue').tr(),
-      ),
-    ],
   );
 }
 
-class _BackupPasswordDialog extends StatefulWidget {
-  const _BackupPasswordDialog({
+class _BackupPasswordSheet extends StatefulWidget {
+  const _BackupPasswordSheet({
     required this.confirm,
     this.titleKey,
     this.hintKey,
@@ -1238,10 +1361,10 @@ class _BackupPasswordDialog extends StatefulWidget {
   final String? actionKey;
 
   @override
-  State<_BackupPasswordDialog> createState() => _BackupPasswordDialogState();
+  State<_BackupPasswordSheet> createState() => _BackupPasswordSheetState();
 }
 
-class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
+class _BackupPasswordSheetState extends State<_BackupPasswordSheet> {
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
 
@@ -1253,66 +1376,67 @@ class _BackupPasswordDialogState extends State<_BackupPasswordDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    scrollable: true,
-    title: Text(
-      widget.titleKey ??
-          (widget.confirm
-              ? 'settingsExportPasswordTitle'
-              : 'settingsImportPasswordTitle'),
-    ).tr(),
-    content: SizedBox(
-      width: 360,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            (widget.hintKey ??
-                    (widget.confirm
-                        ? 'settingsExportVaultPasswordHint'
-                        : 'settingsImportVaultPasswordHint'))
-                .tr(),
-          ),
-          const SizedBox(height: 16),
+  Widget build(BuildContext context) => SheetScaffold(
+    titleText:
+        (widget.titleKey ??
+                (widget.confirm
+                    ? 'settingsExportPasswordTitle'
+                    : 'settingsImportPasswordTitle'))
+            .tr(),
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        Text(
+          (widget.hintKey ??
+                  (widget.confirm
+                      ? 'settingsExportVaultPasswordHint'
+                      : 'settingsImportVaultPasswordHint'))
+              .tr(),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _password,
+          autofocus: true,
+          obscureText: true,
+          decoration: InputDecoration(labelText: 'vaultPasswordLabel'.tr()),
+        ),
+        if (widget.confirm) ...[
+          const SizedBox(height: 12),
           TextField(
-            controller: _password,
-            autofocus: true,
+            controller: _confirmation,
             obscureText: true,
-            decoration: InputDecoration(labelText: 'vaultPasswordLabel'.tr()),
+            decoration: InputDecoration(
+              labelText: 'vaultConfirmPasswordLabel'.tr(),
+            ),
           ),
-          if (widget.confirm) ...[
-            const SizedBox(height: 12),
-            TextField(
-              controller: _confirmation,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'vaultConfirmPasswordLabel'.tr(),
+        ],
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('commonCancel').tr(),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                if (widget.confirm && _password.text != _confirmation.text) {
+                  showSnackBar('vaultPasswordsDontMatch'.tr());
+                  return;
+                }
+                Navigator.of(context).pop(_password.text);
+              },
+              child: Text(
+                widget.confirm
+                    ? (widget.actionKey ?? 'settingsExportData').tr()
+                    : (widget.actionKey ?? 'settingsImportData').tr(),
               ),
             ),
           ],
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('commonCancel').tr(),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (widget.confirm && _password.text != _confirmation.text) {
-            _showMessage('vaultPasswordsDontMatch'.tr());
-            return;
-          }
-          Navigator.of(context).pop(_password.text);
-        },
-        child: Text(
-          widget.confirm
-              ? (widget.actionKey ?? 'settingsExportData').tr()
-              : (widget.actionKey ?? 'settingsImportData').tr(),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -1466,42 +1590,40 @@ class _VaultCloudBindingTile extends ConsumerWidget {
           .read(cloudSyncConfigurationForVaultProvider(vaultId))
           .asData
           ?.value;
-      final workspace = await showDialog<CloudWorkspace>(
+      final workspace = await showModalBottomSheet<CloudWorkspace>(
         context: context,
-        builder: (context) => AlertDialog(
+        isScrollControlled: true,
+        useSafeArea: true,
+        useRootNavigator: true,
+        builder: (sheetContext) => SheetScaffold(
           title: Text(title),
-          content: SizedBox(
-            width: 440,
-            child: workspaces.isEmpty
-                ? const Text('settingsCloudSyncNoWorkspaces').tr()
-                : ListView(
-                    shrinkWrap: true,
-                    children: [
-                      for (final workspace in workspaces)
-                        ListTile(
-                          enabled: workspace.supportsSync,
-                          title: Text(workspace.name),
-                          subtitle: Text(
-                            workspace.supportsSync
-                                ? 'settingsCloudSyncWorkspaceEligible'.tr()
-                                : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
-                          ),
-                          trailing: selected?.workspaceId == workspace.id
-                              ? const Icon(Symbols.check)
-                              : null,
-                          onTap: workspace.supportsSync
-                              ? () => Navigator.of(context).pop(workspace)
-                              : null,
+          heightFactor: 0.6,
+          child: workspaces.isEmpty
+              ? ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  children: [const Text('settingsCloudSyncNoWorkspaces').tr()],
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  children: [
+                    for (final workspace in workspaces)
+                      ListTile(
+                        enabled: workspace.supportsSync,
+                        title: Text(workspace.name),
+                        subtitle: Text(
+                          workspace.supportsSync
+                              ? 'settingsCloudSyncWorkspaceEligible'.tr()
+                              : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
                         ),
-                    ],
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('commonCancel').tr(),
-            ),
-          ],
+                        trailing: selected?.workspaceId == workspace.id
+                            ? const Icon(Symbols.check)
+                            : null,
+                        onTap: workspace.supportsSync
+                            ? () => Navigator.of(sheetContext).pop(workspace)
+                            : null,
+                      ),
+                  ],
+                ),
         ),
       );
       if (workspace == null) return;
@@ -1509,17 +1631,9 @@ class _VaultCloudBindingTile extends ConsumerWidget {
       ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
       ref.invalidate(cloudUserProvider);
     } on CloudSyncException catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
+      if (context.mounted) showSnackBar(error.message);
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('commonSomethingWentWrong'.tr())),
-        );
-      }
+      if (context.mounted) showSnackBar('commonSomethingWentWrong'.tr());
     }
   }
 }
