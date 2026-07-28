@@ -311,8 +311,6 @@ class _VaultGateState extends ConsumerState<VaultGate>
         });
       }
     });
-    if (_unlocked) return widget.child;
-
     final exists = ref.watch(vaultExistsProvider);
     final biometricEnabled = ref.watch(biometricUnlockEnabledProvider);
     final cloudConfiguration = ref.watch(cloudSyncConfigurationProvider);
@@ -323,198 +321,244 @@ class _VaultGateState extends ConsumerState<VaultGate>
     final isCloudDownload =
         cloudConfiguration.asData?.value?.pendingDownload == true;
 
-    return exists.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) => Scaffold(
-        body: Center(
-          child: Text('vaultOpenError'.tr(args: [error.toString()])),
-        ),
-      ),
-      data: (hasVault) => Scaffold(
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Center(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Image.asset(
-                                'assets/icons/icon.png',
-                                width: 72,
-                                height: 72,
-                                errorBuilder: (_, _, _) => Container(
-                                  width: 72,
-                                  height: 72,
-                                  alignment: Alignment.center,
-                                  color:
-                                      theme.colorScheme.surfaceContainerHighest,
-                                  child: Icon(
-                                    Symbols.lock,
-                                    size: 36,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeOut,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: _unlocked
+          ? KeyedSubtree(
+              key: const ValueKey('vault_gate_unlocked'),
+              child: widget.child,
+            )
+          : KeyedSubtree(
+              key: const ValueKey('vault_gate_locked'),
+              child: exists.when(
+                loading: () => const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, _) => Scaffold(
+                  body: Center(
+                    child: Text('vaultOpenError'.tr(args: [error.toString()])),
+                  ),
+                ),
+                data: (hasVault) => Scaffold(
+                  body: SafeArea(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
                           ),
-                          const SizedBox(height: 20),
-                          Text(
-                            hasVault
-                                ? 'vaultUnlockTitle'.tr()
-                                : isCloudDownload
-                                ? 'vaultDownloadedTitle'.tr()
-                                : 'vaultCreateTitle'.tr(),
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            hasVault
-                                ? 'vaultUnlockSubtitle'.tr()
-                                : isCloudDownload
-                                ? 'vaultDownloadedSubtitle'.tr()
-                                : 'vaultCreateSubtitle'.tr(),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          DropdownButtonFormField<String>(
-                            key: ValueKey(activeFile),
-                            initialValue: activeFile ?? _defaultVaultOption,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: 'vaultSelectLabel'.tr(),
-                            ),
-                            onChanged: _busy
-                                ? null
-                                : (value) => _selectVault(
-                                    value == _defaultVaultOption ? null : value,
-                                  ),
-                            items: [
-                              DropdownMenuItem(
-                                value: _defaultVaultOption,
-                                child: Text('vaultDefaultName'.tr()),
-                              ),
-                              ...vaultFiles.map(
-                                (path) => DropdownMenuItem(
-                                  value: path,
-                                  child: Text(
-                                    path.split(Platform.pathSeparator).last,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _password,
-                            obscureText: true,
-                            autofocus: true,
-                            enabled: !_busy,
-                            onSubmitted: (_) => _submit(hasVault),
-                            decoration: InputDecoration(
-                              labelText: 'vaultPasswordLabel'.tr(),
-                              suffix: showBiometricUnlock
-                                  ? IconButton(
-                                      icon: const Icon(Symbols.fingerprint),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 420),
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Center(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Image.asset(
+                                          'assets/icons/icon.png',
+                                          width: 72,
+                                          height: 72,
+                                          errorBuilder: (_, _, _) => Container(
+                                            width: 72,
+                                            height: 72,
+                                            alignment: Alignment.center,
+                                            color: theme
+                                                .colorScheme
+                                                .surfaceContainerHighest,
+                                            child: Icon(
+                                              Symbols.lock,
+                                              size: 36,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Text(
+                                      hasVault
+                                          ? 'vaultUnlockTitle'.tr()
+                                          : isCloudDownload
+                                          ? 'vaultDownloadedTitle'.tr()
+                                          : 'vaultCreateTitle'.tr(),
+                                      style: theme.textTheme.headlineSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      hasVault
+                                          ? 'vaultUnlockSubtitle'.tr()
+                                          : isCloudDownload
+                                          ? 'vaultDownloadedSubtitle'.tr()
+                                          : 'vaultCreateSubtitle'.tr(),
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    DropdownButtonFormField<String>(
+                                      key: ValueKey(activeFile),
+                                      initialValue:
+                                          activeFile ?? _defaultVaultOption,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        labelText: 'vaultSelectLabel'.tr(),
+                                      ),
+                                      onChanged: _busy
+                                          ? null
+                                          : (value) => _selectVault(
+                                              value == _defaultVaultOption
+                                                  ? null
+                                                  : value,
+                                            ),
+                                      items: [
+                                        DropdownMenuItem(
+                                          value: _defaultVaultOption,
+                                          child: Text('vaultDefaultName'.tr()),
+                                        ),
+                                        ...vaultFiles.map(
+                                          (path) => DropdownMenuItem(
+                                            value: path,
+                                            child: Text(
+                                              path
+                                                  .split(Platform.pathSeparator)
+                                                  .last,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: _password,
+                                      obscureText: true,
+                                      autofocus: true,
+                                      enabled: !_busy,
+                                      onSubmitted: (_) => _submit(hasVault),
+                                      decoration: InputDecoration(
+                                        labelText: 'vaultPasswordLabel'.tr(),
+                                        suffix: showBiometricUnlock
+                                            ? IconButton(
+                                                icon: const Icon(
+                                                  Symbols.fingerprint,
+                                                ),
+                                                onPressed: _busy
+                                                    ? null
+                                                    : _unlockWithBiometrics,
+                                                tooltip: 'vaultBiometricAction'
+                                                    .tr(),
+                                                constraints:
+                                                    const BoxConstraints(),
+                                                padding: const EdgeInsets.all(
+                                                  4,
+                                                ),
+                                                iconSize: 20,
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+                                    if (!hasVault && !isCloudDownload) ...[
+                                      const SizedBox(height: 12),
+                                      TextField(
+                                        controller: _confirmation,
+                                        obscureText: true,
+                                        enabled: !_busy,
+                                        onSubmitted: (_) => _submit(false),
+                                        decoration: InputDecoration(
+                                          labelText: 'vaultConfirmPasswordLabel'
+                                              .tr(),
+                                        ),
+                                      ),
+                                    ],
+                                    if (_error != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 12),
+                                        child: Text(
+                                          _error!,
+                                          style: TextStyle(
+                                            color: theme.colorScheme.error,
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 16),
+                                    FilledButton(
                                       onPressed: _busy
                                           ? null
-                                          : _unlockWithBiometrics,
-                                      tooltip: 'vaultBiometricAction'.tr(),
-                                      constraints: const BoxConstraints(),
-                                      padding: const EdgeInsets.all(4),
-                                      iconSize: 20,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          if (!hasVault && !isCloudDownload) ...[
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _confirmation,
-                              obscureText: true,
-                              enabled: !_busy,
-                              onSubmitted: (_) => _submit(false),
-                              decoration: InputDecoration(
-                                labelText: 'vaultConfirmPasswordLabel'.tr(),
-                              ),
-                            ),
-                          ],
-                          if (_error != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Text(
-                                _error!,
-                                style: TextStyle(
-                                  color: theme.colorScheme.error,
+                                          : () => _submit(hasVault),
+                                      child: _busy
+                                          ? const SizedBox(
+                                              height: 18,
+                                              width: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : Text(
+                                              hasVault
+                                                  ? 'vaultUnlockAction'.tr()
+                                                  : isCloudDownload
+                                                  ? 'vaultDownloadedAction'.tr()
+                                                  : 'vaultCreateAction'.tr(),
+                                            ),
+                                    ),
+                                    if (!hasVault) ...[
+                                      const SizedBox(height: 8),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : _createCloudVault,
+                                        icon: const Icon(
+                                          Symbols.cloud_download,
+                                        ),
+                                        label: Text(
+                                          'vaultCreateFromCloudAction'.tr(),
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: _busy ? null : _openVaultFile,
+                                      icon: const Icon(Symbols.folder_open),
+                                      label: Text('vaultOpenFileAction'.tr()),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextButton.icon(
+                                      onPressed: _busy
+                                          ? null
+                                          : _createVaultFile,
+                                      icon: const Icon(Symbols.add),
+                                      label: Text('vaultCreateFileAction'.tr()),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            onPressed: _busy ? null : () => _submit(hasVault),
-                            child: _busy
-                                ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(
-                                    hasVault
-                                        ? 'vaultUnlockAction'.tr()
-                                        : isCloudDownload
-                                        ? 'vaultDownloadedAction'.tr()
-                                        : 'vaultCreateAction'.tr(),
-                                  ),
                           ),
-                          if (!hasVault) ...[
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              onPressed: _busy ? null : _createCloudVault,
-                              icon: const Icon(Symbols.cloud_download),
-                              label: Text('vaultCreateFromCloudAction'.tr()),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          OutlinedButton.icon(
-                            onPressed: _busy ? null : _openVaultFile,
-                            icon: const Icon(Symbols.folder_open),
-                            label: Text('vaultOpenFileAction'.tr()),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: _busy ? null : _createVaultFile,
-                            icon: const Icon(Symbols.add),
-                            label: Text('vaultCreateFileAction'.tr()),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 }

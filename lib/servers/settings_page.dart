@@ -77,47 +77,61 @@ class SettingsPage extends ConsumerWidget {
               const SizedBox(height: 32),
               _SettingsSection(
                 titleKey: 'settingsAppearance',
+                padding: EdgeInsets.zero,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('settingsTheme').tr(),
-                    const SizedBox(height: 4),
-                    Text(
-                      'settingsThemeDescription',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ).tr(),
-                    const SizedBox(height: 12),
-                    SegmentedButton<ThemeMode>(
-                      segments: [
-                        ButtonSegment(
-                          value: ThemeMode.system,
-                          label: Text('settingsThemeSystem'.tr()),
-                          icon: const Icon(Symbols.brightness_auto),
-                        ),
-                        ButtonSegment(
-                          value: ThemeMode.light,
-                          label: Text('settingsThemeLight'.tr()),
-                          icon: const Icon(Symbols.light_mode),
-                        ),
-                        ButtonSegment(
-                          value: ThemeMode.dark,
-                          label: Text('settingsThemeDark'.tr()),
-                          icon: const Icon(Symbols.dark_mode),
-                        ),
-                      ],
-                      selected: {themeMode},
-                      onSelectionChanged: (selection) {
-                        ref
-                            .read(themeModeProvider.notifier)
-                            .setThemeMode(selection.first);
-                      },
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('settingsTheme').tr(),
+                          const SizedBox(height: 4),
+                          Text(
+                            'settingsThemeDescription',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ).tr(),
+                          const SizedBox(height: 12),
+                          SegmentedButton<ThemeMode>(
+                            segments: [
+                              ButtonSegment(
+                                value: ThemeMode.system,
+                                label: Text('settingsThemeSystem'.tr()),
+                                icon: const Icon(Symbols.brightness_auto),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.light,
+                                label: Text('settingsThemeLight'.tr()),
+                                icon: const Icon(Symbols.light_mode),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.dark,
+                                label: Text('settingsThemeDark'.tr()),
+                                icon: const Icon(Symbols.dark_mode),
+                              ),
+                            ],
+                            selected: {themeMode},
+                            onSelectionChanged: (selection) {
+                              ref
+                                  .read(themeModeProvider.notifier)
+                                  .setThemeMode(selection.first);
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          const _LanguageSwitcher(),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    const _LanguageSwitcher(),
                     if (!kIsWeb) ...[
                       const SizedBox(height: 24),
                       SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: _sectionTilePadding,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: _sectionTileBorderRadius(
+                            _SettingsTilePosition.only,
+                          ),
+                        ),
                         title: const Text('settingsBackgroundImage').tr(),
                         subtitle: Text(
                           backgroundImage.asData?.value == null
@@ -132,32 +146,40 @@ class SettingsPage extends ConsumerWidget {
                                 enabled,
                               ),
                       ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () =>
-                                _selectBackgroundImage(context, ref),
-                            icon: const Icon(Symbols.image),
-                            label: const Text(
-                              'settingsBackgroundImageChoose',
-                            ).tr(),
-                          ),
-                          if (backgroundImage.asData?.value != null)
-                            TextButton.icon(
+                      Padding(
+                        padding: _sectionTilePadding,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
                               onPressed: () =>
-                                  _clearBackgroundImage(context, ref),
-                              icon: const Icon(Symbols.delete_outline),
+                                  _selectBackgroundImage(context, ref),
+                              icon: const Icon(Symbols.image),
                               label: const Text(
-                                'settingsBackgroundImageClear',
+                                'settingsBackgroundImageChoose',
                               ).tr(),
                             ),
-                        ],
+                            if (backgroundImage.asData?.value != null)
+                              TextButton.icon(
+                                onPressed: () =>
+                                    _clearBackgroundImage(context, ref),
+                                icon: const Icon(Symbols.delete_outline),
+                                label: const Text(
+                                  'settingsBackgroundImageClear',
+                                ).tr(),
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: _sectionTilePadding,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: _sectionTileBorderRadius(
+                            _SettingsTilePosition.only,
+                          ),
+                        ),
                         title: const Text('settingsTerminalTransparent').tr(),
                         subtitle: const Text(
                           'settingsTerminalTransparentHint',
@@ -178,24 +200,32 @@ class SettingsPage extends ConsumerWidget {
                     ],
                     if (DesktopWindowFrame.isPlatformDesktop) ...[
                       const SizedBox(height: 16),
-                      Text(
-                        'settingsWindowOpacity',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ).tr(),
-                      const SizedBox(height: 4),
-                      Text(
-                        'settingsWindowOpacityHint',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ).tr(),
-                      Slider(
-                        value: windowOpacity.asData?.value ?? 1.0,
-                        min: 0.4,
-                        max: 1.0,
-                        divisions: 12,
-                        label:
-                            '${((windowOpacity.asData?.value ?? 1.0) * 100).round()}%',
-                        onChanged: (value) =>
-                            setMaidKitWindowOpacity(ref, value),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'settingsWindowOpacity',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ).tr(),
+                            const SizedBox(height: 4),
+                            Text(
+                              'settingsWindowOpacityHint',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ).tr(),
+                            Slider(
+                              value: windowOpacity.asData?.value ?? 1.0,
+                              min: 0.4,
+                              max: 1.0,
+                              divisions: 12,
+                              label:
+                                  '${((windowOpacity.asData?.value ?? 1.0) * 100).round()}%',
+                              onChanged: (value) =>
+                                  setMaidKitWindowOpacity(ref, value),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ],
@@ -204,74 +234,82 @@ class SettingsPage extends ConsumerWidget {
               const SizedBox(height: 24),
               _SettingsSection(
                 titleKey: 'settingsTerminal',
+                padding: EdgeInsets.zero,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedAdapterOption.id,
-                      decoration: InputDecoration(
-                        labelText: 'settingsTerminalRenderer'.tr(),
-                      ),
-                      items: [
-                        for (final option in adapterOptions)
-                          DropdownMenuItem(
-                            value: option.id,
-                            child: Text(option.label),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedAdapterOption.id,
+                            decoration: InputDecoration(
+                              labelText: 'settingsTerminalRenderer'.tr(),
+                            ),
+                            items: [
+                              for (final option in adapterOptions)
+                                DropdownMenuItem(
+                                  value: option.id,
+                                  child: Text(option.label),
+                                ),
+                            ],
+                            onChanged: adapterOptions.length < 2
+                                ? null
+                                : (adapterId) async {
+                                    if (adapterId != null) {
+                                      await ref
+                                          .read(
+                                            selectedTerminalSessionAdapterProvider
+                                                .notifier,
+                                          )
+                                          .select(adapterId);
+                                    }
+                                  },
                           ),
-                      ],
-                      onChanged: adapterOptions.length < 2
-                          ? null
-                          : (adapterId) async {
-                              if (adapterId != null) {
+                          const SizedBox(height: 8),
+                          Text(
+                            selectedAdapterOption.description,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'settingsTerminalRendererHint',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ).tr(),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey(terminalColorScheme.id),
+                            initialValue: terminalColorScheme.id,
+                            decoration: InputDecoration(
+                              labelText: 'settingsTerminalColorScheme'.tr(),
+                            ),
+                            items: [
+                              for (final scheme in TerminalColorSchemes.all)
+                                DropdownMenuItem(
+                                  value: scheme.id,
+                                  child: Text(scheme.label),
+                                ),
+                            ],
+                            onChanged: (schemeId) async {
+                              if (schemeId != null) {
                                 await ref
-                                    .read(
-                                      selectedTerminalSessionAdapterProvider
-                                          .notifier,
-                                    )
-                                    .select(adapterId);
+                                    .read(terminalColorSchemeProvider.notifier)
+                                    .select(schemeId);
                               }
                             },
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      selectedAdapterOption.description,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'settingsTerminalRendererHint',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ).tr(),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey(terminalColorScheme.id),
-                      initialValue: terminalColorScheme.id,
-                      decoration: InputDecoration(
-                        labelText: 'settingsTerminalColorScheme'.tr(),
-                      ),
-                      items: [
-                        for (final scheme in TerminalColorSchemes.all)
-                          DropdownMenuItem(
-                            value: scheme.id,
-                            child: Text(scheme.label),
                           ),
-                      ],
-                      onChanged: (schemeId) async {
-                        if (schemeId != null) {
-                          await ref
-                              .read(terminalColorSchemeProvider.notifier)
-                              .select(schemeId);
-                        }
-                      },
+                          const SizedBox(height: 4),
+                          Text(
+                            'settingsTerminalColorSchemeHint',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ).tr(),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'settingsTerminalColorSchemeHint',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ).tr(),
-                    const SizedBox(height: 8),
                     SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
+                      contentPadding: _sectionTilePadding,
                       title: const Text('settingsAnimateCursor').tr(),
                       subtitle: const Text('settingsAnimateCursorHint').tr(),
                       value: cursorAnimationEnabled,
@@ -285,7 +323,7 @@ class SettingsPage extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
+                      contentPadding: _sectionTilePadding,
                       title: const Text(
                         'settingsTerminalBrandingEnvironment',
                       ).tr(),
@@ -305,10 +343,11 @@ class SettingsPage extends ConsumerWidget {
               const SizedBox(height: 24),
               _SettingsSection(
                 titleKey: 'settingsConnections',
+                padding: EdgeInsets.zero,
                 child: Column(
                   children: [
                     SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
+                      contentPadding: _sectionTilePadding,
                       title: const Text('settingsConnectOnStartup').tr(),
                       subtitle: const Text('settingsConnectOnStartupHint').tr(),
                       value: connectOnStartup,
@@ -316,31 +355,44 @@ class SettingsPage extends ConsumerWidget {
                           .read(connectOnStartupProvider.notifier)
                           .setEnabled(value),
                     ),
-                    const SizedBox(height: 12),
-                    _IntervalDropdown(
-                      labelKey: 'settingsBackgroundRefreshInterval',
-                      helperKey: 'settingsBackgroundRefreshIntervalHint',
-                      value: refreshInterval,
-                      options: _refreshIntervals,
-                      fallback: _refreshIntervals[1],
-                      onChanged: (interval) {
-                        ref
-                            .read(serverMetricsRefreshIntervalProvider.notifier)
-                            .setInterval(interval);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _IntervalDropdown(
-                      labelKey: 'settingsFocusedRefreshInterval',
-                      helperKey: 'settingsFocusedRefreshIntervalHint',
-                      value: focusedRefreshInterval,
-                      options: _focusedRefreshIntervals,
-                      fallback: _focusedRefreshIntervals.first,
-                      onChanged: (interval) {
-                        ref
-                            .read(focusedServerRefreshIntervalProvider.notifier)
-                            .setInterval(interval);
-                      },
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 12),
+                          _IntervalDropdown(
+                            labelKey: 'settingsBackgroundRefreshInterval',
+                            helperKey: 'settingsBackgroundRefreshIntervalHint',
+                            value: refreshInterval,
+                            options: _refreshIntervals,
+                            fallback: _refreshIntervals[1],
+                            onChanged: (interval) {
+                              ref
+                                  .read(
+                                    serverMetricsRefreshIntervalProvider
+                                        .notifier,
+                                  )
+                                  .setInterval(interval);
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _IntervalDropdown(
+                            labelKey: 'settingsFocusedRefreshInterval',
+                            helperKey: 'settingsFocusedRefreshIntervalHint',
+                            value: focusedRefreshInterval,
+                            options: _focusedRefreshIntervals,
+                            fallback: _focusedRefreshIntervals.first,
+                            onChanged: (interval) {
+                              ref
+                                  .read(
+                                    focusedServerRefreshIntervalProvider
+                                        .notifier,
+                                  )
+                                  .setInterval(interval);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -363,8 +415,11 @@ class SettingsPage extends ConsumerWidget {
                   data: (enabled) => Column(
                     children: [
                       SwitchListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
+                        contentPadding: _sectionTilePadding,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: _sectionTileBorderRadius(
+                            _SettingsTilePosition.first,
+                          ),
                         ),
                         title: const Text('settingsBiometricUnlock').tr(),
                         subtitle: const Text(
@@ -375,8 +430,11 @@ class SettingsPage extends ConsumerWidget {
                             _setBiometricUnlock(context, ref, value),
                       ),
                       ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
+                        contentPadding: _sectionTilePadding,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: _sectionTileBorderRadius(
+                            _SettingsTilePosition.last,
+                          ),
                         ),
                         leading: const Icon(Symbols.password),
                         title: const Text('settingsVaultChangePassword').tr(),
@@ -395,7 +453,12 @@ class SettingsPage extends ConsumerWidget {
                 titleKey: 'settingsAbout',
                 padding: EdgeInsets.zero,
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  contentPadding: _sectionTilePadding,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: _sectionTileBorderRadius(
+                      _SettingsTilePosition.only,
+                    ),
+                  ),
                   leading: const Icon(Symbols.info),
                   title: Text('aboutTitle'.tr()),
                   subtitle: Text('settingsAboutHint'.tr()),
@@ -408,10 +471,15 @@ class SettingsPage extends ConsumerWidget {
                 titleKey: 'settingsAccount',
                 padding: EdgeInsets.zero,
                 child: cloudUser.when(
-                  loading: () => const ListTile(
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                    leading: CircleAvatar(child: Icon(Symbols.person)),
-                    title: Text('…'),
+                  loading: () => ListTile(
+                    contentPadding: _sectionTilePadding,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: _sectionTileBorderRadius(
+                        _SettingsTilePosition.only,
+                      ),
+                    ),
+                    leading: const CircleAvatar(child: Icon(Symbols.person)),
+                    title: const Text('…'),
                   ),
                   error: (_, _) => _cloudLoginTile(context, ref),
                   data: (user) => user == null
@@ -419,8 +487,11 @@ class SettingsPage extends ConsumerWidget {
                       : Column(
                           children: [
                             ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                              contentPadding: _sectionTilePadding,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: _sectionTileBorderRadius(
+                                  _SettingsTilePosition.only,
+                                ),
                               ),
                               leading: _CloudAvatar(user: user),
                               title: Text(user.name),
@@ -441,6 +512,7 @@ class SettingsPage extends ConsumerWidget {
                     _VaultCloudBindingTile(
                       vaultId: 'maid_kit',
                       title: 'vaultDefaultName'.tr(),
+                      position: _SettingsTilePosition.first,
                       active: activeVaultFile == null,
                       onSelect: () => ref
                           .read(activeVaultFileProvider.notifier)
@@ -458,6 +530,7 @@ class SettingsPage extends ConsumerWidget {
                     ...vaultFiles.map(
                       (path) => _VaultCloudBindingTile(
                         vaultId: path,
+                        position: _SettingsTilePosition.middle,
                         title:
                             vaultLabels[path] ??
                             path.split(Platform.pathSeparator).last,
@@ -485,8 +558,11 @@ class SettingsPage extends ConsumerWidget {
                       ),
                     ),
                     ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+                      contentPadding: _sectionTilePadding,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: _sectionTileBorderRadius(
+                          _SettingsTilePosition.last,
+                        ),
                       ),
                       leading: const Icon(Symbols.add),
                       title: const Text('settingsVaultCreate').tr(),
@@ -520,8 +596,11 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
-  ListTile _cloudLoginTile(BuildContext context, WidgetRef ref) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+  Widget _cloudLoginTile(BuildContext context, WidgetRef ref) => ListTile(
+    contentPadding: _sectionTilePadding,
+    shape: RoundedRectangleBorder(
+      borderRadius: _sectionTileBorderRadius(_SettingsTilePosition.only),
+    ),
     leading: const CircleAvatar(child: Icon(Symbols.person)),
     title: const Text('settingsCloudSignIn').tr(),
     subtitle: const Text('settingsCloudSignInHint').tr(),
@@ -1028,6 +1107,36 @@ enum _VaultOnboardingChoice { local, cloud }
 
 enum _VaultTileAction { changeCloudBinding, rename, delete }
 
+enum _SettingsTilePosition { only, first, middle, last }
+
+const _sectionTilePadding = EdgeInsets.symmetric(horizontal: 16);
+
+BorderRadius _sectionTileBorderRadius(_SettingsTilePosition position) {
+  const radius = Radius.circular(12);
+  return BorderRadius.only(
+    topLeft:
+        position == _SettingsTilePosition.only ||
+            position == _SettingsTilePosition.first
+        ? radius
+        : Radius.zero,
+    topRight:
+        position == _SettingsTilePosition.only ||
+            position == _SettingsTilePosition.first
+        ? radius
+        : Radius.zero,
+    bottomLeft:
+        position == _SettingsTilePosition.only ||
+            position == _SettingsTilePosition.last
+        ? radius
+        : Radius.zero,
+    bottomRight:
+        position == _SettingsTilePosition.only ||
+            position == _SettingsTilePosition.last
+        ? radius
+        : Radius.zero,
+  );
+}
+
 Future<String?> _backupPasswordDialog(
   BuildContext context, {
   required bool confirm,
@@ -1229,6 +1338,7 @@ class _VaultCloudBindingTile extends ConsumerWidget {
   const _VaultCloudBindingTile({
     required this.vaultId,
     required this.title,
+    required this.position,
     required this.active,
     required this.onSelect,
     this.onExport,
@@ -1240,6 +1350,7 @@ class _VaultCloudBindingTile extends ConsumerWidget {
 
   final String vaultId;
   final String title;
+  final _SettingsTilePosition position;
   final bool active;
   final Future<void> Function() onSelect;
   final Future<void> Function()? onExport;
@@ -1266,12 +1377,16 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                     ),
             ],
           );
+    final tileBorderRadius = _sectionTileBorderRadius(position);
     return Material(
       color: active ? Theme.of(context).colorScheme.secondaryContainer : null,
+      borderRadius: tileBorderRadius,
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            contentPadding: _sectionTilePadding,
+            shape: RoundedRectangleBorder(borderRadius: tileBorderRadius),
             leading: const Icon(Symbols.lock),
             title: Text(title),
             subtitle: Text('$workspace\n$syncStatus'),
