@@ -53,6 +53,17 @@ class ServerDashboardTab extends ConsumerWidget {
     await connectForStatistics(context, ref, server);
   }
 
+  Future<void> _reconnectAll(
+    BuildContext context,
+    WidgetRef ref,
+    List<Server> servers,
+  ) async {
+    for (final server in servers) {
+      if (!context.mounted) return;
+      await _connect(context, ref, server);
+    }
+  }
+
   Future<void> _edit(BuildContext context, WidgetRef ref, Server server) async {
     try {
       final repository = ref.read(serverRepositoryProvider);
@@ -109,6 +120,8 @@ class ServerDashboardTab extends ConsumerWidget {
       sessions: sessions,
       onAdd: () => _add(context, ref),
       onConnect: (server) => _connect(context, ref, server),
+      onReconnectAll: (disconnectedServers) =>
+          _reconnectAll(context, ref, disconnectedServers),
       onEdit: (server) => _edit(context, ref, server),
       onDelete: (server) => _delete(ref, server),
       onOpenDetail: (server) =>
@@ -148,6 +161,7 @@ class _ServersCatalog extends StatelessWidget {
     required this.sessions,
     required this.onAdd,
     required this.onConnect,
+    required this.onReconnectAll,
     required this.onEdit,
     required this.onDelete,
     required this.onOpenDetail,
@@ -160,6 +174,7 @@ class _ServersCatalog extends StatelessWidget {
   final List<SshSessionInfo> sessions;
   final VoidCallback onAdd;
   final ValueChanged<Server> onConnect;
+  final Future<void> Function(List<Server>) onReconnectAll;
   final ValueChanged<Server> onEdit;
   final ValueChanged<Server> onDelete;
   final ValueChanged<Server> onOpenDetail;
@@ -177,6 +192,7 @@ class _ServersCatalog extends StatelessWidget {
                 servers: items,
                 sessions: sessions,
                 onConnect: onConnect,
+                onReconnectAll: onReconnectAll,
                 onEdit: onEdit,
                 onDelete: onDelete,
                 onOpenDetail: onOpenDetail,
@@ -199,11 +215,12 @@ class _ServersCatalog extends StatelessWidget {
   }
 }
 
-class _ServerGrid extends StatelessWidget {
+class _ServerGrid extends StatefulWidget {
   const _ServerGrid({
     required this.servers,
     required this.sessions,
     required this.onConnect,
+    required this.onReconnectAll,
     required this.onEdit,
     required this.onDelete,
     required this.onOpenDetail,
@@ -215,6 +232,7 @@ class _ServerGrid extends StatelessWidget {
   final List<Server> servers;
   final List<SshSessionInfo> sessions;
   final ValueChanged<Server> onConnect;
+  final Future<void> Function(List<Server>) onReconnectAll;
   final ValueChanged<Server> onEdit;
   final ValueChanged<Server> onDelete;
   final ValueChanged<Server> onOpenDetail;
@@ -223,47 +241,92 @@ class _ServerGrid extends StatelessWidget {
   final ValueChanged<Server> onRefresh;
 
   @override
-  Widget build(BuildContext context) => GridView.builder(
-    padding: const EdgeInsets.all(24),
-    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-      maxCrossAxisExtent: 380,
-      mainAxisExtent: 320,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-    ),
-    itemCount: servers.length,
-    itemBuilder: (context, index) {
-      final server = servers[index];
-      final session = sessions
-          .where((item) => item.serverId == server.id)
-          .firstOrNull;
-      return ContextMenuWidget(
-        menuProvider: (_) => Menu(
-          children: [
-            MenuAction(
-              title: 'serversEditServer'.tr(),
-              callback: () => onEdit(server),
+  State<_ServerGrid> createState() => _ServerGridState();
+}
+
+class _ServerGridState extends State<_ServerGrid> {
+  var _isReconnecting = false;
+
+  Future<void> _reconnectAll(List<Server> servers) async {
+    setState(() => _isReconnecting = true);
+    try {
+      await widget.onReconnectAll(servers);
+    } finally {
+      if (mounted) setState(() => _isReconnecting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionsByServerId = {
+      for (final session in widget.sessions) session.serverId: session,
+    };
+    final disconnectedServers = widget.servers.where((server) {
+      final status = sessionsByServerId[server.id]?.status;
+      return status != SessionStatus.connected &&
+          status != SessionStatus.connecting;
+    }).toList();
+
+    return Column(
+      children: [
+        if (disconnectedServers.length > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: _isReconnecting
+                    ? null
+                    : () => _reconnectAll(disconnectedServers),
+                icon: const Icon(Symbols.sync),
+                label: Text('serversReconnectAll'.tr()),
+              ),
             ),
-            MenuSeparator(),
-            MenuAction(
-              title: 'serversDeleteServer'.tr(),
-              attributes: const MenuActionAttributes(destructive: true),
-              callback: () => onDelete(server),
+          ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(24),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 380,
+              mainAxisExtent: 320,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
             ),
-          ],
+            itemCount: widget.servers.length,
+            itemBuilder: (context, index) {
+              final server = widget.servers[index];
+              final session = sessionsByServerId[server.id];
+              return ContextMenuWidget(
+                menuProvider: (_) => Menu(
+                  children: [
+                    MenuAction(
+                      title: 'serversEditServer'.tr(),
+                      callback: () => widget.onEdit(server),
+                    ),
+                    MenuSeparator(),
+                    MenuAction(
+                      title: 'serversDeleteServer'.tr(),
+                      attributes: const MenuActionAttributes(destructive: true),
+                      callback: () => widget.onDelete(server),
+                    ),
+                  ],
+                ),
+                child: _ServerCard(
+                  server: server,
+                  session: session,
+                  onConnect: () => widget.onConnect(server),
+                  onOpenDetail: () => widget.onOpenDetail(server),
+                  onOpenTerminal: () => widget.onOpenTerminal(server),
+                  onOpenFiles: () => widget.onOpenFiles(server),
+                  onRefresh: () => widget.onRefresh(server),
+                ),
+              );
+            },
+          ),
         ),
-        child: _ServerCard(
-          server: server,
-          session: session,
-          onConnect: () => onConnect(server),
-          onOpenDetail: () => onOpenDetail(server),
-          onOpenTerminal: () => onOpenTerminal(server),
-          onOpenFiles: () => onOpenFiles(server),
-          onRefresh: () => onRefresh(server),
-        ),
-      );
-    },
-  );
+      ],
+    );
+  }
 }
 
 class _ServerCard extends StatelessWidget {
@@ -376,6 +439,7 @@ class _ServerCard extends StatelessWidget {
                       connected: connected,
                       connecting: connecting,
                       failed: failed,
+                      latency: session?.latency,
                     ),
                     const Spacer(),
                     if (!connected && !connecting)
@@ -482,22 +546,32 @@ class _ConnectionStatus extends StatelessWidget {
     required this.connected,
     required this.connecting,
     required this.failed,
+    this.latency,
   });
 
   final bool connected;
   final bool connecting;
   final bool failed;
+  final Duration? latency;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final latency = this.latency;
     final (label, color) = switch ((connected, connecting, failed)) {
       (true, _, _) => ('serversConnected'.tr(), colorScheme.primary),
       (_, true, _) => ('serversConnecting'.tr(), colorScheme.tertiary),
       (_, _, true) => ('serversFailed'.tr(), colorScheme.error),
       _ => ('serversNotConnected'.tr(), colorScheme.onSurfaceVariant),
     };
+    final latencyColor = latency == null
+        ? colorScheme.onSurfaceVariant
+        : latency.inMilliseconds >= 250
+        ? colorScheme.error
+        : latency.inMilliseconds >= 100
+        ? colorScheme.tertiary
+        : colorScheme.onSurfaceVariant;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -512,6 +586,15 @@ class _ConnectionStatus extends StatelessWidget {
           label,
           style: textTheme.labelLarge?.copyWith(color: colorScheme.onSurface),
         ),
+        if (connected && latency != null) ...[
+          const SizedBox(width: 8),
+          Icon(Symbols.network_ping, size: 16, color: latencyColor),
+          const SizedBox(width: 4),
+          Text(
+            '${latency.inMilliseconds} ms',
+            style: textTheme.labelLarge?.copyWith(color: latencyColor),
+          ),
+        ],
       ],
     );
   }

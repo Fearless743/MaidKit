@@ -215,6 +215,7 @@
   "serversLoadError": "无法加载服务器：{}",
   "serversRefreshStatistics": "刷新统计",
   "serversConnect": "连接",
+  "serversReconnectAll": "全部重连",
   "serversConnected": "已连接",
   "serversConnecting": "连接中",
   "serversFailed": "失败",

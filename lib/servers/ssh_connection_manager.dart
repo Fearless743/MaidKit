@@ -289,6 +289,7 @@ class SshConnectionManager {
     final client = clientFor(server.id);
     final state = _states[server.id];
     if (client == null || client.isClosed || state == null) return;
+    await _refreshLatency(client, state);
     if (server.collectStats) await _refreshStats(client, state);
     if (server.collectSystemInfo) {
       await _refreshSystemInfo(client, _states[server.id] ?? state);
@@ -301,7 +302,22 @@ class SshConnectionManager {
     final client = clientFor(server.id);
     final state = _states[server.id];
     if (client == null || client.isClosed || state == null) return;
+    await _refreshLatency(client, state);
     if (server.collectStats) await _refreshStats(client, state);
+  }
+
+  Future<void> _refreshLatency(SSHClient client, SshSessionInfo state) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final session = await client.execute(':');
+      await session.done;
+      if (!identical(_sessions[state.serverId], client)) return;
+      _set(
+        (_states[state.serverId] ?? state).copyWith(latency: stopwatch.elapsed),
+      );
+    } catch (_) {
+      // Keep the last successful measurement if a transient probe fails.
+    }
   }
 
   /// Process list for the detail page. Caps output so busy hosts (thousands of

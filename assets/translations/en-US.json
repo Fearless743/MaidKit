@@ -218,6 +218,7 @@
   "serversLoadError": "Could not load servers: {}",
   "serversRefreshStatistics": "Refresh statistics",
   "serversConnect": "Connect",
+  "serversReconnectAll": "Reconnect all",
   "serversConnected": "Connected",
   "serversConnecting": "Connecting",
   "serversFailed": "Failed",

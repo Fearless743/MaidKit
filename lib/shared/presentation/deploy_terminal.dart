@@ -264,8 +264,28 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
 
   void _close() {
     final sessions = ref.read(deploySessionsProvider);
-    ref.read(deploySessionsProvider.notifier).remove(_selectedSessionId);
-    if (sessions.length <= 1) widget.dismiss();
+    final closingSessionId = _selectedSessionId;
+    final selectedIndex = sessions.indexWhere(
+      (session) => session.id == closingSessionId,
+    );
+    if (selectedIndex < 0) return;
+
+    final remainingSessions = [
+      for (final session in sessions)
+        if (session.id != closingSessionId) session,
+    ];
+
+    // Keep the selection in sync with the list before removing the current
+    // tab. Otherwise the next close action can still target the already
+    // removed session, leaving the visible task behind when the modal reopens.
+    if (remainingSessions.isNotEmpty) {
+      final nextIndex = selectedIndex < remainingSessions.length
+          ? selectedIndex
+          : remainingSessions.length - 1;
+      setState(() => _selectedSessionId = remainingSessions[nextIndex].id);
+    }
+    ref.read(deploySessionsProvider.notifier).remove(closingSessionId);
+    if (remainingSessions.isEmpty) widget.dismiss();
   }
 
   @override
@@ -315,7 +335,9 @@ class _DeployTerminalModalState extends ConsumerState<_DeployTerminalModal> {
         children: [
           if (sessions.length > 1)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              // The TabBar paints its divider across its own bounds. Keep its
+              // bounds flush with the modal so that divider reaches both edges.
+              padding: const EdgeInsets.only(bottom: 8),
               child: DefaultTabController(
                 key: ValueKey(sessions.map((item) => item.id).join()),
                 length: sessions.length,

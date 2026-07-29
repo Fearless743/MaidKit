@@ -144,6 +144,7 @@ class SshSessionInfo {
     this.error,
     this.stats,
     this.systemInfo,
+    this.latency,
   });
 
   final int serverId;
@@ -153,12 +154,14 @@ class SshSessionInfo {
   final String? error;
   final ServerStats? stats;
   final ServerSystemInfo? systemInfo;
+  final Duration? latency;
 
   SshSessionInfo copyWith({
     SessionStatus? status,
     String? error,
     ServerStats? stats,
     ServerSystemInfo? systemInfo,
+    Duration? latency,
   }) => SshSessionInfo(
     serverId: serverId,
     serverName: serverName,
@@ -167,6 +170,7 @@ class SshSessionInfo {
     error: error ?? this.error,
     stats: stats ?? this.stats,
     systemInfo: systemInfo ?? this.systemInfo,
+    latency: latency ?? this.latency,
   );
 }
 
