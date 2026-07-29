@@ -193,6 +193,8 @@ class CloudSyncService {
   final Dio _dio;
 
   String get _configurationKey => 'maidkit_cloud_sync_$_vaultKey';
+  String _flywheelAppPath(String workspaceId) =>
+      '/flywheel/workspaces/$workspaceId/apps/$appId';
 
   Future<CloudSyncConfiguration?> configuration() async {
     final raw = await _storage.read(key: _configurationKey);
@@ -274,7 +276,7 @@ class CloudSyncService {
         );
       }
       final response = await _authorizedGet(
-        '/flywheel/workspaces/${workspace.id}/apps/$appId/blobs',
+        '${_flywheelAppPath(workspace.id)}/blobs',
         session,
       );
       final entries = response.data;
@@ -377,8 +379,8 @@ class CloudSyncService {
       var remoteRevision = 0;
       try {
         final metadata = await _authorizedGet(
-          '/flywheel/workspaces/${configuration.workspaceId}/apps/$appId/'
-          'blobs/${configuration.blobId}',
+          '${_flywheelAppPath(configuration.workspaceId)}/blobs/'
+          '${configuration.blobId}',
           session,
         );
         final data = metadata.data as Map?;
@@ -392,8 +394,8 @@ class CloudSyncService {
       if (remoteRevision > revision) {
         if (conflictResolution == CloudSyncConflictResolution.downloadRemote) {
           final content = await _dio.get<List<int>>(
-            '$apiBase/flywheel/workspaces/${configuration.workspaceId}/apps/'
-            '$appId/blobs/${configuration.blobId}/content',
+            '$apiBase${_flywheelAppPath(configuration.workspaceId)}/blobs/'
+            '${configuration.blobId}/content',
             options: Options(
               headers: {'Authorization': 'Bearer ${session.accessToken}'},
               responseType: ResponseType.bytes,
@@ -413,8 +415,8 @@ class CloudSyncService {
         revision = remoteRevision;
       }
       final response = await _dio.put<Map<String, dynamic>>(
-        '$apiBase/flywheel/workspaces/${configuration.workspaceId}/apps/'
-        '$appId/blobs/${configuration.blobId}',
+        '$apiBase${_flywheelAppPath(configuration.workspaceId)}/blobs/'
+        '${configuration.blobId}',
         data: FormData.fromMap({
           // Flywheel binds these multipart fields to its C# [FromForm]
           // properties. JSON's snake_case convention does not apply here.

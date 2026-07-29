@@ -47,6 +47,16 @@ jobs:
         with:
           name: build-output-windows
           path: build/windows/x64/runner/Release/
+      - name: Compile Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: setup.iss
+          options: "/DAppVersion=${{ steps.extract_version.outputs.app_version }} /DBuildNumber=${{ steps.extract_version.outputs.build_number }}"
+      - name: Archive installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-windows-installer
+          path: Installer/windows-x86_64-setup.exe
 
   build-linux:
     if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux'
@@ -104,10 +114,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - if: needs.build-windows.result == 'success'
-        name: Download Windows artifact
+        name: Download Windows installer artifact
         uses: actions/download-artifact@v4
         with:
-          name: build-output-windows
+          name: build-output-windows-installer
           path: ./artifacts/windows
       - if: needs.build-linux.result == 'success'
         name: Download Linux artifact
@@ -122,10 +132,10 @@ jobs:
           name: build-output-macos
           path: ./artifacts/macos
       - if: needs.build-windows.result == 'success'
-        name: Zip Windows build
+        name: Zip Windows installer
         run: |
           cd ./artifacts/windows
-          zip -r ../build-output-windows.zip .
+          zip -r ../build-output-windows-installer.zip .
       - if: needs.build-linux.result == 'success'
         name: Zip Linux build
         run: |
@@ -137,14 +147,14 @@ jobs:
           cd ./artifacts/macos
           zip -r ../build-output-macos.zip .
       - if: needs.build-windows.result == 'success'
-        name: Upload Windows to R2
+        name: Upload Windows installer to R2
         uses: ryand56/r2-upload-action@latest
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.S3_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.S3_SECRET_ACCESS_KEY }}
           r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
-          source-dir: ./artifacts/build-output-windows.zip
+          source-dir: ./artifacts/build-output-windows-installer.zip
           destination-dir: maidkit
       - if: needs.build-linux.result == 'success'
         name: Upload Linux to R2
