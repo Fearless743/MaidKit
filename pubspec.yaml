@@ -35,10 +35,10 @@ dependencies:
   archive: ^4.0.9
   cryptography: ^2.9.0
   crypto: ^3.0.7
-  dartssh2: ^2.22.3
-  dio: ^5.10.0
+  dartssh2: ^2.22.4
+  dio: ^5.11.0
   desktop_drop: ^0.7.1
-  drift: ^2.34.2
+  drift: ^2.34.3
   drift_flutter: ^0.3.1
   file_picker: ^11.0.2
   file_saver: ^0.4.0
@@ -46,7 +46,7 @@ dependencies:
   flutter_hooks: ^0.21.3+1
   flutter_secure_storage: ^10.3.1
   flutter_web_auth_2: ^5.0.3
-  hooks_riverpod: ^3.3.2
+  hooks_riverpod: ^3.4.2
   highlight: ^0.7.0
   island_ui_foundation:
     git:
@@ -71,10 +71,10 @@ dependencies:
   fl_chart: ^1.2.0
   flutter_localizations:
     sdk: flutter
-  material_symbols_icons: ^4.2951.0
+  material_symbols_icons: ^4.2960.0
   styled_widget: ^0.4.1
   package_info_plus: ^9.0.1
-  path_provider: ^2.1.5
+  path_provider: ^2.1.6
   toml: ^0.18.0
 
 dev_dependencies:
@@ -98,7 +98,7 @@ dependency_overrides:
     git:
       url: https://github.com/elias8/libghostty.git
       path: packages/libghostty
-      ref: libghostty-v0.0.11
+      ref: main
 
 flutter_launcher_icons:
   android: "launcher_icon"
