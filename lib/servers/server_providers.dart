@@ -3,11 +3,14 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/agent/agent_repository.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'app_theme_preferences.dart';
 import 'ghostty_terminal_session_adapter.dart';
@@ -72,6 +75,80 @@ final databaseProvider = Provider.autoDispose<AppDatabase>((ref) {
 const _activeVaultFilePreference = 'active_vault_file';
 const _vaultFilesPreference = 'vault_files';
 const _vaultLabelsPreference = 'vault_labels';
+
+/// Copies the pre-multi-vault app database into the managed vaults directory
+/// once, so the migrated vault behaves exactly like any other vault file.
+///
+/// The original database lived at the app default location under the fixed
+/// "maid_kit" vault id. Cloud sync, biometric and sync-passphrase keys are
+/// moved to the new path-based vault id so existing bindings keep working.
+Future<void> migrateLegacyVault({required String defaultName}) async {
+  final preferences = await SharedPreferences.getInstance();
+  final documents = await getApplicationDocumentsDirectory();
+  final legacy = File(
+    '${documents.path}${Platform.pathSeparator}maid_kit.sqlite',
+  );
+  if (!await legacy.exists()) return;
+
+  final database = AppDatabase(filePath: legacy.path);
+  final hasVault = await database.select(database.vaultMetadata).get();
+  await database.close();
+  if (hasVault.isEmpty) return;
+
+  final managedPath = await VaultFileStorage().importVault(legacy.path);
+
+  final storage = const FlutterSecureStorage();
+  for (final prefix in [
+    'maidkit_cloud_sync',
+    'maidkit_vault_data_key',
+    'maidkit_vault_sync_passphrase',
+  ]) {
+    final oldKey = '${prefix}_${base64UrlEncode(utf8.encode('maid_kit'))}';
+    final newKey = '${prefix}_${base64UrlEncode(utf8.encode(managedPath))}';
+    try {
+      final value = await storage.read(key: oldKey);
+      if (value != null) {
+        await storage.write(key: newKey, value: value);
+        await storage.delete(key: oldKey);
+      }
+    } catch (_) {
+      // Keychain migration is best-effort; the sync passphrase also lives in
+      // the vault metadata and biometric unlock can be re-enabled with it.
+    }
+  }
+
+  final storedFiles =
+      preferences.getStringList(_vaultFilesPreference) ?? const [];
+  if (!storedFiles.contains(managedPath)) {
+    await preferences.setStringList(_vaultFilesPreference, [
+      managedPath,
+      ...storedFiles,
+    ]);
+  }
+  final active = preferences.getString(_activeVaultFilePreference);
+  if (active == null || active.isEmpty) {
+    await preferences.setString(_activeVaultFilePreference, managedPath);
+  }
+  final rawLabels = preferences.getString(_vaultLabelsPreference);
+  final labels = <String, String>{};
+  if (rawLabels != null) {
+    try {
+      final values = Map<String, dynamic>.from(jsonDecode(rawLabels) as Map);
+      labels.addAll(
+        values.map((key, value) => MapEntry(key, value.toString())),
+      );
+    } catch (_) {
+      // Ignore malformed labels and fall back to a clean map.
+    }
+  }
+  labels[managedPath] = defaultName;
+  await preferences.setString(_vaultLabelsPreference, jsonEncode(labels));
+
+  for (final suffix in ['', '-wal', '-shm']) {
+    final file = File('${legacy.path}$suffix');
+    if (await file.exists()) await file.delete();
+  }
+}
 
 final vaultLabelsProvider =
     NotifierProvider<VaultLabelsNotifier, Map<String, String>>(
@@ -215,6 +292,29 @@ final serverRepositoryProvider = Provider<ServerRepository>((ref) {
     ref.watch(vaultServiceProvider),
   );
 });
+
+final agentRepositoryProvider = Provider<AgentRepository>((ref) {
+  return AgentRepository(
+    ref.watch(databaseProvider),
+    ref.watch(vaultServiceProvider),
+  );
+});
+
+final agentConfiguredProvider = StreamProvider<bool>((ref) {
+  return ref
+      .watch(agentRepositoryProvider)
+      .watchProviders()
+      .map((providers) => providers.isNotEmpty);
+});
+
+final agentProvidersProvider = StreamProvider<List<AgentProvider>>((ref) {
+  return ref.watch(agentRepositoryProvider).watchProviders();
+});
+
+final agentProviderModelsProvider =
+    StreamProvider.family<List<AgentProviderModel>, int>((ref, providerId) {
+      return ref.watch(agentRepositoryProvider).watchModels(providerId);
+    });
 
 final savedCredentialsProvider = StreamProvider<List<SavedCredential>>((ref) {
   return ref.watch(serverRepositoryProvider).watchCredentials();

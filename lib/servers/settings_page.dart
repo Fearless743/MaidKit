@@ -520,54 +520,41 @@ class SettingsPage extends ConsumerWidget {
                 padding: EdgeInsets.zero,
                 child: Column(
                   children: [
-                    _VaultCloudBindingTile(
-                      vaultId: 'maid_kit',
-                      title: 'vaultDefaultName'.tr(),
-                      position: _SettingsTilePosition.first,
-                      active: activeVaultFile == null,
-                      onSelect: () => ref
-                          .read(activeVaultFileProvider.notifier)
-                          .select(null),
-                      onExport: activeVaultFile == null
-                          ? () => _exportDatabase(context, ref)
-                          : null,
-                      onImport: activeVaultFile == null
-                          ? () => _importDatabase(context, ref)
-                          : null,
-                      onSync: activeVaultFile == null
-                          ? () => _syncVault(context, ref, 'maid_kit')
-                          : null,
-                    ),
-                    ...vaultFiles.map(
-                      (path) => _VaultCloudBindingTile(
-                        vaultId: path,
-                        position: _SettingsTilePosition.middle,
-                        title:
-                            vaultLabels[path] ??
-                            path.split(Platform.pathSeparator).last,
-                        active: activeVaultFile == path,
-                        onSelect: () => ref
-                            .read(activeVaultFileProvider.notifier)
-                            .select(path),
-                        onExport: activeVaultFile == path
-                            ? () => _exportDatabase(context, ref)
-                            : null,
-                        onRename: () => _renameVault(
-                          context,
-                          ref,
-                          path,
-                          vaultLabels[path] ??
+                    ...[
+                      for (final (index, path) in vaultFiles.indexed)
+                        _VaultCloudBindingTile(
+                          vaultId: path,
+                          position: index == 0
+                              ? _SettingsTilePosition.first
+                              : _SettingsTilePosition.middle,
+                          title:
+                              vaultLabels[path] ??
                               path.split(Platform.pathSeparator).last,
+                          active: activeVaultFile == path,
+                          onSelect: () => ref
+                              .read(activeVaultFileProvider.notifier)
+                              .select(path),
+                          onExport: activeVaultFile == path
+                              ? () => _exportDatabase(context, ref)
+                              : null,
+                          onRename: () => _renameVault(
+                            context,
+                            ref,
+                            path,
+                            vaultLabels[path] ??
+                                path.split(Platform.pathSeparator).last,
+                          ),
+                          onDelete: activeVaultFile == path
+                              ? null
+                              : () => _deleteVault(context, ref, path),
+                          onImport: activeVaultFile == path
+                              ? () => _importDatabase(context, ref)
+                              : null,
+                          onSync: activeVaultFile == path
+                              ? () => _syncVault(context, ref, path)
+                              : null,
                         ),
-                        onDelete: () => _deleteVault(context, ref, path),
-                        onImport: activeVaultFile == path
-                            ? () => _importDatabase(context, ref)
-                            : null,
-                        onSync: activeVaultFile == path
-                            ? () => _syncVault(context, ref, path)
-                            : null,
-                      ),
-                    ),
+                    ],
                     ListTile(
                       contentPadding: _sectionTilePadding,
                       shape: RoundedRectangleBorder(
@@ -707,7 +694,7 @@ class SettingsPage extends ConsumerWidget {
       await ref.read(cloudSyncServiceProvider).signOut();
       ref.invalidate(cloudUserProvider);
       ref.invalidate(cloudWorkspacesProvider);
-      for (final vaultId in ['maid_kit', ...ref.read(vaultFilesProvider)]) {
+      for (final vaultId in ref.read(vaultFilesProvider)) {
         ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
       }
       if (context.mounted) _showMessage('settingsCloudSignOutSuccess'.tr());
@@ -969,44 +956,17 @@ class SettingsPage extends ConsumerWidget {
     String vaultId,
     String currentName,
   ) async {
-    final controller = TextEditingController(text: currentName);
     final name = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       useRootNavigator: true,
-      builder: (sheetContext) => SheetScaffold(
-        titleText: 'settingsVaultRename'.tr(),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: InputDecoration(labelText: 'settingsVaultName'.tr()),
-              onSubmitted: (value) => Navigator.of(sheetContext).pop(value),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(),
-                  child: const Text('commonCancel').tr(),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () =>
-                      Navigator.of(sheetContext).pop(controller.text),
-                  child: const Text('commonSave').tr(),
-                ),
-              ],
-            ),
-          ],
-        ),
+      builder: (context) => _VaultNameSheet(
+        initialValue: currentName,
+        titleKey: 'settingsVaultRename',
+        actionKey: 'commonSave',
       ),
     );
-    controller.dispose();
     if (name != null) {
       await ref.read(vaultLabelsProvider.notifier).rename(vaultId, name);
     }
@@ -1356,9 +1316,15 @@ Future<String?> _chooseVaultNameSheet(
 );
 
 class _VaultNameSheet extends StatefulWidget {
-  const _VaultNameSheet({required this.initialValue});
+  const _VaultNameSheet({
+    required this.initialValue,
+    this.titleKey = 'settingsVaultName',
+    this.actionKey = 'commonContinue',
+  });
 
   final String initialValue;
+  final String titleKey;
+  final String actionKey;
 
   @override
   State<_VaultNameSheet> createState() => _VaultNameSheetState();
@@ -1382,7 +1348,7 @@ class _VaultNameSheetState extends State<_VaultNameSheet> {
 
   @override
   Widget build(BuildContext context) => SheetScaffold(
-    titleText: 'settingsVaultName'.tr(),
+    titleText: widget.titleKey.tr(),
     child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
@@ -1403,7 +1369,7 @@ class _VaultNameSheetState extends State<_VaultNameSheet> {
             const SizedBox(width: 8),
             FilledButton(
               onPressed: _submit,
-              child: const Text('commonContinue').tr(),
+              child: Text(widget.actionKey.tr()),
             ),
           ],
         ),
@@ -1615,7 +1581,8 @@ class _VaultCloudBindingTile extends ConsumerWidget {
             onTap: () => onSelect(),
           ),
           if (active)
-            Padding(
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
                 children: [

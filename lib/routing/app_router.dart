@@ -24,6 +24,7 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: AssetsRoute.page, path: 'assets'),
         AutoRoute(page: ProjectsRoute.page, path: 'projects'),
         AutoRoute(page: SnippetsRoute.page, path: 'snippets'),
+        AutoRoute(page: AgentRoute.page, path: 'agent'),
         AutoRoute(page: SettingsRoute.page, path: 'settings'),
       ],
     ),

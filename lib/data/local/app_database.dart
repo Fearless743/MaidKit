@@ -115,6 +115,36 @@ class ScriptSnippets extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
+/// Legacy single-provider configuration, retained only to migrate version 11
+/// vaults into [AgentProviders].
+class AgentSettings extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get encryptedApiKey => text()();
+  TextColumn get apiKeyNonce => text()();
+  TextColumn get model => text().withDefault(const Constant('gpt-4o-mini'))();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
+/// Encrypted, OpenAI-compatible provider profiles. The vault database itself
+/// is encrypted and syncable, so profiles travel with a user's vault.
+class AgentProviders extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get encryptedApiKey => text()();
+  TextColumn get apiKeyNonce => text()();
+  TextColumn get baseUrl => text().nullable()();
+  TextColumn get model => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
+/// Model identifiers available through a particular AI provider endpoint.
+class AgentProviderModels extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get providerId => integer()();
+  TextColumn get model => text()();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     Servers,
@@ -125,6 +155,9 @@ class ScriptSnippets extends Table {
     DeploymentProjects,
     DeploymentResources,
     ScriptSnippets,
+    AgentSettings,
+    AgentProviders,
+    AgentProviderModels,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -141,7 +174,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -251,6 +284,36 @@ class AppDatabase extends _$AppDatabase {
         );
         await m.addColumn(vaultMetadata, vaultMetadata.syncPassphraseNonce);
       }
+      if (from < 11) {
+        await m.createTable(agentSettings);
+      }
+      if (from < 12) {
+        await m.createTable(agentProviders);
+        // Preserve the profile introduced in schema 11 as an OpenAI profile.
+        await customStatement('''
+          INSERT INTO agent_providers
+            (name, encrypted_api_key, api_key_nonce, base_url, model, updated_at)
+          SELECT 'OpenAI', encrypted_api_key, api_key_nonce,
+            'https://api.openai.com/v1', model, updated_at
+          FROM agent_settings
+        ''');
+      }
+      if (from < 13) {
+        await m.createTable(agentProviderModels);
+        await customStatement('''
+          INSERT INTO agent_provider_models (provider_id, model, created_at)
+          SELECT id, model, updated_at FROM agent_providers
+        ''');
+      }
+      if (from < 14) {
+        // dart_openai appends its API version itself. Version 12 presets
+        // included /v1, which resulted in requests such as /v1/v1/chat.
+        await customStatement('''
+          UPDATE agent_providers
+          SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 3)
+          WHERE base_url LIKE '%/v1'
+        ''');
+      }
     },
   );
 
@@ -272,4 +335,17 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<ScriptSnippet>> watchScriptSnippets() => (select(
     scriptSnippets,
   )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
+
+  Stream<List<AgentSetting>> watchAgentSettings() =>
+      select(agentSettings).watch();
+
+  Stream<List<AgentProvider>> watchAgentProviders() => (select(
+    agentProviders,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
+
+  Stream<List<AgentProviderModel>> watchAgentProviderModels(int providerId) =>
+      (select(agentProviderModels)
+            ..where((table) => table.providerId.equals(providerId))
+            ..orderBy([(table) => OrderingTerm.asc(table.model)]))
+          .watch();
 }

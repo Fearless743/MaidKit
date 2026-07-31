@@ -34,6 +34,8 @@ Future<void> main() async {
   final metricsRefreshPreferences = preferences[2] as MetricsRefreshPreferences;
   final appThemePreferences = preferences[3] as AppThemePreferences;
 
+  await migrateLegacyVault(defaultName: 'vaultDefaultName'.tr());
+
   if (DesktopWindowFrame.isPlatformDesktop) {
     await windowManager.ensureInitialized();
     await windowManager.setOpacity(await loadMaidKitWindowOpacity());

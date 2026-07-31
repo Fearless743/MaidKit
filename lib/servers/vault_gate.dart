@@ -10,6 +10,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'server_providers.dart';
 import 'cloud_sync_service.dart';
 import 'database_backup_service.dart';
+import 'vault_create_page.dart';
 
 class VaultGate extends ConsumerStatefulWidget {
   const VaultGate({super.key, required this.child});
@@ -21,12 +22,9 @@ class VaultGate extends ConsumerStatefulWidget {
 
 class _VaultGateState extends ConsumerState<VaultGate>
     with WidgetsBindingObserver {
-  static const _defaultVaultOption = '__default_vault__';
   final _password = TextEditingController();
-  final _confirmation = TextEditingController();
   bool _unlocked = false;
   bool _busy = false;
-  bool _preservePasswordDuringVaultSwitch = false;
   Timer? _autoSyncTimer;
   bool _autoSyncing = false;
   String? _error;
@@ -46,7 +44,6 @@ class _VaultGateState extends ConsumerState<VaultGate>
     WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
     _password.dispose();
-    _confirmation.dispose();
     super.dispose();
   }
 
@@ -100,9 +97,6 @@ class _VaultGateState extends ConsumerState<VaultGate>
         final sync = ref.read(cloudSyncServiceProvider);
         final configuration = await sync.configuration();
         final isCloudDownload = configuration?.pendingDownload == true;
-        if (!isCloudDownload && _password.text != _confirmation.text) {
-          throw StateError('vaultPasswordsDontMatch'.tr());
-        }
         await vault.create(_password.text);
         if (isCloudDownload) {
           final backup = DatabaseBackupService(
@@ -181,118 +175,28 @@ class _VaultGateState extends ConsumerState<VaultGate>
       setState(() {
         _error = null;
         _password.clear();
-        _confirmation.clear();
       });
     }
   }
 
-  Future<void> _createVaultFile() async {
+  Future<void> _openCreatePage() async {
     if (_busy) return;
-    final path = await ref.read(vaultFileStorageProvider).createVaultPath();
-    await ref.read(activeVaultFileProvider.notifier).select(path);
-    if (mounted) {
-      setState(() {
-        _error = null;
-        _password.clear();
-        _confirmation.clear();
-      });
+    final created = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const VaultCreatePage()));
+    if (created == true && mounted) {
+      setState(() => _unlocked = true);
+      unawaited(_autoSync());
     }
   }
 
-  Future<void> _createCloudVault() async {
-    if (_busy) return;
-    if (_password.text != _confirmation.text) {
-      setState(() => _error = 'vaultPasswordsDontMatch'.tr());
-      return;
-    }
-    setState(() {
-      _error = null;
-      _busy = true;
-    });
-    try {
-      final path = await ref
-          .read(vaultFileStorageProvider)
-          .createVaultPath(name: 'Solarpass vault');
-      _preservePasswordDuringVaultSwitch = true;
-      await ref.read(activeVaultFileProvider.notifier).select(path);
-      final vault = ref.read(vaultServiceProvider);
-      await vault.create(_password.text);
-      _preservePasswordDuringVaultSwitch = false;
-
-      final service = ref.read(cloudSyncServiceForVaultProvider(path));
-      final workspaces = await service.signInAndListWorkspaces();
-      if (!mounted) return;
-      final workspace = await _selectCloudWorkspace(workspaces);
-      if (workspace == null) {
-        if (mounted) setState(() => _unlocked = true);
-        return;
-      }
-      await service.enable(workspace);
-      final backup = DatabaseBackupService(
-        ref.read(databaseProvider),
-        ref.read(vaultServiceProvider),
-      );
-      await service.sync(
-        archive: await backup.exportArchive(_password.text),
-        applyArchive: (archive) =>
-            backup.importArchive(archive, _password.text),
-      );
-      ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
-      if (mounted) setState(() => _unlocked = true);
-    } catch (error) {
-      if (mounted) setState(() => _error = _friendlyError(error));
-    } finally {
-      _preservePasswordDuringVaultSwitch = false;
-      if (mounted && !_unlocked) setState(() => _busy = false);
-    }
-  }
-
-  Future<CloudWorkspace?> _selectCloudWorkspace(
-    List<CloudWorkspace> workspaces,
-  ) => showDialog<CloudWorkspace>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text('vaultCloudWorkspaceTitle'.tr()),
-      content: SizedBox(
-        width: 440,
-        child: workspaces.isEmpty
-            ? Text('settingsCloudSyncNoWorkspaces'.tr())
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final workspace in workspaces)
-                    ListTile(
-                      enabled: workspace.supportsSync,
-                      title: Text(workspace.name),
-                      subtitle: Text(
-                        workspace.supportsSync
-                            ? 'settingsCloudSyncWorkspaceEligible'.tr()
-                            : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
-                      ),
-                      onTap: workspace.supportsSync
-                          ? () => Navigator.of(context).pop(workspace)
-                          : null,
-                    ),
-                ],
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('commonCancel'.tr()),
-        ),
-      ],
-    ),
-  );
-
-  Future<void> _selectVault(String? path) async {
+  Future<void> _selectVault(String path) async {
     if (_busy) return;
     await ref.read(activeVaultFileProvider.notifier).select(path);
     if (!mounted) return;
     setState(() {
       _error = null;
       _password.clear();
-      _confirmation.clear();
     });
   }
 
@@ -303,11 +207,8 @@ class _VaultGateState extends ConsumerState<VaultGate>
         setState(() {
           _unlocked = false;
           _error = null;
-          if (!_preservePasswordDuringVaultSwitch) {
-            _busy = false;
-            _password.clear();
-            _confirmation.clear();
-          }
+          _busy = false;
+          _password.clear();
         });
       }
     });
@@ -316,6 +217,7 @@ class _VaultGateState extends ConsumerState<VaultGate>
     final cloudConfiguration = ref.watch(cloudSyncConfigurationProvider);
     final activeFile = ref.watch(activeVaultFileProvider);
     final vaultFiles = ref.watch(vaultFilesProvider);
+    final vaultLabels = ref.watch(vaultLabelsProvider);
     final theme = Theme.of(context);
     final showBiometricUnlock = biometricEnabled.asData?.value ?? false;
     final isCloudDownload =
@@ -413,78 +315,68 @@ class _VaultGateState extends ConsumerState<VaultGate>
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 24),
-                                    DropdownButtonFormField<String>(
-                                      key: ValueKey(activeFile),
-                                      initialValue:
-                                          activeFile ?? _defaultVaultOption,
-                                      isExpanded: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'vaultSelectLabel'.tr(),
-                                      ),
-                                      onChanged: _busy
-                                          ? null
-                                          : (value) => _selectVault(
-                                              value == _defaultVaultOption
-                                                  ? null
-                                                  : value,
-                                            ),
-                                      items: [
-                                        DropdownMenuItem(
-                                          value: _defaultVaultOption,
-                                          child: Text('vaultDefaultName'.tr()),
+                                    if (vaultFiles.isNotEmpty) ...[
+                                      DropdownButtonFormField<String>(
+                                        key: ValueKey(activeFile),
+                                        initialValue: activeFile,
+                                        isExpanded: true,
+                                        decoration: InputDecoration(
+                                          labelText: 'vaultSelectLabel'.tr(),
                                         ),
-                                        ...vaultFiles.map(
-                                          (path) => DropdownMenuItem(
-                                            value: path,
-                                            child: Text(
-                                              path
-                                                  .split(Platform.pathSeparator)
-                                                  .last,
-                                              overflow: TextOverflow.ellipsis,
+                                        onChanged: _busy
+                                            ? null
+                                            : (value) {
+                                                if (value != null) {
+                                                  _selectVault(value);
+                                                }
+                                              },
+                                        items: [
+                                          for (final path in vaultFiles)
+                                            DropdownMenuItem(
+                                              value: path,
+                                              child: Text(
+                                                vaultLabels[path] ??
+                                                    path
+                                                        .split(
+                                                          Platform
+                                                              .pathSeparator,
+                                                        )
+                                                        .last,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      controller: _password,
-                                      obscureText: true,
-                                      autofocus: true,
-                                      enabled: !_busy,
-                                      onSubmitted: (_) => _submit(hasVault),
-                                      decoration: InputDecoration(
-                                        labelText: 'vaultPasswordLabel'.tr(),
-                                        suffix: showBiometricUnlock
-                                            ? IconButton(
-                                                icon: const Icon(
-                                                  Symbols.fingerprint,
-                                                ),
-                                                onPressed: _busy
-                                                    ? null
-                                                    : _unlockWithBiometrics,
-                                                tooltip: 'vaultBiometricAction'
-                                                    .tr(),
-                                                constraints:
-                                                    const BoxConstraints(),
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                iconSize: 20,
-                                              )
-                                            : null,
+                                        ],
                                       ),
-                                    ),
-                                    if (!hasVault && !isCloudDownload) ...[
+                                    ],
+                                    if (hasVault || isCloudDownload) ...[
                                       const SizedBox(height: 12),
                                       TextField(
-                                        controller: _confirmation,
+                                        controller: _password,
                                         obscureText: true,
+                                        autofocus: true,
                                         enabled: !_busy,
-                                        onSubmitted: (_) => _submit(false),
+                                        onSubmitted: (_) => _submit(hasVault),
                                         decoration: InputDecoration(
-                                          labelText: 'vaultConfirmPasswordLabel'
-                                              .tr(),
+                                          labelText: 'vaultPasswordLabel'.tr(),
+                                          suffix: showBiometricUnlock
+                                              ? IconButton(
+                                                  icon: const Icon(
+                                                    Symbols.fingerprint,
+                                                  ),
+                                                  onPressed: _busy
+                                                      ? null
+                                                      : _unlockWithBiometrics,
+                                                  tooltip:
+                                                      'vaultBiometricAction'
+                                                          .tr(),
+                                                  constraints:
+                                                      const BoxConstraints(),
+                                                  padding: const EdgeInsets.all(
+                                                    4,
+                                                  ),
+                                                  iconSize: 20,
+                                                )
+                                              : null,
                                         ),
                                       ),
                                     ],
@@ -502,7 +394,11 @@ class _VaultGateState extends ConsumerState<VaultGate>
                                     FilledButton(
                                       onPressed: _busy
                                           ? null
-                                          : () => _submit(hasVault),
+                                          : hasVault
+                                          ? () => _submit(true)
+                                          : isCloudDownload
+                                          ? () => _submit(false)
+                                          : _openCreatePage,
                                       child: _busy
                                           ? const SizedBox(
                                               height: 18,
@@ -516,36 +412,14 @@ class _VaultGateState extends ConsumerState<VaultGate>
                                                   ? 'vaultUnlockAction'.tr()
                                                   : isCloudDownload
                                                   ? 'vaultDownloadedAction'.tr()
-                                                  : 'vaultCreateAction'.tr(),
+                                                  : 'vaultAddAction'.tr(),
                                             ),
                                     ),
-                                    if (!hasVault) ...[
-                                      const SizedBox(height: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: _busy
-                                            ? null
-                                            : _createCloudVault,
-                                        icon: const Icon(
-                                          Symbols.cloud_download,
-                                        ),
-                                        label: Text(
-                                          'vaultCreateFromCloudAction'.tr(),
-                                        ),
-                                      ),
-                                    ],
                                     const SizedBox(height: 8),
                                     OutlinedButton.icon(
                                       onPressed: _busy ? null : _openVaultFile,
                                       icon: const Icon(Symbols.folder_open),
                                       label: Text('vaultOpenFileAction'.tr()),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : _createVaultFile,
-                                      icon: const Icon(Symbols.add),
-                                      label: Text('vaultCreateFileAction'.tr()),
                                     ),
                                   ],
                                 ),

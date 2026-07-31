@@ -4449,6 +4449,1127 @@ class ScriptSnippetsCompanion extends UpdateCompanion<ScriptSnippet> {
   }
 }
 
+class $AgentSettingsTable extends AgentSettings
+    with TableInfo<$AgentSettingsTable, AgentSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AgentSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _encryptedApiKeyMeta = const VerificationMeta(
+    'encryptedApiKey',
+  );
+  @override
+  late final GeneratedColumn<String> encryptedApiKey = GeneratedColumn<String>(
+    'encrypted_api_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _apiKeyNonceMeta = const VerificationMeta(
+    'apiKeyNonce',
+  );
+  @override
+  late final GeneratedColumn<String> apiKeyNonce = GeneratedColumn<String>(
+    'api_key_nonce',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+    'model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('gpt-4o-mini'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    encryptedApiKey,
+    apiKeyNonce,
+    model,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'agent_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AgentSetting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('encrypted_api_key')) {
+      context.handle(
+        _encryptedApiKeyMeta,
+        encryptedApiKey.isAcceptableOrUnknown(
+          data['encrypted_api_key']!,
+          _encryptedApiKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_encryptedApiKeyMeta);
+    }
+    if (data.containsKey('api_key_nonce')) {
+      context.handle(
+        _apiKeyNonceMeta,
+        apiKeyNonce.isAcceptableOrUnknown(
+          data['api_key_nonce']!,
+          _apiKeyNonceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_apiKeyNonceMeta);
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AgentSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AgentSetting(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      encryptedApiKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}encrypted_api_key'],
+      )!,
+      apiKeyNonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}api_key_nonce'],
+      )!,
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AgentSettingsTable createAlias(String alias) {
+    return $AgentSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class AgentSetting extends DataClass implements Insertable<AgentSetting> {
+  final int id;
+  final String encryptedApiKey;
+  final String apiKeyNonce;
+  final String model;
+  final DateTime updatedAt;
+  const AgentSetting({
+    required this.id,
+    required this.encryptedApiKey,
+    required this.apiKeyNonce,
+    required this.model,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['encrypted_api_key'] = Variable<String>(encryptedApiKey);
+    map['api_key_nonce'] = Variable<String>(apiKeyNonce);
+    map['model'] = Variable<String>(model);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  AgentSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AgentSettingsCompanion(
+      id: Value(id),
+      encryptedApiKey: Value(encryptedApiKey),
+      apiKeyNonce: Value(apiKeyNonce),
+      model: Value(model),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AgentSetting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AgentSetting(
+      id: serializer.fromJson<int>(json['id']),
+      encryptedApiKey: serializer.fromJson<String>(json['encryptedApiKey']),
+      apiKeyNonce: serializer.fromJson<String>(json['apiKeyNonce']),
+      model: serializer.fromJson<String>(json['model']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'encryptedApiKey': serializer.toJson<String>(encryptedApiKey),
+      'apiKeyNonce': serializer.toJson<String>(apiKeyNonce),
+      'model': serializer.toJson<String>(model),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  AgentSetting copyWith({
+    int? id,
+    String? encryptedApiKey,
+    String? apiKeyNonce,
+    String? model,
+    DateTime? updatedAt,
+  }) => AgentSetting(
+    id: id ?? this.id,
+    encryptedApiKey: encryptedApiKey ?? this.encryptedApiKey,
+    apiKeyNonce: apiKeyNonce ?? this.apiKeyNonce,
+    model: model ?? this.model,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  AgentSetting copyWithCompanion(AgentSettingsCompanion data) {
+    return AgentSetting(
+      id: data.id.present ? data.id.value : this.id,
+      encryptedApiKey: data.encryptedApiKey.present
+          ? data.encryptedApiKey.value
+          : this.encryptedApiKey,
+      apiKeyNonce: data.apiKeyNonce.present
+          ? data.apiKeyNonce.value
+          : this.apiKeyNonce,
+      model: data.model.present ? data.model.value : this.model,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentSetting(')
+          ..write('id: $id, ')
+          ..write('encryptedApiKey: $encryptedApiKey, ')
+          ..write('apiKeyNonce: $apiKeyNonce, ')
+          ..write('model: $model, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, encryptedApiKey, apiKeyNonce, model, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AgentSetting &&
+          other.id == this.id &&
+          other.encryptedApiKey == this.encryptedApiKey &&
+          other.apiKeyNonce == this.apiKeyNonce &&
+          other.model == this.model &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AgentSettingsCompanion extends UpdateCompanion<AgentSetting> {
+  final Value<int> id;
+  final Value<String> encryptedApiKey;
+  final Value<String> apiKeyNonce;
+  final Value<String> model;
+  final Value<DateTime> updatedAt;
+  const AgentSettingsCompanion({
+    this.id = const Value.absent(),
+    this.encryptedApiKey = const Value.absent(),
+    this.apiKeyNonce = const Value.absent(),
+    this.model = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  AgentSettingsCompanion.insert({
+    this.id = const Value.absent(),
+    required String encryptedApiKey,
+    required String apiKeyNonce,
+    this.model = const Value.absent(),
+    required DateTime updatedAt,
+  }) : encryptedApiKey = Value(encryptedApiKey),
+       apiKeyNonce = Value(apiKeyNonce),
+       updatedAt = Value(updatedAt);
+  static Insertable<AgentSetting> custom({
+    Expression<int>? id,
+    Expression<String>? encryptedApiKey,
+    Expression<String>? apiKeyNonce,
+    Expression<String>? model,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (encryptedApiKey != null) 'encrypted_api_key': encryptedApiKey,
+      if (apiKeyNonce != null) 'api_key_nonce': apiKeyNonce,
+      if (model != null) 'model': model,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  AgentSettingsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? encryptedApiKey,
+    Value<String>? apiKeyNonce,
+    Value<String>? model,
+    Value<DateTime>? updatedAt,
+  }) {
+    return AgentSettingsCompanion(
+      id: id ?? this.id,
+      encryptedApiKey: encryptedApiKey ?? this.encryptedApiKey,
+      apiKeyNonce: apiKeyNonce ?? this.apiKeyNonce,
+      model: model ?? this.model,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (encryptedApiKey.present) {
+      map['encrypted_api_key'] = Variable<String>(encryptedApiKey.value);
+    }
+    if (apiKeyNonce.present) {
+      map['api_key_nonce'] = Variable<String>(apiKeyNonce.value);
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentSettingsCompanion(')
+          ..write('id: $id, ')
+          ..write('encryptedApiKey: $encryptedApiKey, ')
+          ..write('apiKeyNonce: $apiKeyNonce, ')
+          ..write('model: $model, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AgentProvidersTable extends AgentProviders
+    with TableInfo<$AgentProvidersTable, AgentProvider> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AgentProvidersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _encryptedApiKeyMeta = const VerificationMeta(
+    'encryptedApiKey',
+  );
+  @override
+  late final GeneratedColumn<String> encryptedApiKey = GeneratedColumn<String>(
+    'encrypted_api_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _apiKeyNonceMeta = const VerificationMeta(
+    'apiKeyNonce',
+  );
+  @override
+  late final GeneratedColumn<String> apiKeyNonce = GeneratedColumn<String>(
+    'api_key_nonce',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _baseUrlMeta = const VerificationMeta(
+    'baseUrl',
+  );
+  @override
+  late final GeneratedColumn<String> baseUrl = GeneratedColumn<String>(
+    'base_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+    'model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    encryptedApiKey,
+    apiKeyNonce,
+    baseUrl,
+    model,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'agent_providers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AgentProvider> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('encrypted_api_key')) {
+      context.handle(
+        _encryptedApiKeyMeta,
+        encryptedApiKey.isAcceptableOrUnknown(
+          data['encrypted_api_key']!,
+          _encryptedApiKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_encryptedApiKeyMeta);
+    }
+    if (data.containsKey('api_key_nonce')) {
+      context.handle(
+        _apiKeyNonceMeta,
+        apiKeyNonce.isAcceptableOrUnknown(
+          data['api_key_nonce']!,
+          _apiKeyNonceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_apiKeyNonceMeta);
+    }
+    if (data.containsKey('base_url')) {
+      context.handle(
+        _baseUrlMeta,
+        baseUrl.isAcceptableOrUnknown(data['base_url']!, _baseUrlMeta),
+      );
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modelMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AgentProvider map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AgentProvider(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      encryptedApiKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}encrypted_api_key'],
+      )!,
+      apiKeyNonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}api_key_nonce'],
+      )!,
+      baseUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}base_url'],
+      ),
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AgentProvidersTable createAlias(String alias) {
+    return $AgentProvidersTable(attachedDatabase, alias);
+  }
+}
+
+class AgentProvider extends DataClass implements Insertable<AgentProvider> {
+  final int id;
+  final String name;
+  final String encryptedApiKey;
+  final String apiKeyNonce;
+  final String? baseUrl;
+  final String model;
+  final DateTime updatedAt;
+  const AgentProvider({
+    required this.id,
+    required this.name,
+    required this.encryptedApiKey,
+    required this.apiKeyNonce,
+    this.baseUrl,
+    required this.model,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['encrypted_api_key'] = Variable<String>(encryptedApiKey);
+    map['api_key_nonce'] = Variable<String>(apiKeyNonce);
+    if (!nullToAbsent || baseUrl != null) {
+      map['base_url'] = Variable<String>(baseUrl);
+    }
+    map['model'] = Variable<String>(model);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  AgentProvidersCompanion toCompanion(bool nullToAbsent) {
+    return AgentProvidersCompanion(
+      id: Value(id),
+      name: Value(name),
+      encryptedApiKey: Value(encryptedApiKey),
+      apiKeyNonce: Value(apiKeyNonce),
+      baseUrl: baseUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseUrl),
+      model: Value(model),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AgentProvider.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AgentProvider(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      encryptedApiKey: serializer.fromJson<String>(json['encryptedApiKey']),
+      apiKeyNonce: serializer.fromJson<String>(json['apiKeyNonce']),
+      baseUrl: serializer.fromJson<String?>(json['baseUrl']),
+      model: serializer.fromJson<String>(json['model']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'encryptedApiKey': serializer.toJson<String>(encryptedApiKey),
+      'apiKeyNonce': serializer.toJson<String>(apiKeyNonce),
+      'baseUrl': serializer.toJson<String?>(baseUrl),
+      'model': serializer.toJson<String>(model),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  AgentProvider copyWith({
+    int? id,
+    String? name,
+    String? encryptedApiKey,
+    String? apiKeyNonce,
+    Value<String?> baseUrl = const Value.absent(),
+    String? model,
+    DateTime? updatedAt,
+  }) => AgentProvider(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    encryptedApiKey: encryptedApiKey ?? this.encryptedApiKey,
+    apiKeyNonce: apiKeyNonce ?? this.apiKeyNonce,
+    baseUrl: baseUrl.present ? baseUrl.value : this.baseUrl,
+    model: model ?? this.model,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  AgentProvider copyWithCompanion(AgentProvidersCompanion data) {
+    return AgentProvider(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      encryptedApiKey: data.encryptedApiKey.present
+          ? data.encryptedApiKey.value
+          : this.encryptedApiKey,
+      apiKeyNonce: data.apiKeyNonce.present
+          ? data.apiKeyNonce.value
+          : this.apiKeyNonce,
+      baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
+      model: data.model.present ? data.model.value : this.model,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentProvider(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('encryptedApiKey: $encryptedApiKey, ')
+          ..write('apiKeyNonce: $apiKeyNonce, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('model: $model, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    encryptedApiKey,
+    apiKeyNonce,
+    baseUrl,
+    model,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AgentProvider &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.encryptedApiKey == this.encryptedApiKey &&
+          other.apiKeyNonce == this.apiKeyNonce &&
+          other.baseUrl == this.baseUrl &&
+          other.model == this.model &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AgentProvidersCompanion extends UpdateCompanion<AgentProvider> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String> encryptedApiKey;
+  final Value<String> apiKeyNonce;
+  final Value<String?> baseUrl;
+  final Value<String> model;
+  final Value<DateTime> updatedAt;
+  const AgentProvidersCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.encryptedApiKey = const Value.absent(),
+    this.apiKeyNonce = const Value.absent(),
+    this.baseUrl = const Value.absent(),
+    this.model = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  AgentProvidersCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required String encryptedApiKey,
+    required String apiKeyNonce,
+    this.baseUrl = const Value.absent(),
+    required String model,
+    required DateTime updatedAt,
+  }) : name = Value(name),
+       encryptedApiKey = Value(encryptedApiKey),
+       apiKeyNonce = Value(apiKeyNonce),
+       model = Value(model),
+       updatedAt = Value(updatedAt);
+  static Insertable<AgentProvider> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? encryptedApiKey,
+    Expression<String>? apiKeyNonce,
+    Expression<String>? baseUrl,
+    Expression<String>? model,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (encryptedApiKey != null) 'encrypted_api_key': encryptedApiKey,
+      if (apiKeyNonce != null) 'api_key_nonce': apiKeyNonce,
+      if (baseUrl != null) 'base_url': baseUrl,
+      if (model != null) 'model': model,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  AgentProvidersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? encryptedApiKey,
+    Value<String>? apiKeyNonce,
+    Value<String?>? baseUrl,
+    Value<String>? model,
+    Value<DateTime>? updatedAt,
+  }) {
+    return AgentProvidersCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      encryptedApiKey: encryptedApiKey ?? this.encryptedApiKey,
+      apiKeyNonce: apiKeyNonce ?? this.apiKeyNonce,
+      baseUrl: baseUrl ?? this.baseUrl,
+      model: model ?? this.model,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (encryptedApiKey.present) {
+      map['encrypted_api_key'] = Variable<String>(encryptedApiKey.value);
+    }
+    if (apiKeyNonce.present) {
+      map['api_key_nonce'] = Variable<String>(apiKeyNonce.value);
+    }
+    if (baseUrl.present) {
+      map['base_url'] = Variable<String>(baseUrl.value);
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentProvidersCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('encryptedApiKey: $encryptedApiKey, ')
+          ..write('apiKeyNonce: $apiKeyNonce, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('model: $model, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AgentProviderModelsTable extends AgentProviderModels
+    with TableInfo<$AgentProviderModelsTable, AgentProviderModel> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AgentProviderModelsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _providerIdMeta = const VerificationMeta(
+    'providerId',
+  );
+  @override
+  late final GeneratedColumn<int> providerId = GeneratedColumn<int>(
+    'provider_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+    'model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, providerId, model, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'agent_provider_models';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AgentProviderModel> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('provider_id')) {
+      context.handle(
+        _providerIdMeta,
+        providerId.isAcceptableOrUnknown(data['provider_id']!, _providerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_providerIdMeta);
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modelMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AgentProviderModel map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AgentProviderModel(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      providerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}provider_id'],
+      )!,
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AgentProviderModelsTable createAlias(String alias) {
+    return $AgentProviderModelsTable(attachedDatabase, alias);
+  }
+}
+
+class AgentProviderModel extends DataClass
+    implements Insertable<AgentProviderModel> {
+  final int id;
+  final int providerId;
+  final String model;
+  final DateTime createdAt;
+  const AgentProviderModel({
+    required this.id,
+    required this.providerId,
+    required this.model,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['provider_id'] = Variable<int>(providerId);
+    map['model'] = Variable<String>(model);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AgentProviderModelsCompanion toCompanion(bool nullToAbsent) {
+    return AgentProviderModelsCompanion(
+      id: Value(id),
+      providerId: Value(providerId),
+      model: Value(model),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AgentProviderModel.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AgentProviderModel(
+      id: serializer.fromJson<int>(json['id']),
+      providerId: serializer.fromJson<int>(json['providerId']),
+      model: serializer.fromJson<String>(json['model']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'providerId': serializer.toJson<int>(providerId),
+      'model': serializer.toJson<String>(model),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AgentProviderModel copyWith({
+    int? id,
+    int? providerId,
+    String? model,
+    DateTime? createdAt,
+  }) => AgentProviderModel(
+    id: id ?? this.id,
+    providerId: providerId ?? this.providerId,
+    model: model ?? this.model,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  AgentProviderModel copyWithCompanion(AgentProviderModelsCompanion data) {
+    return AgentProviderModel(
+      id: data.id.present ? data.id.value : this.id,
+      providerId: data.providerId.present
+          ? data.providerId.value
+          : this.providerId,
+      model: data.model.present ? data.model.value : this.model,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentProviderModel(')
+          ..write('id: $id, ')
+          ..write('providerId: $providerId, ')
+          ..write('model: $model, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, providerId, model, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AgentProviderModel &&
+          other.id == this.id &&
+          other.providerId == this.providerId &&
+          other.model == this.model &&
+          other.createdAt == this.createdAt);
+}
+
+class AgentProviderModelsCompanion extends UpdateCompanion<AgentProviderModel> {
+  final Value<int> id;
+  final Value<int> providerId;
+  final Value<String> model;
+  final Value<DateTime> createdAt;
+  const AgentProviderModelsCompanion({
+    this.id = const Value.absent(),
+    this.providerId = const Value.absent(),
+    this.model = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  AgentProviderModelsCompanion.insert({
+    this.id = const Value.absent(),
+    required int providerId,
+    required String model,
+    required DateTime createdAt,
+  }) : providerId = Value(providerId),
+       model = Value(model),
+       createdAt = Value(createdAt);
+  static Insertable<AgentProviderModel> custom({
+    Expression<int>? id,
+    Expression<int>? providerId,
+    Expression<String>? model,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (providerId != null) 'provider_id': providerId,
+      if (model != null) 'model': model,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  AgentProviderModelsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? providerId,
+    Value<String>? model,
+    Value<DateTime>? createdAt,
+  }) {
+    return AgentProviderModelsCompanion(
+      id: id ?? this.id,
+      providerId: providerId ?? this.providerId,
+      model: model ?? this.model,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (providerId.present) {
+      map['provider_id'] = Variable<int>(providerId.value);
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AgentProviderModelsCompanion(')
+          ..write('id: $id, ')
+          ..write('providerId: $providerId, ')
+          ..write('model: $model, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4466,6 +5587,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DeploymentResourcesTable deploymentResources =
       $DeploymentResourcesTable(this);
   late final $ScriptSnippetsTable scriptSnippets = $ScriptSnippetsTable(this);
+  late final $AgentSettingsTable agentSettings = $AgentSettingsTable(this);
+  late final $AgentProvidersTable agentProviders = $AgentProvidersTable(this);
+  late final $AgentProviderModelsTable agentProviderModels =
+      $AgentProviderModelsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4479,6 +5604,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     deploymentProjects,
     deploymentResources,
     scriptSnippets,
+    agentSettings,
+    agentProviders,
+    agentProviderModels,
   ];
 }
 
@@ -6724,6 +7852,635 @@ typedef $$ScriptSnippetsTableProcessedTableManager =
       ScriptSnippet,
       PrefetchHooks Function()
     >;
+typedef $$AgentSettingsTableCreateCompanionBuilder =
+    AgentSettingsCompanion Function({
+      Value<int> id,
+      required String encryptedApiKey,
+      required String apiKeyNonce,
+      Value<String> model,
+      required DateTime updatedAt,
+    });
+typedef $$AgentSettingsTableUpdateCompanionBuilder =
+    AgentSettingsCompanion Function({
+      Value<int> id,
+      Value<String> encryptedApiKey,
+      Value<String> apiKeyNonce,
+      Value<String> model,
+      Value<DateTime> updatedAt,
+    });
+
+class $$AgentSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $AgentSettingsTable> {
+  $$AgentSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get encryptedApiKey => $composableBuilder(
+    column: $table.encryptedApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get apiKeyNonce => $composableBuilder(
+    column: $table.apiKeyNonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AgentSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AgentSettingsTable> {
+  $$AgentSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get encryptedApiKey => $composableBuilder(
+    column: $table.encryptedApiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get apiKeyNonce => $composableBuilder(
+    column: $table.apiKeyNonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AgentSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AgentSettingsTable> {
+  $$AgentSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get encryptedApiKey => $composableBuilder(
+    column: $table.encryptedApiKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get apiKeyNonce => $composableBuilder(
+    column: $table.apiKeyNonce,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AgentSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AgentSettingsTable,
+          AgentSetting,
+          $$AgentSettingsTableFilterComposer,
+          $$AgentSettingsTableOrderingComposer,
+          $$AgentSettingsTableAnnotationComposer,
+          $$AgentSettingsTableCreateCompanionBuilder,
+          $$AgentSettingsTableUpdateCompanionBuilder,
+          (
+            AgentSetting,
+            BaseReferences<_$AppDatabase, $AgentSettingsTable, AgentSetting>,
+          ),
+          AgentSetting,
+          PrefetchHooks Function()
+        > {
+  $$AgentSettingsTableTableManager(_$AppDatabase db, $AgentSettingsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AgentSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AgentSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AgentSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> encryptedApiKey = const Value.absent(),
+                Value<String> apiKeyNonce = const Value.absent(),
+                Value<String> model = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => AgentSettingsCompanion(
+                id: id,
+                encryptedApiKey: encryptedApiKey,
+                apiKeyNonce: apiKeyNonce,
+                model: model,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String encryptedApiKey,
+                required String apiKeyNonce,
+                Value<String> model = const Value.absent(),
+                required DateTime updatedAt,
+              }) => AgentSettingsCompanion.insert(
+                id: id,
+                encryptedApiKey: encryptedApiKey,
+                apiKeyNonce: apiKeyNonce,
+                model: model,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AgentSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AgentSettingsTable,
+      AgentSetting,
+      $$AgentSettingsTableFilterComposer,
+      $$AgentSettingsTableOrderingComposer,
+      $$AgentSettingsTableAnnotationComposer,
+      $$AgentSettingsTableCreateCompanionBuilder,
+      $$AgentSettingsTableUpdateCompanionBuilder,
+      (
+        AgentSetting,
+        BaseReferences<_$AppDatabase, $AgentSettingsTable, AgentSetting>,
+      ),
+      AgentSetting,
+      PrefetchHooks Function()
+    >;
+typedef $$AgentProvidersTableCreateCompanionBuilder =
+    AgentProvidersCompanion Function({
+      Value<int> id,
+      required String name,
+      required String encryptedApiKey,
+      required String apiKeyNonce,
+      Value<String?> baseUrl,
+      required String model,
+      required DateTime updatedAt,
+    });
+typedef $$AgentProvidersTableUpdateCompanionBuilder =
+    AgentProvidersCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> encryptedApiKey,
+      Value<String> apiKeyNonce,
+      Value<String?> baseUrl,
+      Value<String> model,
+      Value<DateTime> updatedAt,
+    });
+
+class $$AgentProvidersTableFilterComposer
+    extends Composer<_$AppDatabase, $AgentProvidersTable> {
+  $$AgentProvidersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get encryptedApiKey => $composableBuilder(
+    column: $table.encryptedApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get apiKeyNonce => $composableBuilder(
+    column: $table.apiKeyNonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get baseUrl => $composableBuilder(
+    column: $table.baseUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AgentProvidersTableOrderingComposer
+    extends Composer<_$AppDatabase, $AgentProvidersTable> {
+  $$AgentProvidersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get encryptedApiKey => $composableBuilder(
+    column: $table.encryptedApiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get apiKeyNonce => $composableBuilder(
+    column: $table.apiKeyNonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get baseUrl => $composableBuilder(
+    column: $table.baseUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AgentProvidersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AgentProvidersTable> {
+  $$AgentProvidersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get encryptedApiKey => $composableBuilder(
+    column: $table.encryptedApiKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get apiKeyNonce => $composableBuilder(
+    column: $table.apiKeyNonce,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get baseUrl =>
+      $composableBuilder(column: $table.baseUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AgentProvidersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AgentProvidersTable,
+          AgentProvider,
+          $$AgentProvidersTableFilterComposer,
+          $$AgentProvidersTableOrderingComposer,
+          $$AgentProvidersTableAnnotationComposer,
+          $$AgentProvidersTableCreateCompanionBuilder,
+          $$AgentProvidersTableUpdateCompanionBuilder,
+          (
+            AgentProvider,
+            BaseReferences<_$AppDatabase, $AgentProvidersTable, AgentProvider>,
+          ),
+          AgentProvider,
+          PrefetchHooks Function()
+        > {
+  $$AgentProvidersTableTableManager(
+    _$AppDatabase db,
+    $AgentProvidersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AgentProvidersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AgentProvidersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AgentProvidersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> encryptedApiKey = const Value.absent(),
+                Value<String> apiKeyNonce = const Value.absent(),
+                Value<String?> baseUrl = const Value.absent(),
+                Value<String> model = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => AgentProvidersCompanion(
+                id: id,
+                name: name,
+                encryptedApiKey: encryptedApiKey,
+                apiKeyNonce: apiKeyNonce,
+                baseUrl: baseUrl,
+                model: model,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required String encryptedApiKey,
+                required String apiKeyNonce,
+                Value<String?> baseUrl = const Value.absent(),
+                required String model,
+                required DateTime updatedAt,
+              }) => AgentProvidersCompanion.insert(
+                id: id,
+                name: name,
+                encryptedApiKey: encryptedApiKey,
+                apiKeyNonce: apiKeyNonce,
+                baseUrl: baseUrl,
+                model: model,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AgentProvidersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AgentProvidersTable,
+      AgentProvider,
+      $$AgentProvidersTableFilterComposer,
+      $$AgentProvidersTableOrderingComposer,
+      $$AgentProvidersTableAnnotationComposer,
+      $$AgentProvidersTableCreateCompanionBuilder,
+      $$AgentProvidersTableUpdateCompanionBuilder,
+      (
+        AgentProvider,
+        BaseReferences<_$AppDatabase, $AgentProvidersTable, AgentProvider>,
+      ),
+      AgentProvider,
+      PrefetchHooks Function()
+    >;
+typedef $$AgentProviderModelsTableCreateCompanionBuilder =
+    AgentProviderModelsCompanion Function({
+      Value<int> id,
+      required int providerId,
+      required String model,
+      required DateTime createdAt,
+    });
+typedef $$AgentProviderModelsTableUpdateCompanionBuilder =
+    AgentProviderModelsCompanion Function({
+      Value<int> id,
+      Value<int> providerId,
+      Value<String> model,
+      Value<DateTime> createdAt,
+    });
+
+class $$AgentProviderModelsTableFilterComposer
+    extends Composer<_$AppDatabase, $AgentProviderModelsTable> {
+  $$AgentProviderModelsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get providerId => $composableBuilder(
+    column: $table.providerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AgentProviderModelsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AgentProviderModelsTable> {
+  $$AgentProviderModelsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get providerId => $composableBuilder(
+    column: $table.providerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AgentProviderModelsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AgentProviderModelsTable> {
+  $$AgentProviderModelsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get providerId => $composableBuilder(
+    column: $table.providerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$AgentProviderModelsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AgentProviderModelsTable,
+          AgentProviderModel,
+          $$AgentProviderModelsTableFilterComposer,
+          $$AgentProviderModelsTableOrderingComposer,
+          $$AgentProviderModelsTableAnnotationComposer,
+          $$AgentProviderModelsTableCreateCompanionBuilder,
+          $$AgentProviderModelsTableUpdateCompanionBuilder,
+          (
+            AgentProviderModel,
+            BaseReferences<
+              _$AppDatabase,
+              $AgentProviderModelsTable,
+              AgentProviderModel
+            >,
+          ),
+          AgentProviderModel,
+          PrefetchHooks Function()
+        > {
+  $$AgentProviderModelsTableTableManager(
+    _$AppDatabase db,
+    $AgentProviderModelsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AgentProviderModelsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AgentProviderModelsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$AgentProviderModelsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> providerId = const Value.absent(),
+                Value<String> model = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => AgentProviderModelsCompanion(
+                id: id,
+                providerId: providerId,
+                model: model,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int providerId,
+                required String model,
+                required DateTime createdAt,
+              }) => AgentProviderModelsCompanion.insert(
+                id: id,
+                providerId: providerId,
+                model: model,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AgentProviderModelsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AgentProviderModelsTable,
+      AgentProviderModel,
+      $$AgentProviderModelsTableFilterComposer,
+      $$AgentProviderModelsTableOrderingComposer,
+      $$AgentProviderModelsTableAnnotationComposer,
+      $$AgentProviderModelsTableCreateCompanionBuilder,
+      $$AgentProviderModelsTableUpdateCompanionBuilder,
+      (
+        AgentProviderModel,
+        BaseReferences<
+          _$AppDatabase,
+          $AgentProviderModelsTable,
+          AgentProviderModel
+        >,
+      ),
+      AgentProviderModel,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6744,4 +8501,10 @@ class $AppDatabaseManager {
       $$DeploymentResourcesTableTableManager(_db, _db.deploymentResources);
   $$ScriptSnippetsTableTableManager get scriptSnippets =>
       $$ScriptSnippetsTableTableManager(_db, _db.scriptSnippets);
+  $$AgentSettingsTableTableManager get agentSettings =>
+      $$AgentSettingsTableTableManager(_db, _db.agentSettings);
+  $$AgentProvidersTableTableManager get agentProviders =>
+      $$AgentProvidersTableTableManager(_db, _db.agentProviders);
+  $$AgentProviderModelsTableTableManager get agentProviderModels =>
+      $$AgentProviderModelsTableTableManager(_db, _db.agentProviderModels);
 }

@@ -23,6 +23,7 @@ class ServerWorkspacePage extends StatelessWidget {
         AssetsRoute(),
         ProjectsRoute(),
         SnippetsRoute(),
+        AgentRoute(),
         SettingsRoute(),
       ],
       duration: const Duration(milliseconds: 180),
@@ -63,7 +64,7 @@ class _ServerTabsShell extends ConsumerWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex < 4
+                      selectedIndex: tabsRouter.activeIndex < 5
                           ? tabsRouter.activeIndex
                           : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
@@ -78,11 +79,11 @@ class _ServerTabsShell extends ConsumerWidget {
                             const DeploySessionsRailButton(),
                             const SizedBox(height: 8),
                             _CloudAccountRailButton(
-                              onPressed: () => tabsRouter.setActiveIndex(4),
+                              onPressed: () => tabsRouter.setActiveIndex(5),
                             ),
                             IconButton(
                               tooltip: 'tabSettings'.tr(),
-                              onPressed: () => tabsRouter.setActiveIndex(4),
+                              onPressed: () => tabsRouter.setActiveIndex(5),
                               icon: const Icon(Symbols.settings),
                             ),
                           ],
@@ -114,6 +115,11 @@ class _ServerTabsShell extends ConsumerWidget {
                           icon: const Icon(Symbols.code),
                           selectedIcon: const Icon(Symbols.code, fill: 1),
                           label: Text('tabSnippets').tr(),
+                        ),
+                        const NavigationRailDestination(
+                          icon: Icon(Symbols.smart_toy),
+                          selectedIcon: Icon(Symbols.smart_toy, fill: 1),
+                          label: Text('Agent'),
                         ),
                       ],
                     ),
@@ -158,6 +164,11 @@ class _ServerTabsShell extends ConsumerWidget {
                       icon: const Icon(Symbols.code),
                       selectedIcon: const Icon(Symbols.code, fill: 1),
                       label: 'tabSnippets'.tr(),
+                    ),
+                    const NavigationDestination(
+                      icon: Icon(Symbols.smart_toy),
+                      selectedIcon: Icon(Symbols.smart_toy, fill: 1),
+                      label: 'Agent',
                     ),
                     NavigationDestination(
                       icon: const Icon(Symbols.settings, fill: 1),
