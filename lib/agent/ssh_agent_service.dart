@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dart_openai/dart_openai.dart';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:http/http.dart' as http;
 
 import 'agent_repository.dart';
@@ -63,12 +64,12 @@ class AgentProposal {
   int? get serverId => arguments['server_id'] as int?;
 
   String get title => switch (kind) {
-    AgentActionKind.command => 'Run command',
-    AgentActionKind.readFile => 'Read file',
-    AgentActionKind.writeFile => 'Write file',
-    AgentActionKind.deleteFile => 'Delete file',
-    AgentActionKind.createSnippet => 'Create snippet',
-    AgentActionKind.runSnippet => 'Run snippet',
+    AgentActionKind.command => 'agentActionRunCommand'.tr(),
+    AgentActionKind.readFile => 'agentActionReadFile'.tr(),
+    AgentActionKind.writeFile => 'agentActionWriteFile'.tr(),
+    AgentActionKind.deleteFile => 'agentActionDeleteFile'.tr(),
+    AgentActionKind.createSnippet => 'agentActionCreateSnippet'.tr(),
+    AgentActionKind.runSnippet => 'agentActionRunSnippet'.tr(),
   };
 
   String get detail => switch (kind) {
@@ -79,7 +80,7 @@ class AgentProposal {
     AgentActionKind.createSnippet =>
       '${arguments['name'] as String? ?? ''}\n\n${arguments['script'] as String? ?? ''}',
     AgentActionKind.runSnippet =>
-      'Snippet #${arguments['snippet_id'] as int? ?? ''}',
+      'agentActionSnippetId'.tr(args: ['${arguments['snippet_id'] as int? ?? ''}']),
   };
 
   /// True when the model flagged the action as safe to run without review, or

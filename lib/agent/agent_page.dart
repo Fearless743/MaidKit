@@ -44,6 +44,13 @@ const _providerPresets = [
     'deepseek/deepseek-chat',
     'openai/gpt-4o-mini',
   ]),
+  // PersonalityCore is exposed directly beneath /personality in production.
+  // Do not use the development-only /api compatibility prefix here.
+  _AgentProviderPreset(
+    'Solar Network Personality',
+    'https://api.solian.app/personality',
+    ['agent'],
+  ),
   _AgentProviderPreset('Ollama', 'http://localhost:11434', [
     'llama3.2',
     'qwen2.5-coder',
@@ -251,13 +258,17 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     } on AgentCancelledException {
       if (mounted) {
         setState(
-          () => _messages.add(const _AgentMessage.assistant('Interrupted.')),
+          () => _messages.add(_AgentMessage.assistant('agentInterrupted'.tr())),
         );
         _scrollToBottom();
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _messages.add(_AgentMessage.assistant('Error: $error')));
+        setState(
+          () => _messages.add(
+            _AgentMessage.assistant('agentError'.tr(args: [error.toString()])),
+          ),
+        );
         _scrollToBottom();
       }
     } finally {
@@ -285,7 +296,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       final servers =
           ref.read(serversProvider).asData?.value ?? const <Server>[];
       if (config == null) {
-        throw StateError('The AI provider is no longer available.');
+        throw StateError('agentProviderGone'.tr());
       }
       if (!mounted) {
         return;
@@ -297,7 +308,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             .where((server) => server.id == serverId)
             .firstOrNull;
         if (server == null) {
-          throw StateError('The target server is no longer available.');
+          throw StateError('agentServerGone'.tr());
         }
         if (ref.read(connectionManagerProvider).clientFor(server.id) == null &&
             !await connectForStatistics(context, ref, server)) {
@@ -388,7 +399,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     } on AgentCancelledException {
       if (mounted) {
         setState(() {
-          _messages.add(const _AgentMessage.assistant('Action interrupted.'));
+          _messages.add(_AgentMessage.assistant('agentActionInterrupted'.tr()));
           _proposal = null;
           _reconnectRequired = false;
         });
@@ -397,7 +408,11 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _messages.add(_AgentMessage.assistant('Action failed: $error'));
+          _messages.add(
+            _AgentMessage.assistant(
+              'agentActionFailed'.tr(args: [error.toString()]),
+            ),
+          );
           _proposal = null;
           _reconnectRequired = false;
         });
@@ -438,16 +453,18 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         final name = proposal.arguments['name'] as String? ?? '';
         final script = proposal.arguments['script'] as String? ?? '';
         if (name.trim().isEmpty || script.trim().isEmpty) {
-          throw ArgumentError('A snippet name and script are required.');
+          throw ArgumentError('agentSnippetNameScriptRequired'.tr());
         }
         final id = await snippets.save(name: name, script: script);
-        return 'Created saved snippet #$id: ${name.trim()}';
+        return 'agentSnippetCreated'.tr(args: ['$id', name.trim()]);
       case AgentActionKind.runSnippet:
         final snippetId = proposal.arguments['snippet_id'] as int?;
-        if (snippetId == null) throw ArgumentError('A snippet ID is required.');
+        if (snippetId == null) {
+          throw ArgumentError('agentSnippetIdRequired'.tr());
+        }
         final snippet = await snippets.snippet(snippetId);
         if (snippet == null) {
-          throw StateError('Saved snippet #$snippetId no longer exists.');
+          throw StateError('agentSnippetGone'.tr(args: ['$snippetId']));
         }
         return agent.execute(
           _requireClient(client),
@@ -468,10 +485,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   }
 
   SSHClient _requireClient(SSHClient? client) =>
-      client ??
-      (throw StateError(
-        'This action requires an active SSH connection to its target server.',
-      ));
+      client ?? (throw StateError('agentRequiresConnection'.tr()));
 
   Future<void> _handleTurn(AgentTurn turn) async {
     final proposal = turn.proposal;
@@ -510,7 +524,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   Future<void> _declineProposal() async {
     if (_working) return;
     setState(() {
-      _messages.add(const _AgentMessage.assistant('Action declined.'));
+      _messages.add(_AgentMessage.assistant('agentActionDeclined'.tr()));
       _proposal = null;
       _reconnectRequired = false;
     });
@@ -518,7 +532,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     _agentContext
       ..clear()
       ..addAll(_pendingContext)
-      ..add(_rawContextMessage('assistant', 'Action declined.'));
+      ..add(_rawContextMessage('assistant', 'agentActionDeclined'.tr()));
     _pendingContext = List<Map<String, dynamic>>.from(_agentContext);
     await _persistConversation();
   }
@@ -609,8 +623,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   Future<void> _deleteConversation(AgentConversation conversation) async {
     if (_working) return;
     final confirmed = await showMaidKitConfirmAlert(
-      'Delete "${conversation.title}"? This cannot be undone.',
-      'Delete conversation',
+      'agentDeleteConversationConfirm'.tr(args: [conversation.title]),
+      'agentDeleteConversation'.tr(),
       icon: Symbols.delete_outline,
       isDanger: true,
     );
@@ -644,7 +658,10 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                 .save(draft, id: existing?.id);
             if (sheetContext.mounted) Navigator.pop(sheetContext);
           } catch (error) {
-            showMaidKitErrorAlert(error, title: 'Could not save provider');
+            showMaidKitErrorAlert(
+              error,
+              title: 'agentCouldNotSaveProvider'.tr(),
+            );
           }
         },
       ),
@@ -653,8 +670,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
 
   Future<void> _deleteProvider(AgentProvider provider) async {
     final confirmed = await showMaidKitConfirmAlert(
-      'Delete ${provider.name}? Its encrypted API key will be removed from this vault.',
-      'Delete AI provider',
+      'agentDeleteProviderConfirm'.tr(args: [provider.name]),
+      'agentDeleteProvider'.tr(),
       icon: Symbols.delete_outline,
       isDanger: true,
     );
@@ -679,7 +696,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   .addModel(provider.id, model);
               if (sheetContext.mounted) Navigator.pop(sheetContext);
             } catch (error) {
-              showMaidKitErrorAlert(error, title: 'Could not add model');
+              showMaidKitErrorAlert(error, title: 'agentCouldNotAddModel'.tr());
             }
           },
           presets: _presetModelsFor(provider),
@@ -688,8 +705,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
 
   Future<void> _deleteModel(AgentProviderModel model) async {
     final confirmed = await showMaidKitConfirmAlert(
-      'Remove ${model.model} from this provider?',
-      'Remove model',
+      'agentRemoveModelConfirm'.tr(args: [model.model]),
+      'agentRemoveModel'.tr(),
       icon: Symbols.delete_outline,
       isDanger: true,
     );
@@ -727,45 +744,65 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       _activeModelId = null;
     }
     final scheme = Theme.of(context).colorScheme;
-    return MaidKitAppScaffold(
-      appBar: AppBar(
-        actions: _buildAppBarActions(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The selectors need about 500 logical pixels. Below this width they
+        // move into the content area, where Wrap can reflow them safely.
+        final compact = constraints.maxWidth < 900;
+        final selectors = _buildProviderModelSelectors(
           providers: providers,
           models: models,
           selectedProviderId: selectedProviderId,
           selectedModelId: selectedModelId,
-          scheme: scheme,
-        ),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1120),
-          child: ResponsiveSidebar(
-            isLeft: false,
-            showSidebar: _showSidebar,
-            sidebarWidth: 360,
-            minWideSidebarWidth: 300,
-            maxWideSidebarWidth: 400,
-            minMainContentWidth: 480,
-            sidebarBackgroundColor: scheme.surface,
-            sidebarElevation: 0,
-            sidebarContent: _buildConversationSidebar(
-              conversations: conversations,
-              scheme: scheme,
-            ),
-            mainContent: _buildChatColumn(servers: servers, scheme: scheme),
+        );
+        return MaidKitAppScaffold(
+          appBar: AppBar(
+            actions: [
+              if (!compact) ...selectors,
+              IconButton(
+                tooltip: 'agentConversations'.tr(),
+                onPressed: () => _showSidebar.value = !_showSidebar.value,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Symbols.history),
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
-        ),
-      ),
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: ResponsiveSidebar(
+                isLeft: false,
+                showSidebar: _showSidebar,
+                sidebarWidth: 360,
+                minWideSidebarWidth: 300,
+                maxWideSidebarWidth: 400,
+                minMainContentWidth: 480,
+                sidebarBackgroundColor: scheme.surface,
+                sidebarElevation: 0,
+                sidebarContent: _buildConversationSidebar(
+                  conversations: conversations,
+                  scheme: scheme,
+                ),
+                mainContent: _buildChatColumn(
+                  servers: servers,
+                  scheme: scheme,
+                  compact: compact,
+                  selectors: compact ? selectors : const [],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  List<Widget> _buildAppBarActions({
+  List<Widget> _buildProviderModelSelectors({
     required List<AgentProvider> providers,
     required List<AgentProviderModel> models,
     required int? selectedProviderId,
     required int? selectedModelId,
-    required ColorScheme scheme,
   }) {
     final selectedProvider = selectedProviderId == null
         ? null
@@ -778,7 +815,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     return [
       const SizedBox(width: 4),
       _AppBarDropdown(
-        label: 'AI provider',
+        label: 'agentAiProvider'.tr(),
         value: selectedProviderId,
         entries: [
           for (final provider in providers) (provider.id, provider.name),
@@ -790,18 +827,18 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         }),
         actions: [
           _DropdownAction(
-            label: 'Add provider',
+            label: 'agentAddProvider'.tr(),
             icon: Symbols.add,
             onSelected: () => _showProviderEditor(),
           ),
           _DropdownAction(
-            label: 'Edit provider',
+            label: 'agentEditProvider'.tr(),
             icon: Symbols.edit,
             onSelected: () => _showProviderEditor(selectedProvider!),
             enabled: selectedProvider != null,
           ),
           _DropdownAction(
-            label: 'Delete provider',
+            label: 'agentDeleteProviderAction'.tr(),
             icon: Symbols.delete_outline,
             onSelected: () => _deleteProvider(selectedProvider!),
             enabled: selectedProvider != null,
@@ -810,32 +847,25 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       ),
       const SizedBox(width: 8),
       _AppBarDropdown(
-        label: 'Model',
+        label: 'agentModel'.tr(),
         value: selectedModelId,
         entries: [for (final model in models) (model.id, model.model)],
         enabled: !_working && selectedProviderId != null,
         onChanged: (id) => setState(() => _activeModelId = id),
         actions: [
           _DropdownAction(
-            label: 'Add model',
+            label: 'agentAddModel'.tr(),
             icon: Symbols.add,
             onSelected: () => _showAddModelSheet(selectedProvider!),
             enabled: selectedProvider != null,
           ),
           _DropdownAction(
-            label: 'Remove model',
+            label: 'agentRemoveModel'.tr(),
             icon: Symbols.delete_outline,
             onSelected: () => _deleteModel(selectedModel!),
             enabled: selectedModel != null,
           ),
         ],
-      ),
-      const SizedBox(width: 8),
-      IconButton(
-        tooltip: 'Conversations',
-        onPressed: () => _showSidebar.value = !_showSidebar.value,
-        visualDensity: VisualDensity.compact,
-        icon: const Icon(Symbols.history),
       ),
       const SizedBox(width: 8),
     ];
@@ -854,17 +884,17 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             children: [
               Expanded(
                 child: Text(
-                  'Chats',
+                  'agentChats'.tr(),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
               IconButton(
-                tooltip: 'New conversation',
+                tooltip: 'agentNewConversation'.tr(),
                 onPressed: _working ? null : _startNewConversation,
                 icon: const Icon(Symbols.add),
               ),
               IconButton(
-                tooltip: 'Close',
+                tooltip: 'commonClose'.tr(),
                 onPressed: () => _showSidebar.value = false,
                 icon: const Icon(Symbols.close),
               ),
@@ -877,7 +907,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             children: [
               Expanded(
                 child: Text(
-                  "Don't save this conversation",
+                  'agentGhostConversation'.tr(),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -891,7 +921,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
           child: conversations.isEmpty
               ? Center(
                   child: Text(
-                    'No saved conversations yet',
+                    'agentNoConversations'.tr(),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -918,12 +948,19 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   Widget _buildChatColumn({
     required List<Server> servers,
     required ColorScheme scheme,
+    required bool compact,
+    required List<Widget> selectors,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      padding: EdgeInsets.fromLTRB(compact ? 16 : 24, 0, compact ? 16 : 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (selectors.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: selectors),
+            const SizedBox(height: 8),
+          ],
           Expanded(
             child: Stack(
               children: [
@@ -936,7 +973,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                     bottom: 12,
                     child: FloatingActionButton.small(
                       heroTag: 'agent-scroll-to-bottom',
-                      tooltip: 'Scroll to latest',
+                      tooltip: 'agentScrollToLatest'.tr(),
                       onPressed: _scrollToLatest,
                       child: const Icon(Symbols.arrow_downward),
                     ),
@@ -949,7 +986,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             elevation: 2,
             color: scheme.surfaceContainerHighest,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(32),
+              borderRadius: BorderRadius.circular(12),
               side: BorderSide.none,
             ),
             child: Padding(
@@ -968,8 +1005,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                       onTapOutside: (_) =>
                           FocusManager.instance.primaryFocus?.unfocus(),
                       onSubmitted: (_) => _send(),
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. Check why nginx is failing to start',
+                      decoration: InputDecoration(
+                        hintText: 'agentPromptHint'.tr(),
                         hintMaxLines: 1,
                         border: InputBorder.none,
                         isDense: true,
@@ -981,7 +1018,9 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                     ),
                   ),
                   IconButton(
-                    tooltip: _working ? 'Stop' : 'Send message',
+                    tooltip: _working
+                        ? 'commonStop'.tr()
+                        : 'agentSendMessage'.tr(),
                     color: scheme.primary,
                     onPressed: _working
                         ? _interrupt
@@ -1015,13 +1054,11 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   .where((server) => server.id == pendingProposal.serverId)
                   .map((server) => server.name)
                   .firstOrNull ??
-              'Unavailable server';
+              'agentUnavailableServer'.tr();
     if (_messages.isEmpty && pendingProposal == null) {
       return Center(
         child: Text(
-          _ghost
-              ? 'Ghost chat — messages are not saved to history.'
-              : 'Describe the task. The agent can inspect any saved server.',
+          _ghost ? 'agentGhostHint'.tr() : 'agentEmptyHint'.tr(),
           style: TextStyle(color: scheme.onSurfaceVariant),
         ),
       );
@@ -1121,7 +1158,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     final firstUser = messages
         .where((message) => message.kind == _MessageKind.user)
         .firstOrNull;
-    final text = (firstUser?.text ?? 'Conversation')
+    final text = (firstUser?.text ?? 'agentDefaultConversationTitle'.tr())
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     return text.length <= 48 ? text : '${text.substring(0, 48)}…';
@@ -1322,7 +1359,7 @@ class _ConversationTile extends StatelessWidget {
               ),
               if (selected)
                 IconButton(
-                  tooltip: 'Delete conversation',
+                  tooltip: 'agentDeleteConversation'.tr(),
                   onPressed: onDelete,
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Symbols.delete_outline, size: 18),
@@ -1379,16 +1416,16 @@ class _AgentModelEditorSheetState extends State<_AgentModelEditorSheet> {
 
   @override
   Widget build(BuildContext context) => SheetScaffold(
-    titleText: 'Add model',
+    titleText: 'agentAddModel'.tr(),
     heightFactor: 0.36,
     child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        const Text('Enter the model identifier accepted by this provider.'),
+        Text('agentModelIdentifierHint'.tr()),
         const SizedBox(height: 20),
         if (widget.presets.isNotEmpty) ...[
           DropdownButtonFormField<String>(
-            decoration: const InputDecoration(labelText: 'Preset model'),
+            decoration: InputDecoration(labelText: 'agentPresetModel'.tr()),
             items: [
               for (final model in widget.presets)
                 DropdownMenuItem(value: model, child: Text(model)),
@@ -1403,9 +1440,9 @@ class _AgentModelEditorSheetState extends State<_AgentModelEditorSheet> {
           controller: _model,
           autofocus: true,
           onSubmitted: (_) => _save(),
-          decoration: const InputDecoration(
-            labelText: 'Model identifier',
-            hintText: 'e.g. deepseek-chat',
+          decoration: InputDecoration(
+            labelText: 'agentModelIdentifier'.tr(),
+            hintText: 'agentModelIdentifierExample'.tr(),
           ),
         ),
         const SizedBox(height: 20),
@@ -1413,7 +1450,7 @@ class _AgentModelEditorSheetState extends State<_AgentModelEditorSheet> {
           alignment: Alignment.centerRight,
           child: FilledButton(
             onPressed: _saving ? null : _save,
-            child: const Text('Add model'),
+            child: Text('agentAddModel'.tr()),
           ),
         ),
       ],
@@ -1462,17 +1499,17 @@ class _AgentProviderEditorSheetState extends State<_AgentProviderEditorSheet> {
 
   @override
   Widget build(BuildContext context) => SheetScaffold(
-    titleText: widget.existing == null ? 'Add AI provider' : 'Edit AI provider',
+    titleText: widget.existing == null
+        ? 'agentAddAiProvider'.tr()
+        : 'agentEditAiProvider'.tr(),
     heightFactor: 0.72,
     child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        const Text(
-          'Profiles use OpenAI-compatible chat endpoints. Keys are encrypted with the vault key and sync with the vault.',
-        ),
+        Text('agentProviderInfo'.tr()),
         const SizedBox(height: 20),
         DropdownButtonFormField<_AgentProviderPreset>(
-          decoration: const InputDecoration(labelText: 'Provider preset'),
+          decoration: InputDecoration(labelText: 'agentProviderPreset'.tr()),
           items: [
             for (final preset in _providerPresets)
               DropdownMenuItem(value: preset, child: Text(preset.name)),
@@ -1490,7 +1527,7 @@ class _AgentProviderEditorSheetState extends State<_AgentProviderEditorSheet> {
         TextField(
           controller: _name,
           textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(labelText: 'Provider name'),
+          decoration: InputDecoration(labelText: 'agentProviderName'.tr()),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -1501,8 +1538,8 @@ class _AgentProviderEditorSheetState extends State<_AgentProviderEditorSheet> {
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
             labelText: widget.existing == null
-                ? 'API key'
-                : 'API key (leave empty to keep current key)',
+                ? 'agentApiKey'.tr()
+                : 'agentApiKeyKeepCurrent'.tr(),
           ),
         ),
         const SizedBox(height: 12),
@@ -1511,16 +1548,13 @@ class _AgentProviderEditorSheetState extends State<_AgentProviderEditorSheet> {
           keyboardType: TextInputType.url,
           autocorrect: false,
           textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            labelText:
-                'Base URL (without /v1, for example https://api.deepseek.com)',
-          ),
+          decoration: InputDecoration(labelText: 'agentBaseUrl'.tr()),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _model,
           onSubmitted: (_) => _save(),
-          decoration: const InputDecoration(labelText: 'Model'),
+          decoration: InputDecoration(labelText: 'agentModel'.tr()),
         ),
         const SizedBox(height: 24),
         Align(
@@ -1533,7 +1567,7 @@ class _AgentProviderEditorSheetState extends State<_AgentProviderEditorSheet> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Symbols.save),
-            label: const Text('Save provider'),
+            label: Text('agentSaveProvider'.tr()),
           ),
         ),
       ],
@@ -1546,10 +1580,16 @@ enum _MessageKind { user, assistant, tool }
 String _relativeTime(DateTime time) {
   final local = time.toLocal();
   final difference = DateTime.now().difference(local);
-  if (difference.inMinutes < 1) return 'just now';
-  if (difference.inHours < 1) return '${difference.inMinutes}m ago';
-  if (difference.inDays < 1) return '${difference.inHours}h ago';
-  if (difference.inDays < 7) return '${difference.inDays}d ago';
+  if (difference.inMinutes < 1) return 'agentJustNow'.tr();
+  if (difference.inHours < 1) {
+    return 'agentMinutesAgo'.tr(args: ['${difference.inMinutes}']);
+  }
+  if (difference.inDays < 1) {
+    return 'agentHoursAgo'.tr(args: ['${difference.inHours}']);
+  }
+  if (difference.inDays < 7) {
+    return 'agentDaysAgo'.tr(args: ['${difference.inDays}']);
+  }
   final month = local.month.toString().padLeft(2, '0');
   final day = local.day.toString().padLeft(2, '0');
   return '${local.year}-$month-$day';
@@ -1697,7 +1737,7 @@ class _ToolCallCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                'Auto-approved',
+                'agentAutoApproved'.tr(),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.onPrimaryContainer,
                   fontWeight: FontWeight.w600,
@@ -1789,7 +1829,7 @@ class _ProposalCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Target: $serverName',
+                  'agentTarget'.tr(args: [serverName]),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1806,14 +1846,14 @@ class _ProposalCard extends StatelessWidget {
                       ),
                       label: Text(
                         reconnectRequired
-                            ? 'Reconnect & resume'
-                            : 'Approve & run',
+                            ? 'agentReconnectResume'.tr()
+                            : 'agentApproveRun'.tr(),
                       ),
                     ),
                     const SizedBox(width: 8),
                     TextButton(
                       onPressed: working ? null : onDecline,
-                      child: const Text('Decline'),
+                      child: Text('agentDecline'.tr()),
                     ),
                   ],
                 ),
@@ -1848,7 +1888,7 @@ class _AgentThinkingIndicator extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Agent is working…',
+              'agentWorking'.tr(),
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
