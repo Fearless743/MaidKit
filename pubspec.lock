@@ -429,10 +429,10 @@ packages:
     dependency: "direct main"
     description:
       name: file_picker
-      sha256: f13a03000d942e476bc1ff0a736d2e9de711d2f89a95cd4c1d88f861c3348387
+      sha256: "29cc1fdb20613876cc7afc529738c1c0f11a9ca159b010edad0c566ac330847e"
       url: "https://pub.dev"
     source: hosted
-    version: "11.0.2"
+    version: "11.0.3"
   file_saver:
     dependency: "direct main"
     description:
@@ -745,7 +745,7 @@ packages:
     description:
       path: "packages/island_ui_foundation"
       ref: HEAD
-      resolved-ref: b5553ab55bc24cfba5fb12f7a21b1815a57da8ce
+      resolved-ref: "443d45b809690eafe896e645a7e0e951f5e8e4d4"
       url: "https://src.solsynth.dev/SoSYS/Solian.git"
     source: git
     version: "1.0.0"
@@ -817,7 +817,7 @@ packages:
     dependency: "direct overridden"
     description:
       path: "packages/libghostty"
-      ref: main
+      ref: "5196982aa96ccbb2e4f6e0c0fe75b5e4e2a11a4a"
       resolved-ref: "5196982aa96ccbb2e4f6e0c0fe75b5e4e2a11a4a"
       url: "https://github.com/elias8/libghostty.git"
     source: git

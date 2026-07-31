@@ -73,10 +73,11 @@ packages:
   libghostty:
     dependency: "direct main"
     description:
-      name: libghostty
-      sha256: "1f09c91ec45559d8e660906121bee6ef4a83bc67f2e8141ee9070388d63e5bd2"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/libghostty"
+      ref: "5196982aa96ccbb2e4f6e0c0fe75b5e4e2a11a4a"
+      resolved-ref: "5196982aa96ccbb2e4f6e0c0fe75b5e4e2a11a4a"
+      url: "https://github.com/elias8/libghostty.git"
+    source: git
     version: "0.0.12"
   logging:
     dependency: transitive
