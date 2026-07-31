@@ -154,6 +154,8 @@
   "settingsVaultLastSync": "最后同步于 {}",
   "settingsVaultNotYet": "尚未同步",
   "settingsVaultSyncNow": "立即同步",
+  "settingsVaultSyncPasswordTitle": "同步此保险库",
+  "settingsVaultSyncPasswordHint": "请输入金库密码以进行同步。",
   "settingsVaultSyncPasswordRequired": "请先使用金库密码解锁，然后再同步。",
   "settingsVaultSyncConflictTitle": "金库同步冲突",
   "settingsVaultSyncConflictBody": "云端存在较新的版本。请选择要保留的副本。",

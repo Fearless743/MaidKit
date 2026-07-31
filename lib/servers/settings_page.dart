@@ -1216,19 +1216,26 @@ class SettingsPage extends ConsumerWidget {
   ) async {
     try {
       final vault = ref.read(vaultServiceProvider);
-      final password = await vault.syncPassphrase();
+      var password = await vault.syncPassphrase();
       if (password == null) {
-        if (context.mounted) {
-          _showMessage('settingsVaultSyncPasswordRequired'.tr());
+        if (!context.mounted) return;
+        final entered = await _syncPasswordSheet(context);
+        if (entered == null || !context.mounted) return;
+        if (!await vault.unlockWithPassword(entered)) {
+          if (context.mounted) {
+            _showMessage('settingsVaultPasswordInvalid'.tr());
+          }
+          return;
         }
-        return;
+        password = entered;
       }
+      final syncPassword = password;
       final backup = DatabaseBackupService(ref.read(databaseProvider), vault);
       final service = ref.read(cloudSyncServiceForVaultProvider(vaultId));
-      final archive = await backup.exportArchive(password);
+      final archive = await backup.exportArchive(syncPassword);
       await service.sync(
         archive: archive,
-        applyArchive: (archive) => backup.importArchive(archive, password),
+        applyArchive: (archive) => backup.importArchive(archive, syncPassword),
       );
       ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
       if (context.mounted) {
@@ -1290,6 +1297,20 @@ Future<String?> _backupPasswordSheet(
   useRootNavigator: true,
   builder: (context) => _BackupPasswordSheet(confirm: confirm),
 );
+
+Future<String?> _syncPasswordSheet(BuildContext context) =>
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (context) => const _BackupPasswordSheet(
+        confirm: false,
+        titleKey: 'settingsVaultSyncPasswordTitle',
+        hintKey: 'settingsVaultSyncPasswordHint',
+        actionKey: 'settingsVaultSyncNow',
+      ),
+    );
 
 Future<String?> _newVaultPasswordSheet(BuildContext context) =>
     showModalBottomSheet<String>(

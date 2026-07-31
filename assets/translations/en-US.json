@@ -157,6 +157,8 @@
   "settingsVaultLastSync": "Last sync: {}",
   "settingsVaultNotYet": "Not yet",
   "settingsVaultSyncNow": "Sync now",
+  "settingsVaultSyncPasswordTitle": "Sync this vault",
+  "settingsVaultSyncPasswordHint": "Enter your vault password to sync.",
   "settingsVaultSyncPasswordRequired": "Unlock this vault with its password before syncing.",
   "settingsVaultSyncConflictTitle": "Vault sync conflict",
   "settingsVaultSyncConflictBody": "A newer version exists in the cloud. Choose which copy to keep.",
