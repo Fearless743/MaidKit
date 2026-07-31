@@ -77,6 +77,17 @@ Future<bool> connectForStatistics(
   return true;
 }
 
+Future<bool> shouldReconnectAndRetry(
+  BuildContext context,
+  Object error,
+  Server server,
+) {
+  if (error is! ServerConnectionRequiredException) {
+    return Future.value(false);
+  }
+  return showMaidKitReconnectAlert(server.name);
+}
+
 Future<bool> openTerminalSession(
   BuildContext context,
   WidgetRef ref,

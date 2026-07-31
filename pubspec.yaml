@@ -35,7 +35,7 @@ dependencies:
   archive: ^4.0.9
   cryptography: ^2.9.0
   crypto: ^3.0.7
-  dartssh2: ^2.22.4
+  dartssh2: ^2.22.5
   dio: ^5.11.0
   desktop_drop: ^0.7.1
   drift: ^2.34.3

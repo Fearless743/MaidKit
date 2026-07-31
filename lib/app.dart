@@ -20,14 +20,15 @@ class MaidKitApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final appRouter = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final appSeedColor = ref.watch(appSeedColorProvider);
     ref.watch(serverMetricsRefreshSchedulerProvider);
     IslandUIFoundation.configureOverlay(maidKitOverlayKey);
     IslandUIFoundation.configureNavigator(maidKitNavigatorKey);
     return MaterialApp.router(
       title: 'title'.tr(),
       debugShowCheckedModeBanner: false,
-      theme: createMaidKitTheme(Brightness.light),
-      darkTheme: createMaidKitTheme(Brightness.dark),
+      theme: createMaidKitTheme(Brightness.light, seedColor: appSeedColor),
+      darkTheme: createMaidKitTheme(Brightness.dark, seedColor: appSeedColor),
       themeMode: themeMode,
       locale: context.locale,
       supportedLocales: context.supportedLocales,

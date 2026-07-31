@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
+import 'app_theme_preferences.dart';
 import 'ghostty_terminal_session_adapter.dart';
 import 'cloud_sync_service.dart';
 import 'metrics_refresh_preferences.dart';
@@ -243,6 +244,24 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
   void setThemeMode(ThemeMode mode) => state = mode;
 }
 
+final appThemeSettingsProvider = Provider<AppThemeSettings>(
+  (ref) => InMemoryAppThemeSettings(),
+);
+
+final appSeedColorProvider = NotifierProvider<AppSeedColorNotifier, Color>(
+  AppSeedColorNotifier.new,
+);
+
+class AppSeedColorNotifier extends Notifier<Color> {
+  @override
+  Color build() => ref.read(appThemeSettingsProvider).seedColor;
+
+  Future<void> setSeedColor(Color color) async {
+    await ref.read(appThemeSettingsProvider).saveSeedColor(color);
+    state = color;
+  }
+}
+
 final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
       final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
@@ -404,25 +423,71 @@ class TerminalBrandingEnvironmentEnabledNotifier extends Notifier<bool> {
   }
 }
 
-final terminalColorSchemeProvider =
-    NotifierProvider<TerminalColorSchemeNotifier, TerminalColorScheme>(
-      TerminalColorSchemeNotifier.new,
+final platformBrightnessProvider =
+    NotifierProvider<PlatformBrightnessNotifier, Brightness>(
+      PlatformBrightnessNotifier.new,
     );
 
-class TerminalColorSchemeNotifier extends Notifier<TerminalColorScheme> {
+class PlatformBrightnessNotifier extends Notifier<Brightness> {
   @override
-  TerminalColorScheme build() => TerminalColorSchemes.byId(
-    ref.read(terminalAdapterPreferencesProvider).colorSchemeId,
-  );
-
-  Future<void> select(String colorSchemeId) async {
-    final scheme = TerminalColorSchemes.byId(colorSchemeId);
-    await ref
-        .read(terminalAdapterPreferencesProvider)
-        .saveColorSchemeId(scheme.id);
-    state = scheme;
+  Brightness build() {
+    final dispatcher = WidgetsBinding.instance.platformDispatcher;
+    dispatcher.onPlatformBrightnessChanged = () {
+      state = dispatcher.platformBrightness;
+    };
+    ref.onDispose(() => dispatcher.onPlatformBrightnessChanged = null);
+    return dispatcher.platformBrightness;
   }
 }
+
+/// The brightness the app actually renders in, honoring the theme mode and
+/// falling back to the OS setting for `ThemeMode.system`.
+final appBrightnessProvider = Provider<Brightness>((ref) {
+  final mode = ref.watch(themeModeProvider);
+  if (mode == ThemeMode.light) return Brightness.light;
+  if (mode == ThemeMode.dark) return Brightness.dark;
+  return ref.watch(platformBrightnessProvider);
+});
+
+final terminalLightThemeProvider =
+    NotifierProvider<TerminalLightThemeNotifier, TerminalColorScheme>(
+      TerminalLightThemeNotifier.new,
+    );
+
+class TerminalLightThemeNotifier extends Notifier<TerminalColorScheme> {
+  @override
+  TerminalColorScheme build() =>
+      ref.read(terminalAdapterPreferencesProvider).lightTheme;
+
+  Future<void> save(TerminalColorScheme theme) async {
+    await ref.read(terminalAdapterPreferencesProvider).saveLightTheme(theme);
+    state = theme;
+  }
+}
+
+final terminalDarkThemeProvider =
+    NotifierProvider<TerminalDarkThemeNotifier, TerminalColorScheme>(
+      TerminalDarkThemeNotifier.new,
+    );
+
+class TerminalDarkThemeNotifier extends Notifier<TerminalColorScheme> {
+  @override
+  TerminalColorScheme build() =>
+      ref.read(terminalAdapterPreferencesProvider).darkTheme;
+
+  Future<void> save(TerminalColorScheme theme) async {
+    await ref.read(terminalAdapterPreferencesProvider).saveDarkTheme(theme);
+    state = theme;
+  }
+}
+
+/// The terminal palette that matches the current app brightness.
+final terminalColorSchemeProvider = Provider<TerminalColorScheme>((ref) {
+  final brightness = ref.watch(appBrightnessProvider);
+  return brightness == Brightness.light
+      ? ref.watch(terminalLightThemeProvider)
+      : ref.watch(terminalDarkThemeProvider);
+});
 
 final terminalSessionAdapterFactoryProvider =
     Provider<TerminalSessionAdapterFactory>((ref) {

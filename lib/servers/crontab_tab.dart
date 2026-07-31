@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'crontab_models.dart';
+import 'server_connection_actions.dart';
 import 'server_providers.dart';
 
 /// Manage the SSH user's personal crontab on a connected server.
@@ -66,6 +67,7 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
   Future<void> _persist(
     CrontabDocument document, {
     required String success,
+    bool canRetryConnection = true,
   }) async {
     setState(() => _busy = true);
     try {
@@ -79,6 +81,18 @@ class _CrontabTabState extends ConsumerState<CrontabTab> {
       });
       showStyledSnackBar(message: success, title: 'crontabTitle'.tr());
     } catch (error) {
+      if (!mounted) return;
+      final shouldRetry =
+          canRetryConnection &&
+          await shouldReconnectAndRetry(context, error, widget.server);
+      if (!mounted) return;
+      if (shouldRetry) {
+        await widget.onConnect();
+        if (mounted) {
+          await _persist(document, success: success, canRetryConnection: false);
+        }
+        return;
+      }
       if (!mounted) return;
       setState(() => _busy = false);
       showStyledSnackBar(

@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app.dart';
 import 'shared/presentation/app_scaffold.dart';
 import 'servers/server_providers.dart';
+import 'servers/app_theme_preferences.dart';
 import 'servers/metrics_refresh_preferences.dart';
 import 'servers/terminal_adapter_preferences.dart';
 import 'servers/startup_connection_preferences.dart';
@@ -24,12 +25,14 @@ Future<void> main() async {
     TerminalAdapterPreferences.load(),
     StartupConnectionPreferences.load(),
     MetricsRefreshPreferences.load(),
+    AppThemePreferences.load(),
   ]);
   final terminalAdapterPreferences =
       preferences[0] as TerminalAdapterPreferences;
   final startupConnectionPreferences =
       preferences[1] as StartupConnectionPreferences;
   final metricsRefreshPreferences = preferences[2] as MetricsRefreshPreferences;
+  final appThemePreferences = preferences[3] as AppThemePreferences;
 
   if (DesktopWindowFrame.isPlatformDesktop) {
     await windowManager.ensureInitialized();
@@ -59,6 +62,7 @@ Future<void> main() async {
         metricsRefreshSettingsProvider.overrideWithValue(
           metricsRefreshPreferences,
         ),
+        appThemeSettingsProvider.overrideWithValue(appThemePreferences),
       ],
       child: EasyLocalization(
         supportedLocales: const [Locale('en', 'US'), Locale('zh', 'CN')],

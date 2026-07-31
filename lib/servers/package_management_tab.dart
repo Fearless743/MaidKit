@@ -8,6 +8,7 @@ import 'package:super_context_menu/super_context_menu.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package_models.dart';
+import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 
@@ -114,10 +115,18 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
     }
   }
 
-  Future<void> _run(PackageAction action, {String? packageName}) async {
+  Future<void> _run(
+    PackageAction action, {
+    String? packageName,
+    bool skipConfirmation = false,
+    bool canRetryConnection = true,
+  }) async {
     final manager = _manager;
-    if (manager == null || _busy) return;
-    if (!await _confirm(action, packageName: packageName) || !mounted) return;
+    if (manager == null || (_busy && !skipConfirmation)) return;
+    if (!skipConfirmation &&
+        (!await _confirm(action, packageName: packageName) || !mounted)) {
+      return;
+    }
     setState(() => _busy = true);
     try {
       await runWithDeployTerminal(
@@ -146,6 +155,23 @@ class _PackageManagementTabState extends ConsumerState<PackageManagementTab> {
       );
       await _load();
     } catch (error) {
+      if (!mounted) return;
+      final shouldRetry =
+          canRetryConnection &&
+          await shouldReconnectAndRetry(context, error, widget.server);
+      if (!mounted) return;
+      if (shouldRetry) {
+        await widget.onConnect();
+        if (mounted) {
+          await _run(
+            action,
+            packageName: packageName,
+            skipConfirmation: true,
+            canRetryConnection: false,
+          );
+        }
+        return;
+      }
       if (mounted) {
         showStyledSnackBar(
           message: error.toString(),

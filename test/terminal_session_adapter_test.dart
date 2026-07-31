@@ -36,35 +36,62 @@ void main() {
     },
   );
 
-  test(
-    'persists the selected terminal color scheme through settings',
-    () async {
-      final settings = InMemoryTerminalAdapterSettings(
-        colorSchemeId: TerminalColorSchemes.catppuccinMocha.id,
-      );
-      final container = ProviderContainer(
-        overrides: [
-          terminalAdapterPreferencesProvider.overrideWithValue(settings),
-        ],
-      );
-      addTearDown(container.dispose);
+  test('persists separate light and dark terminal themes', () async {
+    final settings = InMemoryTerminalAdapterSettings(
+      lightTheme: TerminalColorSchemes.catppuccinLatte,
+      darkTheme: TerminalColorSchemes.nord,
+    );
+    final container = ProviderContainer(
+      overrides: [
+        terminalAdapterPreferencesProvider.overrideWithValue(settings),
+      ],
+    );
+    addTearDown(container.dispose);
 
-      expect(
-        container.read(terminalColorSchemeProvider),
-        TerminalColorSchemes.catppuccinMocha,
-      );
+    expect(
+      container.read(terminalLightThemeProvider),
+      TerminalColorSchemes.catppuccinLatte,
+    );
+    expect(
+      container.read(terminalDarkThemeProvider),
+      TerminalColorSchemes.nord,
+    );
 
-      await container
-          .read(terminalColorSchemeProvider.notifier)
-          .select(TerminalColorSchemes.nord.id);
+    await container
+        .read(terminalDarkThemeProvider.notifier)
+        .save(TerminalColorSchemes.dracula);
 
-      expect(
-        container.read(terminalColorSchemeProvider),
-        TerminalColorSchemes.nord,
-      );
-      expect(settings.colorSchemeId, TerminalColorSchemes.nord.id);
-    },
-  );
+    expect(
+      container.read(terminalDarkThemeProvider),
+      TerminalColorSchemes.dracula,
+    );
+    expect(settings.darkTheme, TerminalColorSchemes.dracula);
+  });
+
+  test('resolves the terminal palette from the app brightness', () async {
+    final settings = InMemoryTerminalAdapterSettings(
+      lightTheme: TerminalColorSchemes.catppuccinLatte,
+      darkTheme: TerminalColorSchemes.nord,
+    );
+    final container = ProviderContainer(
+      overrides: [
+        terminalAdapterPreferencesProvider.overrideWithValue(settings),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light);
+    expect(
+      container.read(terminalColorSchemeProvider),
+      TerminalColorSchemes.catppuccinLatte,
+    );
+
+    container.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark);
+    expect(
+      container.read(terminalColorSchemeProvider),
+      TerminalColorSchemes.nord,
+    );
+  });
 
   test('persists the terminal branding environment preference', () async {
     final settings = InMemoryTerminalAdapterSettings();

@@ -69,6 +69,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('settingsTitle'.tr()), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('settingsTerminalRenderer'.tr()),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('settingsTerminalRenderer'.tr()), findsOneWidget);
 
     await tester.scrollUntilVisible(

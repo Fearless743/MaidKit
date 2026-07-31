@@ -78,6 +78,14 @@ class ServerDraft {
 
 enum SessionStatus { connecting, connected, failed, closed }
 
+/// Raised when an operation needs the server's retained SSH connection.
+class ServerConnectionRequiredException implements Exception {
+  const ServerConnectionRequiredException();
+
+  @override
+  String toString() => 'Connect to this server before running an operation.';
+}
+
 class ServerStats {
   const ServerStats({
     required this.collectorId,

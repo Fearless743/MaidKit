@@ -9,6 +9,7 @@ import 'package:super_context_menu/super_context_menu.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_context_menu.dart';
 import 'package:maid_kit/theme.dart';
+import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'systemd_models.dart';
@@ -99,6 +100,7 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
     Future<void> Function() action, {
     required String success,
     String? unit,
+    bool canRetryConnection = true,
   }) async {
     setState(() {
       _busy = true;
@@ -110,6 +112,23 @@ class _SystemdTabState extends ConsumerState<SystemdTab> {
       showStyledSnackBar(message: success, title: 'systemdServices'.tr());
       await _load();
     } catch (error) {
+      if (!mounted) return;
+      final shouldRetry =
+          canRetryConnection &&
+          await shouldReconnectAndRetry(context, error, widget.server);
+      if (!mounted) return;
+      if (shouldRetry) {
+        await widget.onConnect();
+        if (mounted) {
+          await _run(
+            action,
+            success: success,
+            unit: unit,
+            canRetryConnection: false,
+          );
+        }
+        return;
+      }
       if (!mounted) return;
       showStyledSnackBar(
         message: error.toString(),

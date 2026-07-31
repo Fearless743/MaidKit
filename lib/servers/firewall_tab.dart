@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'firewall_models.dart';
+import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 
@@ -82,6 +83,7 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
   Future<void> _run(
     Future<void> Function() action, {
     required String success,
+    bool canRetryConnection = true,
   }) async {
     setState(() => _busy = true);
     try {
@@ -90,6 +92,18 @@ class _FirewallTabState extends ConsumerState<FirewallTab> {
       showStyledSnackBar(message: success, title: 'firewallFirewall'.tr());
       await _load();
     } catch (error) {
+      if (!mounted) return;
+      final shouldRetry =
+          canRetryConnection &&
+          await shouldReconnectAndRetry(context, error, widget.server);
+      if (!mounted) return;
+      if (shouldRetry) {
+        await widget.onConnect();
+        if (mounted) {
+          await _run(action, success: success, canRetryConnection: false);
+        }
+        return;
+      }
       if (!mounted) return;
       showStyledSnackBar(
         message: error.toString(),

@@ -63,11 +63,7 @@ class SshConnectionManager {
     required int targetPort,
   }) async {
     final client = clientFor(server.id);
-    if (client == null) {
-      throw StateError(
-        'Connect to this server before starting a port forward.',
-      );
-    }
+    if (client == null) throw const ServerConnectionRequiredException();
     final id = 'forward-${_nextPortForwardId++}';
     final info = ActivePortForward(
       id: id,
@@ -161,9 +157,7 @@ class SshConnectionManager {
     Future<T> Function(SSHClient client) run,
   ) {
     final client = clientFor(serverId);
-    if (client == null) {
-      throw StateError('Connect to this server before running an operation.');
-    }
+    if (client == null) throw const ServerConnectionRequiredException();
     return run(client);
   }
 
@@ -2632,9 +2626,7 @@ fi
     required void Function(String chunk) onChunk,
   }) async {
     final client = clientFor(serverId);
-    if (client == null) {
-      throw StateError('Connect to this server before running an operation.');
-    }
+    if (client == null) throw const ServerConnectionRequiredException();
     // No PTY: keep log bytes line-oriented without terminal reflow.
     final session = await client.execute(command);
     var cancelled = false;

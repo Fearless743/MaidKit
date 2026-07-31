@@ -22,6 +22,26 @@ class TerminalColorScheme {
   final Color cursor;
   final Color selection;
   final List<Color> ansiColors;
+
+  TerminalColorScheme copyWith({
+    String? id,
+    String? label,
+    Color? background,
+    Color? foreground,
+    Color? cursor,
+    Color? selection,
+    List<Color>? ansiColors,
+  }) {
+    return TerminalColorScheme(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      background: background ?? this.background,
+      foreground: foreground ?? this.foreground,
+      cursor: cursor ?? this.cursor,
+      selection: selection ?? this.selection,
+      ansiColors: ansiColors ?? this.ansiColors,
+    );
+  }
 }
 
 abstract final class TerminalColorSchemes {
@@ -49,6 +69,33 @@ abstract final class TerminalColorSchemes {
       Color(0xFFD670D6),
       Color(0xFF29B8DB),
       Color(0xFFFFFFFF),
+    ],
+  );
+
+  static const defaultLightScheme = TerminalColorScheme(
+    id: 'default-light',
+    label: 'Default Light',
+    background: Color(0xFFFAFAFA),
+    foreground: Color(0xFF24292E),
+    cursor: Color(0xFF0F766E),
+    selection: Color(0xFFB7D8D5),
+    ansiColors: [
+      Color(0xFF24292E),
+      Color(0xFFC62828),
+      Color(0xFF2E7D32),
+      Color(0xFFB8860B),
+      Color(0xFF1565C0),
+      Color(0xFF7B1FA2),
+      Color(0xFF00838F),
+      Color(0xFFB0BEC5),
+      Color(0xFF90A4AE),
+      Color(0xFFE53935),
+      Color(0xFF43A047),
+      Color(0xFFFBC02D),
+      Color(0xFF1E88E5),
+      Color(0xFF8E24AA),
+      Color(0xFF00ACC1),
+      Color(0xFFECEFF1),
     ],
   );
 

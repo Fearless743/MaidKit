@@ -9,10 +9,9 @@ abstract final class MaidKitFonts {
 
 /// The application-wide Material theme. Keep feature widgets dependent on this
 /// shared foundation instead of creating local colour schemes or chrome.
-ThemeData createMaidKitTheme(Brightness brightness) {
-  const seedColor = Color(0xFF0F766E);
+ThemeData createMaidKitTheme(Brightness brightness, {Color? seedColor}) {
   final colorScheme = ColorScheme.fromSeed(
-    seedColor: seedColor,
+    seedColor: seedColor ?? const Color(0xFF0F766E),
     brightness: brightness,
   );
 

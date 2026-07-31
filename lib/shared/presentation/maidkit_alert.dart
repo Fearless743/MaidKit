@@ -263,6 +263,50 @@ Future<bool> showMaidKitConfirmAlert(
   return result ?? false;
 }
 
+/// Prompts the user to reconnect before retrying an interrupted server action.
+Future<bool> showMaidKitReconnectAlert(String serverName) async {
+  final result = await showMaidKitOverlayDialog<bool>(
+    builder: (context, close) => ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
+      child: AlertDialog(
+        title: null,
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Symbols.link_off,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'serverConnectionLostTitle'.tr(),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text('serverConnectionLostRetry'.tr(args: [serverName])),
+            const SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => close(false),
+            child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+          ),
+          FilledButton(
+            onPressed: () => close(true),
+            child: Text('serverConnectAndRetry'.tr()),
+          ),
+        ],
+      ),
+    ),
+  );
+  return result ?? false;
+}
+
 /// An Island command-palette-shaped overlay for searchable app actions.
 Future<T?> showMaidKitCommandPalette<T>({
   required Widget Function(BuildContext context, void Function(T? result) close)
