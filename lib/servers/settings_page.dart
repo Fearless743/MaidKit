@@ -12,6 +12,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
@@ -56,6 +57,8 @@ class SettingsPage extends ConsumerWidget {
     final vaultFiles = ref.watch(vaultFilesProvider);
     final vaultLabels = ref.watch(vaultLabelsProvider);
     final cloudUser = ref.watch(cloudUserProvider);
+    final runPolicyAsync = ref.watch(agentRunPolicyProvider);
+    final agentPersonalityAsync = ref.watch(agentPersonalityProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
@@ -404,6 +407,80 @@ class SettingsPage extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
               _SettingsSection(
+                titleKey: 'settingsAgent',
+                padding: EdgeInsets.zero,
+                child: runPolicyAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: LinearProgressIndicator(),
+                  ),
+                  error: (error, _) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(error.toString()),
+                  ),
+                  data: (policy) => Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text('settingsAgentRunPolicy').tr(),
+                        const SizedBox(height: 4),
+                        Text(
+                          'settingsAgentRunPolicyHint',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ).tr(),
+                        const SizedBox(height: 12),
+                        SegmentedButton<AgentRunPolicy>(
+                          showSelectedIcon: false,
+                          segments: [
+                            for (final mode in AgentRunPolicy.values)
+                              ButtonSegment(
+                                value: mode,
+                                label: Text(mode.labelKey.tr()),
+                                tooltip: mode.descriptionKey.tr(),
+                              ),
+                          ],
+                          selected: {policy},
+                          onSelectionChanged: (selection) {
+                            ref
+                                .read(agentRunPolicyProvider.notifier)
+                                .setPolicy(selection.first);
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          policy.descriptionKey.tr(),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const Divider(height: 32),
+                        agentPersonalityAsync.when(
+                          loading: () => const LinearProgressIndicator(),
+                          error: (error, _) => Text(error.toString()),
+                          data: (personality) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('settingsAgentPersonality').tr(),
+                            subtitle: Text(
+                              personality.isEmpty
+                                  ? 'settingsAgentPersonalityHint'.tr()
+                                  : personality,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: const Icon(Symbols.chevron_right),
+                            onTap: () => _editAgentPersonality(
+                              context,
+                              ref,
+                              personality,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
                 titleKey: 'settingsSecurity',
                 padding: EdgeInsets.zero,
                 child: biometricEnabled.when(
@@ -605,6 +682,50 @@ class SettingsPage extends ConsumerWidget {
     if (updated != null) {
       await ref.read(appSeedColorProvider.notifier).setSeedColor(updated);
     }
+  }
+
+  Future<void> _editAgentPersonality(
+    BuildContext context,
+    WidgetRef ref,
+    String current,
+  ) async {
+    final controller = TextEditingController(text: current);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('settingsAgentPersonality').tr(),
+        content: SizedBox(
+          width: 480,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 5,
+            maxLines: 10,
+            decoration: InputDecoration(
+              hintText: 'settingsAgentPersonalityHint'.tr(),
+              alignLabelWithHint: true,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('commonCancel').tr(),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, ''),
+            child: const Text('settingsAgentPersonalityClear').tr(),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('commonSave').tr(),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (updated == null) return;
+    await ref.read(agentPersonalityProvider.notifier).setPersonality(updated);
   }
 
   Future<void> _editTerminalTheme(

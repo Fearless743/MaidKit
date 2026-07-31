@@ -19,6 +19,14 @@ class SnippetRepository {
 
   Stream<List<ScriptSnippet>> watchAll() => _database.watchScriptSnippets();
 
+  Future<List<ScriptSnippet>> all() => (_database.select(
+    _database.scriptSnippets,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).get();
+
+  Future<ScriptSnippet?> snippet(int id) => (_database.select(
+    _database.scriptSnippets,
+  )..where((table) => table.id.equals(id))).getSingleOrNull();
+
   Future<int> save({int? id, required String name, required String script}) {
     final now = DateTime.now().toUtc();
     final values = ScriptSnippetsCompanion(

@@ -11,6 +11,8 @@ import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/agent/agent_repository.dart';
+import 'package:maid_kit/agent/agent_personality.dart';
+import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'app_theme_preferences.dart';
 import 'ghostty_terminal_session_adapter.dart';
@@ -315,6 +317,47 @@ final agentProviderModelsProvider =
     StreamProvider.family<List<AgentProviderModel>, int>((ref, providerId) {
       return ref.watch(agentRepositoryProvider).watchModels(providerId);
     });
+
+final agentConversationsProvider = StreamProvider<List<AgentConversation>>(
+  (ref) => ref.watch(agentRepositoryProvider).watchConversations(),
+);
+
+final agentRunPolicyProvider =
+    AsyncNotifierProvider<AgentRunPolicyNotifier, AgentRunPolicy>(
+      AgentRunPolicyNotifier.new,
+    );
+
+class AgentRunPolicyNotifier extends AsyncNotifier<AgentRunPolicy> {
+  @override
+  Future<AgentRunPolicy> build() async {
+    return (await AgentRunPolicyPreferences.load()).policy;
+  }
+
+  Future<void> setPolicy(AgentRunPolicy policy) async {
+    await AgentRunPolicyPreferences.load().then((settings) {
+      return settings.savePolicy(policy);
+    });
+    state = AsyncData(policy);
+  }
+}
+
+final agentPersonalityProvider =
+    AsyncNotifierProvider<AgentPersonalityNotifier, String>(
+      AgentPersonalityNotifier.new,
+    );
+
+class AgentPersonalityNotifier extends AsyncNotifier<String> {
+  @override
+  Future<String> build() async =>
+      (await AgentPersonalityPreferences.load()).personality;
+
+  Future<void> setPersonality(String personality) async {
+    await AgentPersonalityPreferences.load().then((settings) {
+      return settings.savePersonality(personality);
+    });
+    state = AsyncData(personality.trim());
+  }
+}
 
 final savedCredentialsProvider = StreamProvider<List<SavedCredential>>((ref) {
   return ref.watch(serverRepositoryProvider).watchCredentials();

@@ -145,6 +145,19 @@ class AgentProviderModels extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
+/// A saved agent conversation. Messages are stored as a JSON array of
+/// `{role, text}` records so a conversation can be restored without replaying
+/// any tool execution. Ghost chats are never written here.
+class AgentConversations extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get title => text()();
+  IntColumn get providerId => integer().nullable()();
+  IntColumn get modelId => integer().nullable()();
+  TextColumn get messages => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     Servers,
@@ -158,6 +171,7 @@ class AgentProviderModels extends Table {
     AgentSettings,
     AgentProviders,
     AgentProviderModels,
+    AgentConversations,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -174,7 +188,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -314,6 +328,9 @@ class AppDatabase extends _$AppDatabase {
           WHERE base_url LIKE '%/v1'
         ''');
       }
+      if (from < 15) {
+        await m.createTable(agentConversations);
+      }
     },
   );
 
@@ -348,4 +365,8 @@ class AppDatabase extends _$AppDatabase {
             ..where((table) => table.providerId.equals(providerId))
             ..orderBy([(table) => OrderingTerm.asc(table.model)]))
           .watch();
+
+  Stream<List<AgentConversation>> watchAgentConversations() => (select(
+    agentConversations,
+  )..orderBy([(table) => OrderingTerm.desc(table.updatedAt)])).watch();
 }

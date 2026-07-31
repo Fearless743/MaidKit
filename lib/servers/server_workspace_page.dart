@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:maid_kit/agent/agent_input_focus.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
+import 'package:styled_widget/styled_widget.dart';
 import 'port_forwarding_models.dart';
 import 'server_providers.dart';
 import 'terminal_tabs_provider.dart';
@@ -51,6 +53,7 @@ class _ServerTabsShell extends ConsumerWidget {
             (tabs) => tabs.selectedTab is DashboardTab,
           ),
         );
+    final isAgentInputFocused = ref.watch(agentInputFocusedProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -137,45 +140,55 @@ class _ServerTabsShell extends ConsumerWidget {
                   ],
                 )
               : child,
-          bottomNavigationBar: isWide || !isDashboardFocused
+          bottomNavigationBar:
+              isWide || !isDashboardFocused || isAgentInputFocused
               ? null
-              : NavigationBar(
-                  height: 56,
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-                  selectedIndex: tabsRouter.activeIndex,
-                  onDestinationSelected: tabsRouter.setActiveIndex,
-                  destinations: [
-                    NavigationDestination(
-                      icon: const Icon(Symbols.dns),
-                      selectedIcon: const Icon(Symbols.dns, fill: 1),
-                      label: 'tabServers'.tr(),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Symbols.inventory_2),
-                      selectedIcon: const Icon(Symbols.inventory_2, fill: 1),
-                      label: 'tabAssets'.tr(),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Symbols.deployed_code),
-                      selectedIcon: const Icon(Symbols.deployed_code, fill: 1),
-                      label: 'tabProjects'.tr(),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Symbols.code),
-                      selectedIcon: const Icon(Symbols.code, fill: 1),
-                      label: 'tabSnippets'.tr(),
-                    ),
-                    const NavigationDestination(
-                      icon: Icon(Symbols.smart_toy),
-                      selectedIcon: Icon(Symbols.smart_toy, fill: 1),
-                      label: 'Agent',
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Symbols.settings, fill: 1),
-                      selectedIcon: const Icon(Symbols.settings),
-                      label: 'tabSettings'.tr(),
-                    ),
-                  ],
+              : Material(
+                  elevation: 0,
+                  color: Theme.of(context).colorScheme.surfaceContainer,
+                  child: NavigationBar(
+                    backgroundColor: Colors.transparent,
+                    height: 56,
+                    labelBehavior:
+                        NavigationDestinationLabelBehavior.alwaysHide,
+                    selectedIndex: tabsRouter.activeIndex,
+                    onDestinationSelected: tabsRouter.setActiveIndex,
+                    destinations: [
+                      NavigationDestination(
+                        icon: const Icon(Symbols.dns),
+                        selectedIcon: const Icon(Symbols.dns, fill: 1),
+                        label: 'tabServers'.tr(),
+                      ),
+                      NavigationDestination(
+                        icon: const Icon(Symbols.inventory_2),
+                        selectedIcon: const Icon(Symbols.inventory_2, fill: 1),
+                        label: 'tabAssets'.tr(),
+                      ),
+                      NavigationDestination(
+                        icon: const Icon(Symbols.deployed_code),
+                        selectedIcon: const Icon(
+                          Symbols.deployed_code,
+                          fill: 1,
+                        ),
+                        label: 'tabProjects'.tr(),
+                      ),
+                      NavigationDestination(
+                        icon: const Icon(Symbols.code),
+                        selectedIcon: const Icon(Symbols.code, fill: 1),
+                        label: 'tabSnippets'.tr(),
+                      ),
+                      const NavigationDestination(
+                        icon: Icon(Symbols.smart_toy),
+                        selectedIcon: Icon(Symbols.smart_toy, fill: 1),
+                        label: 'Agent',
+                      ),
+                      NavigationDestination(
+                        icon: const Icon(Symbols.settings, fill: 1),
+                        selectedIcon: const Icon(Symbols.settings),
+                        label: 'tabSettings'.tr(),
+                      ),
+                    ],
+                  ).padding(horizontal: 16),
                 ),
         );
       },

@@ -56,6 +56,8 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>MaidKit uses the camera only when you choose to capture an image to attach to content managed in the app.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Explain why your app needs Face ID access here.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MaidKit uses your location only when you choose to include location metadata with an image you capture.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

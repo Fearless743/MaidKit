@@ -559,19 +559,39 @@ class _ConnectionStatus extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final latency = this.latency;
-    final (label, color) = switch ((connected, connecting, failed)) {
-      (true, _, _) => ('serversConnected'.tr(), colorScheme.primary),
-      (_, true, _) => ('serversConnecting'.tr(), colorScheme.tertiary),
-      (_, _, true) => ('serversFailed'.tr(), colorScheme.error),
+
+    if (connected) {
+      final latencyColor = latency == null
+          ? colorScheme.onSurfaceVariant
+          : latency.inMilliseconds >= 250
+          ? colorScheme.error
+          : latency.inMilliseconds >= 100
+          ? colorScheme.tertiary
+          : colorScheme.onSurfaceVariant;
+      return Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            latency == null ? '—' : '${latency.inMilliseconds} ms',
+            style: textTheme.labelLarge?.copyWith(color: latencyColor),
+          ),
+        ],
+      );
+    }
+
+    final (label, color) = switch ((connecting, failed)) {
+      (true, _) => ('serversConnecting'.tr(), colorScheme.tertiary),
+      (_, true) => ('serversFailed'.tr(), colorScheme.error),
       _ => ('serversNotConnected'.tr(), colorScheme.onSurfaceVariant),
     };
-    final latencyColor = latency == null
-        ? colorScheme.onSurfaceVariant
-        : latency.inMilliseconds >= 250
-        ? colorScheme.error
-        : latency.inMilliseconds >= 100
-        ? colorScheme.tertiary
-        : colorScheme.onSurfaceVariant;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -586,15 +606,6 @@ class _ConnectionStatus extends StatelessWidget {
           label,
           style: textTheme.labelLarge?.copyWith(color: colorScheme.onSurface),
         ),
-        if (connected && latency != null) ...[
-          const SizedBox(width: 8),
-          Icon(Symbols.network_ping, size: 16, color: latencyColor),
-          const SizedBox(width: 4),
-          Text(
-            '${latency.inMilliseconds} ms',
-            style: textTheme.labelLarge?.copyWith(color: latencyColor),
-          ),
-        ],
       ],
     );
   }
