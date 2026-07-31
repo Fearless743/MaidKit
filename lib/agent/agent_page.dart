@@ -90,12 +90,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   bool _ghost = false;
   bool _working = false;
   bool _personalityProviderProvisioned = false;
-  Map<String, PersonalityAgent> _personalityAgents = const {};
   AgentCancelToken? _activeToken;
 
   @override
   void initState() {
     super.initState();
+    _restoreSelection();
     _messagesScroll.addListener(_updateScrollToBottomVisibility);
     _promptFocus.addListener(
       () => ref
@@ -126,6 +126,21 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       text: newText,
       selection: TextSelection.collapsed(offset: start + 1),
     );
+  }
+
+  Future<void> _restoreSelection() async {
+    final selection = await ref.read(agentSelectionProvider.future);
+    if (!mounted || selection.providerId == null) return;
+    setState(() {
+      _activeProviderId = selection.providerId;
+      _activeModelId = selection.modelId;
+    });
+  }
+
+  void _persistSelection() {
+    ref
+        .read(agentSelectionProvider.notifier)
+        .select(providerId: _activeProviderId, modelId: _activeModelId);
   }
 
   @override
@@ -610,6 +625,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       _reconnectRequired = false;
       _pendingPrompt = null;
     });
+    _persistSelection();
     _showSidebar.value = false;
   }
 
@@ -718,41 +734,25 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       return configuration;
     }
     final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
-    return accessToken == null
-        ? configuration
-        : AgentConfiguration(
-            providerId: configuration!.providerId,
-            providerName: configuration.providerName,
-            apiKey: accessToken,
-            baseUrl: configuration.baseUrl,
-            model: configuration.model,
-          );
+    if (accessToken == null) return configuration;
+    final fixedAgentId = await ref.read(agentPersonalityAgentProvider.future);
+    return AgentConfiguration(
+      providerId: configuration!.providerId,
+      providerName: configuration.providerName,
+      apiKey: accessToken,
+      baseUrl: configuration.baseUrl,
+      model: fixedAgentId,
+    );
   }
 
   Future<void> _ensurePersonalityProvider() async {
     final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
     if (accessToken == null || !mounted) return;
-    final models = <String>['agent'];
-    var discoveredAgents = const <PersonalityAgent>[];
-    try {
-      discoveredAgents = await const PersonalityService().listAgents(
-        baseUrl: PersonalityService.productionBaseUrl,
-        accessToken: accessToken,
-      );
-      models.addAll(discoveredAgents.map((agent) => agent.id));
-    } catch (_) {
-      // The default agent remains available while discovery is temporarily
-      // unavailable. Opening Agent again retries discovery.
-    }
+    final fixedAgentId = await ref.read(agentPersonalityAgentProvider.future);
     if (!mounted) return;
-    setState(
-      () => _personalityAgents = {
-        for (final agent in discoveredAgents) agent.id: agent,
-      },
-    );
     await ref
         .read(agentRepositoryProvider)
-        .ensurePersonalityProvider(accessToken, models: models);
+        .ensurePersonalityProvider(accessToken, models: [fixedAgentId]);
   }
 
   @override
@@ -782,10 +782,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
               const <AgentProviderModel>[];
     final selectedModelId =
         _activeModelId ?? (models.isEmpty ? null : models.first.id);
-    if (_activeProviderId != null &&
+    if (providers.isNotEmpty &&
+        _activeProviderId != null &&
         !providers.any((provider) => provider.id == _activeProviderId)) {
       _activeProviderId = null;
       _activeModelId = null;
+      _persistSelection();
     }
     final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
@@ -860,9 +862,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         selectedProvider?.baseUrl == PersonalityService.productionBaseUrl;
     final modelEntries = <_DropdownEntry>[
       for (final model in models)
-        isManagedPersonalityProvider
-            ? _personalityModelEntry(model)
-            : _DropdownEntry(value: model.id, label: model.model),
+        _DropdownEntry(value: model.id, label: model.model),
     ];
     return [
       const SizedBox(width: 4),
@@ -877,6 +877,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         onChanged: (id) => setState(() {
           _activeProviderId = id;
           _activeModelId = null;
+          _persistSelection();
         }),
         actions: [
           _DropdownAction(
@@ -898,45 +899,35 @@ class _AgentPageState extends ConsumerState<AgentPage> {
           ),
         ],
       ),
-      const SizedBox(width: 8),
-      _AppBarDropdown(
-        label: 'agentModel'.tr(),
-        value: selectedModelId,
-        entries: modelEntries,
-        enabled: !_working && selectedProviderId != null,
-        onChanged: (id) => setState(() => _activeModelId = id),
-        actions: [
-          _DropdownAction(
-            label: 'agentAddModel'.tr(),
-            icon: Symbols.add,
-            onSelected: () => _showAddModelSheet(selectedProvider!),
-            enabled: selectedProvider != null && !isManagedPersonalityProvider,
-          ),
-          _DropdownAction(
-            label: 'agentRemoveModel'.tr(),
-            icon: Symbols.delete_outline,
-            onSelected: () => _deleteModel(selectedModel!),
-            enabled: selectedModel != null && !isManagedPersonalityProvider,
-          ),
-        ],
-      ),
+      if (!isManagedPersonalityProvider) ...[
+        const SizedBox(width: 8),
+        _AppBarDropdown(
+          label: 'agentModel'.tr(),
+          value: selectedModelId,
+          entries: modelEntries,
+          enabled: !_working && selectedProviderId != null,
+          onChanged: (id) => setState(() {
+            _activeModelId = id;
+            _persistSelection();
+          }),
+          actions: [
+            _DropdownAction(
+              label: 'agentAddModel'.tr(),
+              icon: Symbols.add,
+              onSelected: () => _showAddModelSheet(selectedProvider!),
+              enabled: selectedProvider != null,
+            ),
+            _DropdownAction(
+              label: 'agentRemoveModel'.tr(),
+              icon: Symbols.delete_outline,
+              onSelected: () => _deleteModel(selectedModel!),
+              enabled: selectedModel != null,
+            ),
+          ],
+        ),
+      ],
       const SizedBox(width: 8),
     ];
-  }
-
-  _DropdownEntry _personalityModelEntry(AgentProviderModel model) {
-    if (model.model == 'agent') {
-      return _DropdownEntry(
-        value: model.id,
-        label: 'agentDefaultPersonalityAgent'.tr(),
-      );
-    }
-    final agent = _personalityAgents[model.model];
-    return _DropdownEntry(
-      value: model.id,
-      label: agent?.displayName ?? 'agentUnavailablePersonalityAgent'.tr(),
-      description: agent?.description,
-    );
   }
 
   Widget _buildConversationSidebar({
@@ -1278,15 +1269,10 @@ class _DropdownAction {
 }
 
 class _DropdownEntry {
-  const _DropdownEntry({
-    required this.value,
-    required this.label,
-    this.description,
-  });
+  const _DropdownEntry({required this.value, required this.label});
 
   final int value;
   final String label;
-  final String? description;
 }
 
 class _AppBarDropdown extends StatelessWidget {
@@ -1398,32 +1384,9 @@ class _DropdownEntryLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final description = entry.description;
-    if (description == null || description.isEmpty) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 220),
-        child: Text(entry.label, overflow: TextOverflow.ellipsis),
-      );
-    }
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 260),
-      child: Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(text: entry.label, style: theme.textTheme.bodyMedium),
-            TextSpan(
-              text: '\n$description',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Text(entry.label, overflow: TextOverflow.ellipsis),
     );
   }
 }

@@ -13,7 +13,10 @@ import 'package:styled_widget/styled_widget.dart';
 import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
+import 'package:maid_kit/agent/billing_service.dart';
+import 'package:maid_kit/agent/personality_service.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
@@ -60,6 +63,9 @@ class SettingsPage extends ConsumerWidget {
     final cloudUser = ref.watch(cloudUserProvider);
     final runPolicyAsync = ref.watch(agentRunPolicyProvider);
     final agentPersonalityAsync = ref.watch(agentPersonalityProvider);
+    final agentPersonalityAgentAsync = ref.watch(agentPersonalityAgentProvider);
+    final personalityAgentsAsync = ref.watch(personalityAgentsProvider);
+    final billingPolicyAsync = ref.watch(personalityBillingPolicyProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
@@ -453,7 +459,6 @@ class SettingsPage extends ConsumerWidget {
                           policy.descriptionKey.tr(),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const Divider(height: 32),
                         agentPersonalityAsync.when(
                           loading: () => const LinearProgressIndicator(),
                           error: (error, _) => Text(error.toString()),
@@ -592,6 +597,209 @@ class SettingsPage extends ConsumerWidget {
                         ),
                 ),
               ),
+              if (cloudUser.asData?.value != null) ...[
+                const SizedBox(height: 24),
+                _SettingsSection(
+                  titleKey: 'settingsSolarNetworkAi',
+                  padding: EdgeInsets.zero,
+                  child: billingPolicyAsync.when(
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: LinearProgressIndicator(),
+                    ),
+                    error: (error, _) => Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'settingsBillingError'.tr(args: [error.toString()]),
+                      ),
+                    ),
+                    data: (policy) => policy == null
+                        ? const SizedBox.shrink()
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (policy.blacklisted)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    12,
+                                    16,
+                                    0,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.errorContainer,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Symbols.warning_amber,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'settingsBillingBlacklisted'.tr(),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  0,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'settingsAgentPersonalityAgent',
+                                    ).tr(),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'settingsAgentPersonalityAgentHint',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ).tr(),
+                                    const SizedBox(height: 12),
+                                    agentPersonalityAgentAsync.when(
+                                      loading: () =>
+                                          const LinearProgressIndicator(),
+                                      error: (error, _) =>
+                                          Text(error.toString()),
+                                      data: (agentId) =>
+                                          _PersonalityAgentDropdown(
+                                            agentId: agentId,
+                                            agents:
+                                                personalityAgentsAsync
+                                                    .asData
+                                                    ?.value ??
+                                                const [],
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('settingsBillingUsage').tr(),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'settingsBillingUsageHint',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ).tr(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ListTile(
+                                contentPadding: _sectionTilePadding,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: _sectionTileBorderRadius(
+                                    _SettingsTilePosition.first,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'settingsBillingHourlyGolds',
+                                ).tr(),
+                                trailing: _UsageTrailing(
+                                  usage: policy.hourlyGolds,
+                                ),
+                              ),
+                              ListTile(
+                                contentPadding: _sectionTilePadding,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: _sectionTileBorderRadius(
+                                    _SettingsTilePosition.middle,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'settingsBillingHourlyBits',
+                                ).tr(),
+                                trailing: _UsageTrailing(
+                                  usage: policy.hourlyPoints,
+                                ),
+                              ),
+                              ListTile(
+                                contentPadding: _sectionTilePadding,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: _sectionTileBorderRadius(
+                                    _SettingsTilePosition.middle,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'settingsBillingDailyGolds',
+                                ).tr(),
+                                trailing: _UsageTrailing(
+                                  usage: policy.dailyGolds,
+                                ),
+                              ),
+                              ListTile(
+                                contentPadding: _sectionTilePadding,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: _sectionTileBorderRadius(
+                                    _SettingsTilePosition.last,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'settingsBillingDailyBits',
+                                ).tr(),
+                                trailing: _UsageTrailing(
+                                  usage: policy.dailyPoints,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'settingsBillingSettleHint'.tr(),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    FilledButton.tonalIcon(
+                                      onPressed: () =>
+                                          _settleBilling(context, ref),
+                                      icon: const Icon(Symbols.payments),
+                                      label: const Text(
+                                        'settingsBillingSettleNow',
+                                      ).tr(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               _SettingsSection(
                 titleKey: 'settingsVaults',
@@ -727,6 +935,26 @@ class SettingsPage extends ConsumerWidget {
     controller.dispose();
     if (updated == null) return;
     await ref.read(agentPersonalityProvider.notifier).setPersonality(updated);
+  }
+
+  Future<void> _settleBilling(BuildContext context, WidgetRef ref) async {
+    final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
+    if (accessToken == null) {
+      if (context.mounted) _showMessage('settingsCloudSignInRequired'.tr());
+      return;
+    }
+    try {
+      await const PersonalityBillingService().settle(
+        baseUrl: PersonalityBillingService.productionBaseUrl,
+        accessToken: accessToken,
+      );
+      ref.invalidate(personalityBillingPolicyProvider);
+      if (context.mounted) _showMessage('settingsBillingSettleSuccess'.tr());
+    } on PersonalityBillingException catch (error) {
+      if (context.mounted) _showMessage(error.message);
+    } catch (_) {
+      if (context.mounted) _showMessage('commonSomethingWentWrong'.tr());
+    }
   }
 
   Future<void> _editTerminalTheme(
@@ -1346,6 +1574,74 @@ enum _SettingsTilePosition { only, first, middle, last }
 
 const _sectionTilePadding = EdgeInsets.symmetric(horizontal: 16);
 
+String _usageLabel(BillingUsage? usage) {
+  if (usage == null) return '—';
+  final max = usage.max;
+  return max == null
+      ? _formatUsage(usage.used)
+      : '${_formatUsage(usage.used)} / ${_formatUsage(max)}';
+}
+
+String _formatUsage(double value) {
+  if (value == value.roundToDouble()) return value.round().toString();
+  return value.toStringAsFixed(2);
+}
+
+class _UsageTrailing extends StatelessWidget {
+  const _UsageTrailing({required this.usage});
+
+  final BillingUsage? usage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(_usageLabel(usage)),
+        const SizedBox(width: 6),
+        _UsageRing(usage: usage),
+      ],
+    );
+  }
+}
+
+class _UsageRing extends StatelessWidget {
+  const _UsageRing({required this.usage});
+
+  final BillingUsage? usage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final used = usage?.used ?? 0;
+    final max = usage?.max;
+    final progress = (max == null || max <= 0)
+        ? 0.0
+        : (used / max).clamp(0.0, 1.0);
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 3,
+            strokeCap: StrokeCap.round,
+            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          ),
+          Center(
+            child: Text(
+              max == null ? '—' : '${(progress * 100).round()}%',
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 BorderRadius _sectionTileBorderRadius(_SettingsTilePosition position) {
   const radius = Radius.circular(12);
   return BorderRadius.only(
@@ -1789,6 +2085,52 @@ class _VaultCloudBindingTile extends ConsumerWidget {
     } catch (_) {
       if (context.mounted) showSnackBar('commonSomethingWentWrong'.tr());
     }
+  }
+}
+
+class _PersonalityAgentDropdown extends ConsumerWidget {
+  const _PersonalityAgentDropdown({
+    required this.agentId,
+    required this.agents,
+  });
+
+  final String agentId;
+  final List<PersonalityAgent> agents;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = <String>{
+      agentId,
+      for (final agent in agents)
+        if (agent.id.isNotEmpty) agent.id,
+    };
+    final selected = options.contains(agentId) ? agentId : options.first;
+    return DropdownButtonFormField<String>(
+      initialValue: selected,
+      decoration: InputDecoration(
+        labelText: 'settingsAgentPersonalityAgentLabel'.tr(),
+        helperText: 'settingsAgentPersonalityAgentFieldHint'.tr(
+          args: [AgentPersonalityAgentPreferences.defaultAgentId],
+        ),
+      ),
+      items: [
+        for (final id in options)
+          DropdownMenuItem(
+            value: id,
+            child: Text(
+              agents
+                      .where((agent) => agent.id == id)
+                      .firstOrNull
+                      ?.displayName ??
+                  id,
+            ),
+          ),
+      ],
+      onChanged: (id) {
+        if (id == null) return;
+        ref.read(agentPersonalityAgentProvider.notifier).setAgentId(id);
+      },
+    );
   }
 }
 
