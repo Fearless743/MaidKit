@@ -152,6 +152,8 @@
   "agentEditProvider": "编辑提供方",
   "agentDeleteProviderAction": "删除提供方",
   "agentModel": "模型",
+  "agentDefaultPersonalityAgent": "默认助手",
+  "agentUnavailablePersonalityAgent": "不可用的助手",
   "agentAddModel": "添加模型",
   "agentConversations": "对话",
   "agentChats": "聊天",

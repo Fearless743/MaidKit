@@ -4,6 +4,8 @@ import 'package:drift/drift.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/vault_service.dart';
 
+import 'personality_service.dart';
+
 class AgentConfiguration {
   const AgentConfiguration({
     required this.providerId,
@@ -145,6 +147,11 @@ class AgentRepository {
     final name = draft.name.trim();
     final model = draft.model.trim();
     final baseUrl = _normalizeBaseUrl(draft.baseUrl);
+    if (baseUrl == PersonalityService.productionBaseUrl) {
+      throw ArgumentError(
+        'Solar Network Personality is managed automatically by Solarpass.',
+      );
+    }
     if (name.isEmpty || model.isEmpty) {
       throw ArgumentError('Provider name and model are required.');
     }
@@ -231,6 +238,58 @@ class AgentRepository {
   Future<void> delete(int id) => (_database.delete(
     _database.agentProviders,
   )..where((table) => table.id.equals(id))).go();
+
+  /// Keeps the first-party provider available for the active Solarpass user.
+  /// Its access token is encrypted with the vault key like other provider
+  /// credentials, while the active request still uses a refreshed token.
+  Future<void> ensurePersonalityProvider(
+    String accessToken, {
+    Iterable<String> models = const ['agent'],
+  }) async {
+    final encrypted = await _vault.encrypt(
+      accessToken,
+      context: 'agent-provider-api-key',
+    );
+    final existing =
+        await (_database.select(_database.agentProviders)
+              ..where(
+                (table) =>
+                    table.baseUrl.equals(PersonalityService.productionBaseUrl),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    final now = DateTime.now().toUtc();
+    if (existing == null) {
+      final providerId = await _database
+          .into(_database.agentProviders)
+          .insert(
+            AgentProvidersCompanion.insert(
+              name: 'Solar Network Personality',
+              encryptedApiKey: encrypted.bytes,
+              apiKeyNonce: encrypted.nonce,
+              baseUrl: const Value(PersonalityService.productionBaseUrl),
+              model: 'agent',
+              updatedAt: now,
+            ),
+          );
+      for (final model in models) {
+        await addModel(providerId, model);
+      }
+      return;
+    }
+    await (_database.update(
+      _database.agentProviders,
+    )..where((table) => table.id.equals(existing.id))).write(
+      AgentProvidersCompanion(
+        encryptedApiKey: Value(encrypted.bytes),
+        apiKeyNonce: Value(encrypted.nonce),
+        updatedAt: Value(now),
+      ),
+    );
+    for (final model in models) {
+      await addModel(existing.id, model);
+    }
+  }
 
   Future<AgentConfiguration?> configuration([
     int? providerId,

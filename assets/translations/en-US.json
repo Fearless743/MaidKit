@@ -155,6 +155,8 @@
   "agentEditProvider": "Edit provider",
   "agentDeleteProviderAction": "Delete provider",
   "agentModel": "Model",
+  "agentDefaultPersonalityAgent": "Default agent",
+  "agentUnavailablePersonalityAgent": "Unavailable agent",
   "agentAddModel": "Add model",
   "agentConversations": "Conversations",
   "agentChats": "Chats",

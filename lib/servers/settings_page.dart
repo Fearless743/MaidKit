@@ -9,6 +9,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:styled_widget/styled_widget.dart';
 import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
@@ -1728,7 +1729,7 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                   ),
                 ],
               ),
-            ),
+            ).alignment(.centerLeft),
         ],
       ),
     );

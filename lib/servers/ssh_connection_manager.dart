@@ -3235,7 +3235,13 @@ fi
       );
       _sessions[server.id] = client;
       _set(_states[server.id]!.copyWith(status: SessionStatus.connected));
-      unawaited(refreshServerInfo(server));
+      // Establish the first latency sample before this connection is allowed
+      // to yield to another startup/reconnect attempt. Otherwise the next
+      // SSH handshake can delay this probe and make the first displayed
+      // response time include local connection work rather than the server's
+      // SSH round trip.
+      await _refreshLatency(client, _states[server.id]!);
+      unawaited(_refreshConnectionDetails(server, client));
       unawaited(
         client.done.whenComplete(() {
           if (!identical(_sessions[server.id], client)) return;
@@ -3261,6 +3267,18 @@ fi
         ),
       );
       rethrow;
+    }
+  }
+
+  Future<void> _refreshConnectionDetails(
+    Server server,
+    SSHClient client,
+  ) async {
+    final state = _states[server.id];
+    if (!identical(_sessions[server.id], client) || state == null) return;
+    if (server.collectStats) await _refreshStats(client, state);
+    if (server.collectSystemInfo) {
+      await _refreshSystemInfo(client, _states[server.id] ?? state);
     }
   }
 

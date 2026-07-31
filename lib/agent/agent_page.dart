@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:auto_route/auto_route.dart';
@@ -19,6 +20,7 @@ import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'agent_input_focus.dart';
+import 'personality_service.dart';
 import 'agent_repository.dart';
 import 'agent_run_policy.dart';
 import 'ssh_agent_service.dart';
@@ -44,13 +46,6 @@ const _providerPresets = [
     'deepseek/deepseek-chat',
     'openai/gpt-4o-mini',
   ]),
-  // PersonalityCore is exposed directly beneath /personality in production.
-  // Do not use the development-only /api compatibility prefix here.
-  _AgentProviderPreset(
-    'Solar Network Personality',
-    'https://api.solian.app/personality',
-    ['agent'],
-  ),
   _AgentProviderPreset('Ollama', 'http://localhost:11434', [
     'llama3.2',
     'qwen2.5-coder',
@@ -94,6 +89,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   int? _conversationId;
   bool _ghost = false;
   bool _working = false;
+  bool _personalityProviderProvisioned = false;
+  Map<String, PersonalityAgent> _personalityAgents = const {};
   AgentCancelToken? _activeToken;
 
   @override
@@ -206,9 +203,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     });
     _scrollToBottom();
     try {
-      final config = await ref
-          .read(agentRepositoryProvider)
-          .configuration(_activeProviderId, _activeModelId);
+      final config = await _configuration();
       if (config == null) {
         if (mounted) await _showProviderEditor();
         return;
@@ -290,9 +285,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     }
     setState(() => _working = true);
     try {
-      final config = await ref
-          .read(agentRepositoryProvider)
-          .configuration(_activeProviderId, _activeModelId);
+      final config = await _configuration();
       final servers =
           ref.read(serversProvider).asData?.value ?? const <Server>[];
       if (config == null) {
@@ -717,8 +710,59 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     }
   }
 
+  Future<AgentConfiguration?> _configuration() async {
+    final configuration = await ref
+        .read(agentRepositoryProvider)
+        .configuration(_activeProviderId, _activeModelId);
+    if (configuration?.baseUrl != PersonalityService.productionBaseUrl) {
+      return configuration;
+    }
+    final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
+    return accessToken == null
+        ? configuration
+        : AgentConfiguration(
+            providerId: configuration!.providerId,
+            providerName: configuration.providerName,
+            apiKey: accessToken,
+            baseUrl: configuration.baseUrl,
+            model: configuration.model,
+          );
+  }
+
+  Future<void> _ensurePersonalityProvider() async {
+    final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
+    if (accessToken == null || !mounted) return;
+    final models = <String>['agent'];
+    var discoveredAgents = const <PersonalityAgent>[];
+    try {
+      discoveredAgents = await const PersonalityService().listAgents(
+        baseUrl: PersonalityService.productionBaseUrl,
+        accessToken: accessToken,
+      );
+      models.addAll(discoveredAgents.map((agent) => agent.id));
+    } catch (_) {
+      // The default agent remains available while discovery is temporarily
+      // unavailable. Opening Agent again retries discovery.
+    }
+    if (!mounted) return;
+    setState(
+      () => _personalityAgents = {
+        for (final agent in discoveredAgents) agent.id: agent,
+      },
+    );
+    await ref
+        .read(agentRepositoryProvider)
+        .ensurePersonalityProvider(accessToken, models: models);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cloudUser = ref.watch(cloudUserProvider).asData?.value;
+    if (cloudUser != null && !_personalityProviderProvisioned) {
+      _personalityProviderProvisioned = true;
+      unawaited(_ensurePersonalityProvider());
+    }
+    if (cloudUser == null) _personalityProviderProvisioned = false;
     final servers =
         ref.watch(serversProvider).asData?.value ?? const <Server>[];
     final providers =
@@ -812,13 +856,22 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     final selectedModel = selectedModelId == null
         ? null
         : models.where((model) => model.id == selectedModelId).firstOrNull;
+    final isManagedPersonalityProvider =
+        selectedProvider?.baseUrl == PersonalityService.productionBaseUrl;
+    final modelEntries = <_DropdownEntry>[
+      for (final model in models)
+        isManagedPersonalityProvider
+            ? _personalityModelEntry(model)
+            : _DropdownEntry(value: model.id, label: model.model),
+    ];
     return [
       const SizedBox(width: 4),
       _AppBarDropdown(
         label: 'agentAiProvider'.tr(),
         value: selectedProviderId,
         entries: [
-          for (final provider in providers) (provider.id, provider.name),
+          for (final provider in providers)
+            _DropdownEntry(value: provider.id, label: provider.name),
         ],
         enabled: !_working,
         onChanged: (id) => setState(() {
@@ -835,13 +888,13 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             label: 'agentEditProvider'.tr(),
             icon: Symbols.edit,
             onSelected: () => _showProviderEditor(selectedProvider!),
-            enabled: selectedProvider != null,
+            enabled: selectedProvider != null && !isManagedPersonalityProvider,
           ),
           _DropdownAction(
             label: 'agentDeleteProviderAction'.tr(),
             icon: Symbols.delete_outline,
             onSelected: () => _deleteProvider(selectedProvider!),
-            enabled: selectedProvider != null,
+            enabled: selectedProvider != null && !isManagedPersonalityProvider,
           ),
         ],
       ),
@@ -849,7 +902,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       _AppBarDropdown(
         label: 'agentModel'.tr(),
         value: selectedModelId,
-        entries: [for (final model in models) (model.id, model.model)],
+        entries: modelEntries,
         enabled: !_working && selectedProviderId != null,
         onChanged: (id) => setState(() => _activeModelId = id),
         actions: [
@@ -857,18 +910,33 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             label: 'agentAddModel'.tr(),
             icon: Symbols.add,
             onSelected: () => _showAddModelSheet(selectedProvider!),
-            enabled: selectedProvider != null,
+            enabled: selectedProvider != null && !isManagedPersonalityProvider,
           ),
           _DropdownAction(
             label: 'agentRemoveModel'.tr(),
             icon: Symbols.delete_outline,
             onSelected: () => _deleteModel(selectedModel!),
-            enabled: selectedModel != null,
+            enabled: selectedModel != null && !isManagedPersonalityProvider,
           ),
         ],
       ),
       const SizedBox(width: 8),
     ];
+  }
+
+  _DropdownEntry _personalityModelEntry(AgentProviderModel model) {
+    if (model.model == 'agent') {
+      return _DropdownEntry(
+        value: model.id,
+        label: 'agentDefaultPersonalityAgent'.tr(),
+      );
+    }
+    final agent = _personalityAgents[model.model];
+    return _DropdownEntry(
+      value: model.id,
+      label: agent?.displayName ?? 'agentUnavailablePersonalityAgent'.tr(),
+      description: agent?.description,
+    );
   }
 
   Widget _buildConversationSidebar({
@@ -1209,6 +1277,18 @@ class _DropdownAction {
   final bool enabled;
 }
 
+class _DropdownEntry {
+  const _DropdownEntry({
+    required this.value,
+    required this.label,
+    this.description,
+  });
+
+  final int value;
+  final String label;
+  final String? description;
+}
+
 class _AppBarDropdown extends StatelessWidget {
   const _AppBarDropdown({
     required this.label,
@@ -1221,7 +1301,7 @@ class _AppBarDropdown extends StatelessWidget {
 
   final String label;
   final int? value;
-  final List<(int, String)> entries;
+  final List<_DropdownEntry> entries;
   final ValueChanged<int> onChanged;
   final bool enabled;
   final List<_DropdownAction> actions;
@@ -1230,7 +1310,9 @@ class _AppBarDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final selected = entries.any((entry) => entry.$1 == value) ? value : null;
+    final selected = entries.any((entry) => entry.value == value)
+        ? value
+        : null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -1240,6 +1322,7 @@ class _AppBarDropdown extends StatelessWidget {
       child: DropdownButton<int>(
         value: selected,
         isDense: true,
+        itemHeight: null,
         underline: const SizedBox.shrink(),
         borderRadius: BorderRadius.circular(8),
         style: theme.textTheme.bodyMedium,
@@ -1251,14 +1334,11 @@ class _AppBarDropdown extends StatelessWidget {
           ),
         ),
         items: [
-          for (final (id, name) in entries)
+          for (final entry in entries)
             DropdownMenuItem(
-              value: id,
+              value: entry.value,
               enabled: enabled,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 220),
-                child: Text(name, overflow: TextOverflow.ellipsis),
-              ),
+              child: _DropdownEntryLabel(entry: entry),
             ),
           if (actions.isNotEmpty) ...[
             for (var index = 0; index < actions.length; index++)
@@ -1285,7 +1365,7 @@ class _AppBarDropdown extends StatelessWidget {
           onChanged(id);
         },
         selectedItemBuilder: (context) => [
-          for (final (_, name) in entries)
+          for (final entry in entries)
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1298,7 +1378,7 @@ class _AppBarDropdown extends StatelessWidget {
                 const SizedBox(width: 6),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 180),
-                  child: Text(name, overflow: TextOverflow.ellipsis),
+                  child: Text(entry.label, overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
@@ -1306,6 +1386,43 @@ class _AppBarDropdown extends StatelessWidget {
             for (var index = 0; index < actions.length; index++)
               const SizedBox.shrink(),
         ],
+      ),
+    );
+  }
+}
+
+class _DropdownEntryLabel extends StatelessWidget {
+  const _DropdownEntryLabel({required this.entry});
+
+  final _DropdownEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = entry.description;
+    if (description == null || description.isEmpty) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Text(entry.label, overflow: TextOverflow.ellipsis),
+      );
+    }
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 260),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: entry.label, style: theme.textTheme.bodyMedium),
+            TextSpan(
+              text: '\n$description',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

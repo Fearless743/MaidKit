@@ -221,6 +221,10 @@ class CloudSyncService {
         : null;
   }
 
+  /// Returns a current Solarpass access token for first-party services.
+  /// The token remains in secure storage and is refreshed when necessary.
+  Future<String?> accessToken() async => (await _validSession())?.accessToken;
+
   Future<CloudUser> signIn() async {
     try {
       await _signIn();
