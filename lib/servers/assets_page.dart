@@ -18,9 +18,8 @@ class AssetsPage extends StatelessWidget {
   const AssetsPage({super.key});
 
   @override
-  Widget build(BuildContext context) => MaidKitAppBackground(
-    color: Theme.of(context).colorScheme.surface,
-    child: ListView(
+  Widget build(BuildContext context) => MaidKitAppScaffold(
+    body: ListView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       children: const [
         ServerAssetsSection(),

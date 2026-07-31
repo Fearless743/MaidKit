@@ -167,6 +167,11 @@ class MaidKitAppBackground extends ConsumerWidget {
 /// insets intact until the page that owns the content decides to consume them.
 /// The scaffold always paints an opaque Material surface, which keeps iOS
 /// gesture-back transitions from revealing a transparent route underneath.
+///
+/// By default the scaffold consumes the top inset when there is no [appBar].
+/// Shells that host other page scaffolds can pass `topSafeArea: false` so the
+/// content pages manage the top inset themselves, which keeps their surface
+/// painting edge-to-edge behind the status bar.
 class MaidKitAppScaffold extends StatelessWidget {
   const MaidKitAppScaffold({
     super.key,
@@ -180,6 +185,7 @@ class MaidKitAppScaffold extends StatelessWidget {
     this.endDrawer,
     this.extendBody = false,
     this.useSafeArea = true,
+    this.topSafeArea = true,
     this.backgroundColor,
     this.showBackgroundImage = true,
   });
@@ -193,7 +199,15 @@ class MaidKitAppScaffold extends StatelessWidget {
   final Widget? drawer;
   final Widget? endDrawer;
   final bool extendBody;
+
+  /// Master switch for the scaffold-level safe-area handling.
   final bool useSafeArea;
+
+  /// Whether this scaffold consumes the top inset itself. Set to false for
+  /// shells whose body hosts other page scaffolds, so those content pages
+  /// control the top safe area.
+  final bool topSafeArea;
+
   final Color? backgroundColor;
   final bool showBackgroundImage;
 
@@ -208,7 +222,7 @@ class MaidKitAppScaffold extends StatelessWidget {
             showBackgroundImage: showBackgroundImage,
             child: useSafeArea
                 ? SafeArea(
-                    top: appBar == null,
+                    top: topSafeArea && appBar == null,
                     bottom: bottomNavigationBar == null,
                     child: body!,
                   )

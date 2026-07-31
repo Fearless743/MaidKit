@@ -37,17 +37,23 @@ class SessionsWorkspace extends ConsumerWidget {
     final focusedSession = _sessionForTab(sessions, tabs.selectedTab);
 
     return MaidKitAppScaffold(
+      // The pane tab bar paints the top safe area when tabs are open; the
+      // intro below pads itself instead, so the whole workspace stays flat.
+      topSafeArea: false,
       body: Column(
         children: [
           Expanded(
             child: tabs.isEmpty
-                ? _SessionIntro(
-                    servers: servers,
-                    tabs: tabs,
-                    // Full-workspace intro (no pane chrome / no top tab strip).
-                    onOpenTerminal: (server) =>
-                        openTerminalSession(context, ref, server),
-                    onOpenFiles: (server) => _openFiles(context, ref, server),
+                ? SafeArea(
+                    top: true,
+                    child: _SessionIntro(
+                      servers: servers,
+                      tabs: tabs,
+                      // Full-workspace intro (no pane chrome / no top tab strip).
+                      onOpenTerminal: (server) =>
+                          openTerminalSession(context, ref, server),
+                      onOpenFiles: (server) => _openFiles(context, ref, server),
+                    ),
                   )
                 : _SessionLayoutView(tabs: tabs, servers: servers),
           ),
@@ -100,9 +106,14 @@ class _SessionLayoutView extends ConsumerWidget {
     if (root == null) {
       final pane = tabs.focusedPane;
       if (pane == null) return const SizedBox.shrink();
-      return _SessionPaneView(paneId: pane.id, tabs: tabs, servers: servers);
+      return _SessionPaneView(
+        paneId: pane.id,
+        tabs: tabs,
+        servers: servers,
+        atTop: true,
+      );
     }
-    return _LayoutNode(node: root, tabs: tabs, servers: servers);
+    return _LayoutNode(node: root, tabs: tabs, servers: servers, atTop: true);
   }
 }
 
@@ -111,17 +122,27 @@ class _LayoutNode extends ConsumerWidget {
     required this.node,
     required this.tabs,
     required this.servers,
+    required this.atTop,
   });
 
   final SessionLayout node;
   final TerminalTabsState tabs;
   final AsyncValue<List<Server>> servers;
 
+  /// Whether this subtree's tab bar sits on the top edge of the workspace and
+  /// should therefore paint the top safe area with the tab-bar color.
+  final bool atTop;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     switch (node) {
       case SessionLayoutLeaf(:final paneId):
-        return _SessionPaneView(paneId: paneId, tabs: tabs, servers: servers);
+        return _SessionPaneView(
+          paneId: paneId,
+          tabs: tabs,
+          servers: servers,
+          atTop: atTop,
+        );
       case SessionLayoutSplit(
         :final id,
         :final axis,
@@ -134,8 +155,20 @@ class _LayoutNode extends ConsumerWidget {
           ratio: ratio,
           onRatioChanged: (value) =>
               ref.read(terminalTabsProvider.notifier).setSplitRatio(id, value),
-          first: _LayoutNode(node: first, tabs: tabs, servers: servers),
-          second: _LayoutNode(node: second, tabs: tabs, servers: servers),
+          // Horizontal splits (side-by-side) keep both children at the top
+          // edge; vertical splits (stacked) only keep the first child there.
+          first: _LayoutNode(
+            node: first,
+            tabs: tabs,
+            servers: servers,
+            atTop: atTop,
+          ),
+          second: _LayoutNode(
+            node: second,
+            tabs: tabs,
+            servers: servers,
+            atTop: axis == SessionSplitAxis.horizontal ? atTop : false,
+          ),
         );
     }
   }
@@ -246,11 +279,15 @@ class _SessionPaneView extends ConsumerWidget {
     required this.paneId,
     required this.tabs,
     required this.servers,
+    this.atTop = false,
   });
 
   final String paneId;
   final TerminalTabsState tabs;
   final AsyncValue<List<Server>> servers;
+
+  /// Whether this pane's tab bar sits on the top edge of the workspace.
+  final bool atTop;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -273,27 +310,35 @@ class _SessionPaneView extends ConsumerWidget {
             selectedTabId: pane.selectedTabId,
             focused: focused,
             showClosePane: tabs.hasSplits || isEmptyPane,
+            fillTopSafeArea: atTop,
           ),
           Expanded(
-            child: isEmptyPane
-                ? _SessionIntro(
-                    servers: servers,
-                    tabs: tabs,
-                    compact: true,
-                    onOpenTerminal: (server) => openTerminalSession(
-                      context,
-                      ref,
-                      server,
-                      paneId: paneId,
+            // The pane tab bar owns the top safe area; strip it here so tab
+            // bodies (dashboard, server detail, editors) don't re-apply the
+            // status-bar inset and leave a gap below the tab bar.
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              child: isEmptyPane
+                  ? _SessionIntro(
+                      servers: servers,
+                      tabs: tabs,
+                      compact: true,
+                      onOpenTerminal: (server) => openTerminalSession(
+                        context,
+                        ref,
+                        server,
+                        paneId: paneId,
+                      ),
+                      onOpenFiles: (server) =>
+                          _openFiles(context, ref, server, paneId: paneId),
+                    )
+                  : _PaneTabStack(
+                      paneTabs: paneTabs,
+                      selectedTabId: pane.selectedTabId,
+                      paneFocused: focused,
                     ),
-                    onOpenFiles: (server) =>
-                        _openFiles(context, ref, server, paneId: paneId),
-                  )
-                : _PaneTabStack(
-                    paneTabs: paneTabs,
-                    selectedTabId: pane.selectedTabId,
-                    paneFocused: focused,
-                  ),
+            ),
           ),
         ],
       ),
@@ -318,6 +363,7 @@ class _PaneTabBar extends ConsumerWidget {
     required this.selectedTabId,
     required this.focused,
     required this.showClosePane,
+    this.fillTopSafeArea = false,
   });
 
   final String paneId;
@@ -325,6 +371,10 @@ class _PaneTabBar extends ConsumerWidget {
   final String? selectedTabId;
   final bool focused;
   final bool showClosePane;
+
+  /// Whether this tab bar sits on the top edge and should extend its color
+  /// into the top safe area instead of leaving a background-colored strip.
+  final bool fillTopSafeArea;
 
   void _acceptTab(WidgetRef ref, _TabDragData data, {int? toIndex}) {
     ref
@@ -335,147 +385,163 @@ class _PaneTabBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return Material(
       color: focused ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow,
-      child: SizedBox(
-        height: _paneTabBarHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: DragTarget<_TabDragData>(
-                onWillAcceptWithDetails: (details) =>
-                    details.data.tabId.isNotEmpty,
-                onAcceptWithDetails: (details) => _acceptTab(ref, details.data),
-                builder: (context, candidate, rejected) {
-                  final hovering = candidate.isNotEmpty;
-                  return DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: hovering
-                          ? scheme.primary.withValues(alpha: 0.08)
-                          : null,
-                    ),
-                    child: paneTabs.isEmpty
-                        ? Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 12),
-                              child: Text(
-                                hovering
-                                    ? 'sessionsDropTabHere'.tr()
-                                    : 'sessionsNewPane'.tr(),
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ),
-                          )
-                        : ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            padding: EdgeInsets.zero,
-                            // Trailing slot so tabs can be dropped after the last item.
-                            itemCount: paneTabs.length + 1,
-                            itemBuilder: (context, index) {
-                              if (index == paneTabs.length) {
-                                return _TabDropTail(
-                                  hovering: hovering,
-                                  onAccept: (data) => _acceptTab(
-                                    ref,
-                                    data,
-                                    toIndex: paneTabs.length,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (fillTopSafeArea && topInset > 0) SizedBox(height: topInset),
+          SizedBox(
+            height: _paneTabBarHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: DragTarget<_TabDragData>(
+                    onWillAcceptWithDetails: (details) =>
+                        details.data.tabId.isNotEmpty,
+                    onAcceptWithDetails: (details) =>
+                        _acceptTab(ref, details.data),
+                    builder: (context, candidate, rejected) {
+                      final hovering = candidate.isNotEmpty;
+                      return DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: hovering
+                              ? scheme.primary.withValues(alpha: 0.08)
+                              : null,
+                        ),
+                        child: paneTabs.isEmpty
+                            ? Align(
+                                alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Text(
+                                    hovering
+                                        ? 'sessionsDropTabHere'.tr()
+                                        : 'sessionsNewPane'.tr(),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
                                   ),
-                                );
-                              }
-                              final tab = paneTabs[index];
-                              final selected = tab.id == selectedTabId;
-                              return _DraggablePaneTab(
-                                key: ValueKey(tab.id),
-                                tab: tab,
-                                paneId: paneId,
-                                selected: selected,
-                                index: index,
-                                onSelect: () {
-                                  ref
-                                      .read(terminalTabsProvider.notifier)
-                                      .focusPane(paneId);
-                                  ref
-                                      .read(terminalTabsProvider.notifier)
-                                      .select(tab.id);
+                                ),
+                              )
+                            : ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                padding: EdgeInsets.zero,
+                                // Trailing slot so tabs can be dropped after the last item.
+                                itemCount: paneTabs.length + 1,
+                                itemBuilder: (context, index) {
+                                  if (index == paneTabs.length) {
+                                    return _TabDropTail(
+                                      hovering: hovering,
+                                      onAccept: (data) => _acceptTab(
+                                        ref,
+                                        data,
+                                        toIndex: paneTabs.length,
+                                      ),
+                                    );
+                                  }
+                                  final tab = paneTabs[index];
+                                  final selected = tab.id == selectedTabId;
+                                  return _DraggablePaneTab(
+                                    key: ValueKey(tab.id),
+                                    tab: tab,
+                                    paneId: paneId,
+                                    selected: selected,
+                                    index: index,
+                                    onSelect: () {
+                                      ref
+                                          .read(terminalTabsProvider.notifier)
+                                          .focusPane(paneId);
+                                      ref
+                                          .read(terminalTabsProvider.notifier)
+                                          .select(tab.id);
+                                    },
+                                    onClose: () => ref
+                                        .read(terminalTabsProvider.notifier)
+                                        .close(tab.id),
+                                    onAccept: (data, insertIndex) => _acceptTab(
+                                      ref,
+                                      data,
+                                      toIndex: insertIndex,
+                                    ),
+                                  );
                                 },
-                                onClose: () => ref
-                                    .read(terminalTabsProvider.notifier)
-                                    .close(tab.id),
-                                onAccept: (data, insertIndex) =>
-                                    _acceptTab(ref, data, toIndex: insertIndex),
-                              );
-                            },
-                          ),
-                  );
-                },
-              ),
-            ),
-            IconButton(
-              tooltip: 'sessionsSplitRight'.tr(),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: _paneTabBarHeight,
-                minHeight: _paneTabBarHeight,
-              ),
-              onPressed: () {
-                ref.read(terminalTabsProvider.notifier).focusPane(paneId);
-                ref
-                    .read(terminalTabsProvider.notifier)
-                    .splitEmpty(SessionSplitAxis.horizontal);
-              },
-              icon: const Icon(Symbols.vertical_split, size: 20),
-            ),
-            IconButton(
-              tooltip: 'sessionsSplitDown'.tr(),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: _paneTabBarHeight,
-                minHeight: _paneTabBarHeight,
-              ),
-              onPressed: () {
-                ref.read(terminalTabsProvider.notifier).focusPane(paneId);
-                ref
-                    .read(terminalTabsProvider.notifier)
-                    .splitEmpty(SessionSplitAxis.vertical);
-              },
-              icon: const Icon(Symbols.horizontal_split, size: 20),
-            ),
-            IconButton(
-              tooltip: 'sessionsSessionActions'.tr(),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: _paneTabBarHeight,
-                minHeight: _paneTabBarHeight,
-              ),
-              onPressed: () {
-                ref.read(terminalTabsProvider.notifier).focusPane(paneId);
-                showTerminalCommandPalette(context, ref);
-              },
-              icon: const Icon(Symbols.add, size: 20),
-            ),
-            if (showClosePane)
-              IconButton(
-                tooltip: 'sessionsClosePane'.tr(),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: _paneTabBarHeight,
-                  minHeight: _paneTabBarHeight,
+                              ),
+                      );
+                    },
+                  ),
                 ),
-                onPressed: () =>
-                    ref.read(terminalTabsProvider.notifier).closePane(paneId),
-                icon: const Icon(Symbols.close, size: 18),
-              ),
-            const SizedBox(width: 4),
-          ],
-        ),
+                IconButton(
+                  tooltip: 'sessionsSplitRight'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: _paneTabBarHeight,
+                    minHeight: _paneTabBarHeight,
+                  ),
+                  onPressed: () {
+                    ref.read(terminalTabsProvider.notifier).focusPane(paneId);
+                    ref
+                        .read(terminalTabsProvider.notifier)
+                        .splitEmpty(SessionSplitAxis.horizontal);
+                  },
+                  icon: const Icon(Symbols.vertical_split, size: 20),
+                ),
+                IconButton(
+                  tooltip: 'sessionsSplitDown'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: _paneTabBarHeight,
+                    minHeight: _paneTabBarHeight,
+                  ),
+                  onPressed: () {
+                    ref.read(terminalTabsProvider.notifier).focusPane(paneId);
+                    ref
+                        .read(terminalTabsProvider.notifier)
+                        .splitEmpty(SessionSplitAxis.vertical);
+                  },
+                  icon: const Icon(Symbols.horizontal_split, size: 20),
+                ),
+                IconButton(
+                  tooltip: 'sessionsSessionActions'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: _paneTabBarHeight,
+                    minHeight: _paneTabBarHeight,
+                  ),
+                  onPressed: () {
+                    ref.read(terminalTabsProvider.notifier).focusPane(paneId);
+                    showTerminalCommandPalette(context, ref);
+                  },
+                  icon: const Icon(Symbols.add, size: 20),
+                ),
+                if (showClosePane)
+                  IconButton(
+                    tooltip: 'sessionsClosePane'.tr(),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: _paneTabBarHeight,
+                      minHeight: _paneTabBarHeight,
+                    ),
+                    onPressed: () => ref
+                        .read(terminalTabsProvider.notifier)
+                        .closePane(paneId),
+                    icon: const Icon(Symbols.close, size: 18),
+                  ),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
