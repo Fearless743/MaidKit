@@ -792,25 +792,35 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // The selectors need about 500 logical pixels. Below this width they
-        // move into the content area, where Wrap can reflow them safely.
         final compact = constraints.maxWidth < 900;
         final selectors = _buildProviderModelSelectors(
           providers: providers,
           models: models,
           selectedProviderId: selectedProviderId,
           selectedModelId: selectedModelId,
+          compact: compact,
+        );
+        final historyButton = IconButton(
+          tooltip: 'agentConversations'.tr(),
+          onPressed: () => _showSidebar.value = !_showSidebar.value,
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Symbols.history),
         );
         return MaidKitAppScaffold(
           appBar: AppBar(
             actions: [
-              if (!compact) ...selectors,
-              IconButton(
-                tooltip: 'agentConversations'.tr(),
-                onPressed: () => _showSidebar.value = !_showSidebar.value,
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Symbols.history),
-              ),
+              if (compact)
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [...selectors, historyButton],
+                  ),
+                )
+              else ...[
+                ...selectors,
+                historyButton,
+              ],
               const SizedBox(width: 8),
             ],
           ),
@@ -834,7 +844,6 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   servers: servers,
                   scheme: scheme,
                   compact: compact,
-                  selectors: compact ? selectors : const [],
                 ),
               ),
             ),
@@ -849,6 +858,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     required List<AgentProviderModel> models,
     required int? selectedProviderId,
     required int? selectedModelId,
+    required bool compact,
   }) {
     final selectedProvider = selectedProviderId == null
         ? null
@@ -874,6 +884,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             _DropdownEntry(value: provider.id, label: provider.name),
         ],
         enabled: !_working,
+        compact: compact,
         onChanged: (id) => setState(() {
           _activeProviderId = id;
           _activeModelId = null;
@@ -906,6 +917,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
           value: selectedModelId,
           entries: modelEntries,
           enabled: !_working && selectedProviderId != null,
+          compact: compact,
           onChanged: (id) => setState(() {
             _activeModelId = id;
             _persistSelection();
@@ -1008,18 +1020,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     required List<Server> servers,
     required ColorScheme scheme,
     required bool compact,
-    required List<Widget> selectors,
   }) {
     return Padding(
       padding: EdgeInsets.fromLTRB(compact ? 16 : 24, 0, compact ? 16 : 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (selectors.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: selectors),
-            const SizedBox(height: 8),
-          ],
           Expanded(
             child: Stack(
               children: [
@@ -1283,6 +1289,7 @@ class _AppBarDropdown extends StatelessWidget {
     required this.onChanged,
     this.enabled = true,
     this.actions = const [],
+    this.compact = false,
   });
 
   final String label;
@@ -1291,6 +1298,7 @@ class _AppBarDropdown extends StatelessWidget {
   final ValueChanged<int> onChanged;
   final bool enabled;
   final List<_DropdownAction> actions;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1299,93 +1307,108 @@ class _AppBarDropdown extends StatelessWidget {
     final selected = entries.any((entry) => entry.value == value)
         ? value
         : null;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: DropdownButton<int>(
-        value: selected,
-        isDense: true,
-        itemHeight: null,
-        underline: const SizedBox.shrink(),
-        borderRadius: BorderRadius.circular(8),
-        style: theme.textTheme.bodyMedium,
-        icon: const Icon(Symbols.expand_more, size: 18),
-        hint: Text(
-          label,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+    return Tooltip(
+      message: label,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 12,
+          vertical: compact ? 2 : 4,
         ),
-        items: [
-          for (final entry in entries)
-            DropdownMenuItem(
-              value: entry.value,
-              enabled: enabled,
-              child: _DropdownEntryLabel(entry: entry),
+        decoration: BoxDecoration(
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: DropdownButton<int>(
+          value: selected,
+          isDense: true,
+          itemHeight: null,
+          underline: const SizedBox.shrink(),
+          borderRadius: BorderRadius.circular(8),
+          menuWidth: compact ? 220 : null,
+          style: theme.textTheme.bodyMedium,
+          icon: const Icon(Symbols.expand_more, size: 18),
+          hint: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
-          if (actions.isNotEmpty) ...[
-            for (var index = 0; index < actions.length; index++)
+          ),
+          items: [
+            for (final entry in entries)
               DropdownMenuItem(
-                value: -index - 1,
-                enabled: actions[index].enabled,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(actions[index].icon, size: 18),
-                    const SizedBox(width: 10),
-                    Text(actions[index].label),
-                  ],
-                ),
+                value: entry.value,
+                enabled: enabled,
+                child: _DropdownEntryLabel(entry: entry, compact: compact),
               ),
-          ],
-        ],
-        onChanged: (id) {
-          if (id == null) return;
-          if (id < 0) {
-            actions[-id - 1].onSelected();
-            return;
-          }
-          onChanged(id);
-        },
-        selectedItemBuilder: (context) => [
-          for (final entry in entries)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+            if (actions.isNotEmpty) ...[
+              for (var index = 0; index < actions.length; index++)
+                DropdownMenuItem(
+                  value: -index - 1,
+                  enabled: actions[index].enabled,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(actions[index].icon, size: 18),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          actions[index].label,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 180),
-                  child: Text(entry.label, overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-          if (actions.isNotEmpty)
-            for (var index = 0; index < actions.length; index++)
-              const SizedBox.shrink(),
-        ],
+            ],
+          ],
+          onChanged: (id) {
+            if (id == null) return;
+            if (id < 0) {
+              actions[-id - 1].onSelected();
+              return;
+            }
+            onChanged(id);
+          },
+          selectedItemBuilder: (context) => [
+            for (final entry in entries)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!compact) ...[
+                    Text(
+                      label,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: compact ? 96 : 180),
+                    child: Text(entry.label, overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+            if (actions.isNotEmpty)
+              for (var index = 0; index < actions.length; index++)
+                const SizedBox.shrink(),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _DropdownEntryLabel extends StatelessWidget {
-  const _DropdownEntryLabel({required this.entry});
+  const _DropdownEntryLabel({required this.entry, this.compact = false});
 
   final _DropdownEntry entry;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 220),
+      constraints: BoxConstraints(maxWidth: compact ? 120 : 220),
       child: Text(entry.label, overflow: TextOverflow.ellipsis),
     );
   }

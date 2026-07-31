@@ -281,7 +281,7 @@ class _ServerGridState extends State<_ServerGrid> {
           child: disconnectedServers.length > 1
               ? Padding(
                   key: const ValueKey('servers-reconnect-all'),
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                   child: _ReconnectAllCard(
                     count: disconnectedServers.length,
                     isReconnecting: _isReconnecting,
