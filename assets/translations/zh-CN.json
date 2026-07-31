@@ -154,6 +154,7 @@
   "settingsVaultLastSync": "最后同步于 {}",
   "settingsVaultNotYet": "尚未同步",
   "settingsVaultSyncNow": "立即同步",
+  "settingsVaultSyncStarted": "已在后台开始同步。",
   "settingsVaultSyncPasswordTitle": "同步此保险库",
   "settingsVaultSyncPasswordHint": "请输入金库密码以进行同步。",
   "settingsVaultSyncPasswordRequired": "请先使用金库密码解锁，然后再同步。",

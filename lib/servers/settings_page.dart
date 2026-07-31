@@ -1230,6 +1230,9 @@ class SettingsPage extends ConsumerWidget {
         password = entered;
       }
       final syncPassword = password;
+      if (context.mounted) {
+        showSnackBar('settingsVaultSyncStarted'.tr());
+      }
       final backup = DatabaseBackupService(ref.read(databaseProvider), vault);
       final service = ref.read(cloudSyncServiceForVaultProvider(vaultId));
       final archive = await backup.exportArchive(syncPassword);

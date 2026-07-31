@@ -45,6 +45,8 @@ class VaultMetadata extends Table {
   TextColumn get wrappedDataKeyNonce => text()();
   TextColumn get verifier => text()();
   TextColumn get verifierNonce => text()();
+  TextColumn get syncPassphraseCiphertext => text().nullable()();
+  TextColumn get syncPassphraseNonce => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 }
 
@@ -139,7 +141,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -238,6 +240,16 @@ class AppDatabase extends _$AppDatabase {
           )
           WHERE encrypted_credential IS NOT NULL AND credential_nonce IS NOT NULL
         ''');
+      }
+      if (from < 10) {
+        // Keep the encrypted sync passphrase with the vault instead of only in
+        // the OS keychain, so biometric unlock (which recovers the data key)
+        // can always decrypt it for cloud sync.
+        await m.addColumn(
+          vaultMetadata,
+          vaultMetadata.syncPassphraseCiphertext,
+        );
+        await m.addColumn(vaultMetadata, vaultMetadata.syncPassphraseNonce);
       }
     },
   );

@@ -50,24 +50,55 @@ class VaultService {
     if (cached != null) return cached;
     final dataKey = _dataKey;
     if (dataKey == null) return null;
-    final raw = await _secureStorage.read(key: _syncPassphraseKey);
-    if (raw == null) return null;
+
+    String? passphrase;
+    String? raw;
     try {
-      final value = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      final passphrase = utf8.decode(
-        await _decryptBytes(
-          _decode(value['ciphertext'] as String),
-          _decode(value['nonce'] as String),
+      final metadata = await _metadata();
+      if (metadata.syncPassphraseCiphertext != null &&
+          metadata.syncPassphraseNonce != null) {
+        passphrase = await _decryptStoredPassphrase(
+          metadata.syncPassphraseCiphertext!,
+          metadata.syncPassphraseNonce!,
           dataKey,
-          'sync-passphrase',
-        ),
-      );
-      _syncPassphrases[_vaultId] = passphrase;
-      return passphrase;
+        );
+      }
     } catch (_) {
-      await _secureStorage.delete(key: _syncPassphraseKey);
-      return null;
+      passphrase = null;
     }
+    if (passphrase == null) {
+      raw = await _secureStorage.read(key: _syncPassphraseKey);
+      if (raw == null) return null;
+      try {
+        final value = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        passphrase = await _decryptStoredPassphrase(
+          value['ciphertext'] as String,
+          value['nonce'] as String,
+          dataKey,
+        );
+      } catch (_) {
+        await _secureStorage.delete(key: _syncPassphraseKey);
+        return null;
+      }
+    }
+    _syncPassphrases[_vaultId] = passphrase;
+    // Migrate a keychain-only copy into the vault so it can never be lost.
+    if (raw != null) await _cacheSyncPassphrase(passphrase);
+    return passphrase;
+  }
+
+  Future<String> _decryptStoredPassphrase(
+    String ciphertext,
+    String nonce,
+    SecretKey dataKey,
+  ) async {
+    final clear = await _decryptBytes(
+      _decode(ciphertext),
+      _decode(nonce),
+      dataKey,
+      'sync-passphrase',
+    );
+    return utf8.decode(clear);
   }
 
   Future<bool> hasVault() async =>
@@ -241,12 +272,22 @@ class VaultService {
       'sync-passphrase',
     );
     _syncPassphrases[_vaultId] = passphrase;
+    final ciphertext = _encode(_pack(box));
+    final nonce = _encode(box.nonce);
     await _secureStorage.write(
       key: _syncPassphraseKey,
-      value: jsonEncode({
-        'ciphertext': _encode(_pack(box)),
-        'nonce': _encode(box.nonce),
-      }),
+      value: jsonEncode({'ciphertext': ciphertext, 'nonce': nonce}),
+    );
+    // Persist with the vault so biometric unlock can always recover it via the
+    // data key, independent of the OS keychain.
+    final metadata = await _metadata();
+    await (_database.update(
+      _database.vaultMetadata,
+    )..where((table) => table.id.equals(metadata.id))).write(
+      VaultMetadataCompanion(
+        syncPassphraseCiphertext: Value(ciphertext),
+        syncPassphraseNonce: Value(nonce),
+      ),
     );
   }
 

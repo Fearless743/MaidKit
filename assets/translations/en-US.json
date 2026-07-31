@@ -157,6 +157,7 @@
   "settingsVaultLastSync": "Last sync: {}",
   "settingsVaultNotYet": "Not yet",
   "settingsVaultSyncNow": "Sync now",
+  "settingsVaultSyncStarted": "Sync started in the background.",
   "settingsVaultSyncPasswordTitle": "Sync this vault",
   "settingsVaultSyncPasswordHint": "Enter your vault password to sync.",
   "settingsVaultSyncPasswordRequired": "Unlock this vault with its password before syncing.",

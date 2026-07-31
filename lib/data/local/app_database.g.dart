@@ -1604,6 +1604,28 @@ class $VaultMetadataTable extends VaultMetadata
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _syncPassphraseCiphertextMeta =
+      const VerificationMeta('syncPassphraseCiphertext');
+  @override
+  late final GeneratedColumn<String> syncPassphraseCiphertext =
+      GeneratedColumn<String>(
+        'sync_passphrase_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _syncPassphraseNonceMeta =
+      const VerificationMeta('syncPassphraseNonce');
+  @override
+  late final GeneratedColumn<String> syncPassphraseNonce =
+      GeneratedColumn<String>(
+        'sync_passphrase_nonce',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1624,6 +1646,8 @@ class $VaultMetadataTable extends VaultMetadata
     wrappedDataKeyNonce,
     verifier,
     verifierNonce,
+    syncPassphraseCiphertext,
+    syncPassphraseNonce,
     createdAt,
   ];
   @override
@@ -1701,6 +1725,24 @@ class $VaultMetadataTable extends VaultMetadata
     } else if (isInserting) {
       context.missing(_verifierNonceMeta);
     }
+    if (data.containsKey('sync_passphrase_ciphertext')) {
+      context.handle(
+        _syncPassphraseCiphertextMeta,
+        syncPassphraseCiphertext.isAcceptableOrUnknown(
+          data['sync_passphrase_ciphertext']!,
+          _syncPassphraseCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_passphrase_nonce')) {
+      context.handle(
+        _syncPassphraseNonceMeta,
+        syncPassphraseNonce.isAcceptableOrUnknown(
+          data['sync_passphrase_nonce']!,
+          _syncPassphraseNonceMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1746,6 +1788,14 @@ class $VaultMetadataTable extends VaultMetadata
         DriftSqlType.string,
         data['${effectivePrefix}verifier_nonce'],
       )!,
+      syncPassphraseCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_passphrase_ciphertext'],
+      ),
+      syncPassphraseNonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_passphrase_nonce'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1768,6 +1818,8 @@ class VaultMetadataData extends DataClass
   final String wrappedDataKeyNonce;
   final String verifier;
   final String verifierNonce;
+  final String? syncPassphraseCiphertext;
+  final String? syncPassphraseNonce;
   final DateTime createdAt;
   const VaultMetadataData({
     required this.id,
@@ -1777,6 +1829,8 @@ class VaultMetadataData extends DataClass
     required this.wrappedDataKeyNonce,
     required this.verifier,
     required this.verifierNonce,
+    this.syncPassphraseCiphertext,
+    this.syncPassphraseNonce,
     required this.createdAt,
   });
   @override
@@ -1789,6 +1843,14 @@ class VaultMetadataData extends DataClass
     map['wrapped_data_key_nonce'] = Variable<String>(wrappedDataKeyNonce);
     map['verifier'] = Variable<String>(verifier);
     map['verifier_nonce'] = Variable<String>(verifierNonce);
+    if (!nullToAbsent || syncPassphraseCiphertext != null) {
+      map['sync_passphrase_ciphertext'] = Variable<String>(
+        syncPassphraseCiphertext,
+      );
+    }
+    if (!nullToAbsent || syncPassphraseNonce != null) {
+      map['sync_passphrase_nonce'] = Variable<String>(syncPassphraseNonce);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1802,6 +1864,12 @@ class VaultMetadataData extends DataClass
       wrappedDataKeyNonce: Value(wrappedDataKeyNonce),
       verifier: Value(verifier),
       verifierNonce: Value(verifierNonce),
+      syncPassphraseCiphertext: syncPassphraseCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncPassphraseCiphertext),
+      syncPassphraseNonce: syncPassphraseNonce == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncPassphraseNonce),
       createdAt: Value(createdAt),
     );
   }
@@ -1821,6 +1889,12 @@ class VaultMetadataData extends DataClass
       ),
       verifier: serializer.fromJson<String>(json['verifier']),
       verifierNonce: serializer.fromJson<String>(json['verifierNonce']),
+      syncPassphraseCiphertext: serializer.fromJson<String?>(
+        json['syncPassphraseCiphertext'],
+      ),
+      syncPassphraseNonce: serializer.fromJson<String?>(
+        json['syncPassphraseNonce'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1835,6 +1909,10 @@ class VaultMetadataData extends DataClass
       'wrappedDataKeyNonce': serializer.toJson<String>(wrappedDataKeyNonce),
       'verifier': serializer.toJson<String>(verifier),
       'verifierNonce': serializer.toJson<String>(verifierNonce),
+      'syncPassphraseCiphertext': serializer.toJson<String?>(
+        syncPassphraseCiphertext,
+      ),
+      'syncPassphraseNonce': serializer.toJson<String?>(syncPassphraseNonce),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1847,6 +1925,8 @@ class VaultMetadataData extends DataClass
     String? wrappedDataKeyNonce,
     String? verifier,
     String? verifierNonce,
+    Value<String?> syncPassphraseCiphertext = const Value.absent(),
+    Value<String?> syncPassphraseNonce = const Value.absent(),
     DateTime? createdAt,
   }) => VaultMetadataData(
     id: id ?? this.id,
@@ -1856,6 +1936,12 @@ class VaultMetadataData extends DataClass
     wrappedDataKeyNonce: wrappedDataKeyNonce ?? this.wrappedDataKeyNonce,
     verifier: verifier ?? this.verifier,
     verifierNonce: verifierNonce ?? this.verifierNonce,
+    syncPassphraseCiphertext: syncPassphraseCiphertext.present
+        ? syncPassphraseCiphertext.value
+        : this.syncPassphraseCiphertext,
+    syncPassphraseNonce: syncPassphraseNonce.present
+        ? syncPassphraseNonce.value
+        : this.syncPassphraseNonce,
     createdAt: createdAt ?? this.createdAt,
   );
   VaultMetadataData copyWithCompanion(VaultMetadataCompanion data) {
@@ -1875,6 +1961,12 @@ class VaultMetadataData extends DataClass
       verifierNonce: data.verifierNonce.present
           ? data.verifierNonce.value
           : this.verifierNonce,
+      syncPassphraseCiphertext: data.syncPassphraseCiphertext.present
+          ? data.syncPassphraseCiphertext.value
+          : this.syncPassphraseCiphertext,
+      syncPassphraseNonce: data.syncPassphraseNonce.present
+          ? data.syncPassphraseNonce.value
+          : this.syncPassphraseNonce,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1889,6 +1981,8 @@ class VaultMetadataData extends DataClass
           ..write('wrappedDataKeyNonce: $wrappedDataKeyNonce, ')
           ..write('verifier: $verifier, ')
           ..write('verifierNonce: $verifierNonce, ')
+          ..write('syncPassphraseCiphertext: $syncPassphraseCiphertext, ')
+          ..write('syncPassphraseNonce: $syncPassphraseNonce, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1903,6 +1997,8 @@ class VaultMetadataData extends DataClass
     wrappedDataKeyNonce,
     verifier,
     verifierNonce,
+    syncPassphraseCiphertext,
+    syncPassphraseNonce,
     createdAt,
   );
   @override
@@ -1916,6 +2012,8 @@ class VaultMetadataData extends DataClass
           other.wrappedDataKeyNonce == this.wrappedDataKeyNonce &&
           other.verifier == this.verifier &&
           other.verifierNonce == this.verifierNonce &&
+          other.syncPassphraseCiphertext == this.syncPassphraseCiphertext &&
+          other.syncPassphraseNonce == this.syncPassphraseNonce &&
           other.createdAt == this.createdAt);
 }
 
@@ -1927,6 +2025,8 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
   final Value<String> wrappedDataKeyNonce;
   final Value<String> verifier;
   final Value<String> verifierNonce;
+  final Value<String?> syncPassphraseCiphertext;
+  final Value<String?> syncPassphraseNonce;
   final Value<DateTime> createdAt;
   const VaultMetadataCompanion({
     this.id = const Value.absent(),
@@ -1936,6 +2036,8 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
     this.wrappedDataKeyNonce = const Value.absent(),
     this.verifier = const Value.absent(),
     this.verifierNonce = const Value.absent(),
+    this.syncPassphraseCiphertext = const Value.absent(),
+    this.syncPassphraseNonce = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   VaultMetadataCompanion.insert({
@@ -1946,6 +2048,8 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
     required String wrappedDataKeyNonce,
     required String verifier,
     required String verifierNonce,
+    this.syncPassphraseCiphertext = const Value.absent(),
+    this.syncPassphraseNonce = const Value.absent(),
     required DateTime createdAt,
   }) : formatVersion = Value(formatVersion),
        salt = Value(salt),
@@ -1962,6 +2066,8 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
     Expression<String>? wrappedDataKeyNonce,
     Expression<String>? verifier,
     Expression<String>? verifierNonce,
+    Expression<String>? syncPassphraseCiphertext,
+    Expression<String>? syncPassphraseNonce,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -1973,6 +2079,10 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
         'wrapped_data_key_nonce': wrappedDataKeyNonce,
       if (verifier != null) 'verifier': verifier,
       if (verifierNonce != null) 'verifier_nonce': verifierNonce,
+      if (syncPassphraseCiphertext != null)
+        'sync_passphrase_ciphertext': syncPassphraseCiphertext,
+      if (syncPassphraseNonce != null)
+        'sync_passphrase_nonce': syncPassphraseNonce,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -1985,6 +2095,8 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
     Value<String>? wrappedDataKeyNonce,
     Value<String>? verifier,
     Value<String>? verifierNonce,
+    Value<String?>? syncPassphraseCiphertext,
+    Value<String?>? syncPassphraseNonce,
     Value<DateTime>? createdAt,
   }) {
     return VaultMetadataCompanion(
@@ -1995,6 +2107,9 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
       wrappedDataKeyNonce: wrappedDataKeyNonce ?? this.wrappedDataKeyNonce,
       verifier: verifier ?? this.verifier,
       verifierNonce: verifierNonce ?? this.verifierNonce,
+      syncPassphraseCiphertext:
+          syncPassphraseCiphertext ?? this.syncPassphraseCiphertext,
+      syncPassphraseNonce: syncPassphraseNonce ?? this.syncPassphraseNonce,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -2025,6 +2140,16 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
     if (verifierNonce.present) {
       map['verifier_nonce'] = Variable<String>(verifierNonce.value);
     }
+    if (syncPassphraseCiphertext.present) {
+      map['sync_passphrase_ciphertext'] = Variable<String>(
+        syncPassphraseCiphertext.value,
+      );
+    }
+    if (syncPassphraseNonce.present) {
+      map['sync_passphrase_nonce'] = Variable<String>(
+        syncPassphraseNonce.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2041,6 +2166,8 @@ class VaultMetadataCompanion extends UpdateCompanion<VaultMetadataData> {
           ..write('wrappedDataKeyNonce: $wrappedDataKeyNonce, ')
           ..write('verifier: $verifier, ')
           ..write('verifierNonce: $verifierNonce, ')
+          ..write('syncPassphraseCiphertext: $syncPassphraseCiphertext, ')
+          ..write('syncPassphraseNonce: $syncPassphraseNonce, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -5061,6 +5188,8 @@ typedef $$VaultMetadataTableCreateCompanionBuilder =
       required String wrappedDataKeyNonce,
       required String verifier,
       required String verifierNonce,
+      Value<String?> syncPassphraseCiphertext,
+      Value<String?> syncPassphraseNonce,
       required DateTime createdAt,
     });
 typedef $$VaultMetadataTableUpdateCompanionBuilder =
@@ -5072,6 +5201,8 @@ typedef $$VaultMetadataTableUpdateCompanionBuilder =
       Value<String> wrappedDataKeyNonce,
       Value<String> verifier,
       Value<String> verifierNonce,
+      Value<String?> syncPassphraseCiphertext,
+      Value<String?> syncPassphraseNonce,
       Value<DateTime> createdAt,
     });
 
@@ -5116,6 +5247,16 @@ class $$VaultMetadataTableFilterComposer
 
   ColumnFilters<String> get verifierNonce => $composableBuilder(
     column: $table.verifierNonce,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncPassphraseCiphertext => $composableBuilder(
+    column: $table.syncPassphraseCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncPassphraseNonce => $composableBuilder(
+    column: $table.syncPassphraseNonce,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5169,6 +5310,16 @@ class $$VaultMetadataTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get syncPassphraseCiphertext => $composableBuilder(
+    column: $table.syncPassphraseCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncPassphraseNonce => $composableBuilder(
+    column: $table.syncPassphraseNonce,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -5210,6 +5361,16 @@ class $$VaultMetadataTableAnnotationComposer
 
   GeneratedColumn<String> get verifierNonce => $composableBuilder(
     column: $table.verifierNonce,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncPassphraseCiphertext => $composableBuilder(
+    column: $table.syncPassphraseCiphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncPassphraseNonce => $composableBuilder(
+    column: $table.syncPassphraseNonce,
     builder: (column) => column,
   );
 
@@ -5259,6 +5420,8 @@ class $$VaultMetadataTableTableManager
                 Value<String> wrappedDataKeyNonce = const Value.absent(),
                 Value<String> verifier = const Value.absent(),
                 Value<String> verifierNonce = const Value.absent(),
+                Value<String?> syncPassphraseCiphertext = const Value.absent(),
+                Value<String?> syncPassphraseNonce = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => VaultMetadataCompanion(
                 id: id,
@@ -5268,6 +5431,8 @@ class $$VaultMetadataTableTableManager
                 wrappedDataKeyNonce: wrappedDataKeyNonce,
                 verifier: verifier,
                 verifierNonce: verifierNonce,
+                syncPassphraseCiphertext: syncPassphraseCiphertext,
+                syncPassphraseNonce: syncPassphraseNonce,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -5279,6 +5444,8 @@ class $$VaultMetadataTableTableManager
                 required String wrappedDataKeyNonce,
                 required String verifier,
                 required String verifierNonce,
+                Value<String?> syncPassphraseCiphertext = const Value.absent(),
+                Value<String?> syncPassphraseNonce = const Value.absent(),
                 required DateTime createdAt,
               }) => VaultMetadataCompanion.insert(
                 id: id,
@@ -5288,6 +5455,8 @@ class $$VaultMetadataTableTableManager
                 wrappedDataKeyNonce: wrappedDataKeyNonce,
                 verifier: verifier,
                 verifierNonce: verifierNonce,
+                syncPassphraseCiphertext: syncPassphraseCiphertext,
+                syncPassphraseNonce: syncPassphraseNonce,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
