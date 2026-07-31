@@ -214,15 +214,18 @@ class XtermTerminalSessionAdapterFactory
   const XtermTerminalSessionAdapterFactory({
     required this.colorScheme,
     this.transparentBackground = false,
+    this.fontFamily = MaidKitFonts.mono,
   });
 
   final TerminalColorScheme colorScheme;
   final bool transparentBackground;
+  final String fontFamily;
 
   @override
   TerminalSessionAdapter create() => XtermTerminalSessionAdapter(
     colorScheme: colorScheme,
     transparentBackground: transparentBackground,
+    fontFamily: fontFamily,
   );
 }
 
@@ -239,6 +242,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   XtermTerminalSessionAdapter({
     required this.colorScheme,
     this.transparentBackground = false,
+    this.fontFamily = MaidKitFonts.mono,
   }) : _terminal = Terminal(maxLines: 10000) {
     _terminal.onOutput = (data) {
       if (!_disposed) {
@@ -263,6 +267,7 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
   final Terminal _terminal;
   final TerminalColorScheme colorScheme;
   final bool transparentBackground;
+  final String fontFamily;
   final TerminalController _controller = TerminalController();
   final ScrollController _scrollController = ScrollController();
   final _outgoingBytes = StreamController<Uint8List>.broadcast();
@@ -463,9 +468,9 @@ class XtermTerminalSessionAdapter implements TerminalSessionAdapter {
             : 1,
         theme: theme,
         padding: const EdgeInsets.all(12),
-        textStyle: const TerminalStyle(
-          fontFamily: MaidKitFonts.mono,
-          fontFamilyFallback: [
+        textStyle: TerminalStyle(
+          fontFamily: fontFamily,
+          fontFamilyFallback: const [
             'Menlo',
             'Monaco',
             'Consolas',

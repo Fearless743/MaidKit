@@ -112,6 +112,104 @@ void main() {
     expect(settings.brandingEnvironmentEnabled, isFalse);
   });
 
+  test('persists the terminal font family', () async {
+    final settings = InMemoryTerminalAdapterSettings();
+    final container = ProviderContainer(
+      overrides: [
+        terminalAdapterPreferencesProvider.overrideWithValue(settings),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(
+      container.read(terminalFontFamilyProvider),
+      TerminalFonts.defaultFamily,
+    );
+
+    await container
+        .read(terminalFontFamilyProvider.notifier)
+        .setFontFamily('Fira Code');
+
+    expect(container.read(terminalFontFamilyProvider), 'Fira Code');
+    expect(settings.terminalFontFamily, 'Fira Code');
+  });
+
+  test('dedupes font variants into a single regular entry per family', () {
+    final options = TerminalFonts.dedupe(const [
+      'SFMono-Regular',
+      'SFMono-Bold',
+      'SFMono-Light',
+      'Menlo',
+      'JetBrainsMono-Regular',
+      'JetBrainsMono-BoldItalic',
+      'JetBrainsMono-Medium',
+      'AndaleMono',
+    ]);
+
+    final byLabel = {for (final option in options) option.label: option};
+    expect(byLabel['SFMono']?.family, 'SFMono-Regular');
+    expect(byLabel['JetBrainsMono']?.family, 'JetBrainsMono-Regular');
+    expect(byLabel['Menlo']?.family, 'Menlo');
+    expect(byLabel['AndaleMono']?.family, 'AndaleMono');
+    expect(options, hasLength(4));
+  });
+
+  test('strips only the trailing variant from multi-dash family names', () {
+    final options = TerminalFonts.dedupe(const [
+      'MapleMono-NF-CN-Regular',
+      'MapleMono-NF-CN-ExtraLight',
+      'MapleMono-NF-CN-ExtraLightItalic',
+      'MapleMono-NF-CN-Bold',
+      'MapleMono-NF-Regular',
+      'MapleMono-NF-Bold',
+    ]);
+
+    final byLabel = {for (final option in options) option.label: option};
+    expect(byLabel['MapleMono-NF-CN']?.family, 'MapleMono-NF-CN-Regular');
+    expect(byLabel['MapleMono-NF']?.family, 'MapleMono-NF-Regular');
+    expect(options, hasLength(2));
+  });
+
+  test('collapses compound and width/style variants', () {
+    final options = TerminalFonts.dedupe(const [
+      'FiraCodeNerdFont-Regular',
+      'FiraCodeNerdFont-Retina',
+      'CaskaydiaMonoNerdFont-Regular',
+      'CaskaydiaMonoNerdFont-SemiLight',
+      'CaskaydiaMonoNerdFont-SemiLightItalic',
+      'MartianMonoNerdFont-Regular',
+      'MartianMonoNerdFont-CondensedBold',
+      'MartianMonoNerdFont-CondensedRegular',
+      'BlexMonoNerdFont-Regular',
+      'BlexMonoNerdFont-Text',
+      'BlexMonoNerdFont-TextItalic',
+      'BlexMonoNerdFont-ExtraLightItalic',
+    ]);
+
+    final byLabel = {for (final option in options) option.label: option};
+    expect(byLabel['FiraCodeNerdFont']?.family, 'FiraCodeNerdFont-Regular');
+    expect(
+      byLabel['CaskaydiaMonoNerdFont']?.family,
+      'CaskaydiaMonoNerdFont-Regular',
+    );
+    expect(
+      byLabel['MartianMonoNerdFont']?.family,
+      'MartianMonoNerdFont-Regular',
+    );
+    expect(byLabel['BlexMonoNerdFont']?.family, 'BlexMonoNerdFont-Regular');
+    expect(options, hasLength(4));
+  });
+
+  test('prefers a plain family file when no regular variant exists', () {
+    final options = TerminalFonts.dedupe(const [
+      'CascadiaCode-Bold',
+      'CascadiaCode-Black',
+    ]);
+    expect(options, hasLength(1));
+    expect(options.single.label, 'CascadiaCode');
+    expect(options.single.family, 'CascadiaCode-Black');
+  });
+
   test('applies the selected palette to both terminal renderers', () async {
     final scheme = TerminalColorSchemes.catppuccinMocha;
     final xtermAdapter = XtermTerminalSessionAdapter(colorScheme: scheme);

@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
@@ -266,6 +268,7 @@ final terminalSessionAdapterOptionsProvider =
     Provider<List<TerminalSessionAdapterOption>>((ref) {
       final cursorAnimationEnabled = ref.watch(cursorAnimationEnabledProvider);
       final colorScheme = ref.watch(terminalColorSchemeProvider);
+      final terminalFontFamily = ref.watch(terminalFontFamilyProvider);
       final transparentBackground = ref.watch(
         transparentTerminalBackgroundProvider,
       );
@@ -278,6 +281,7 @@ final terminalSessionAdapterOptionsProvider =
             cursorAnimationEnabled: cursorAnimationEnabled,
             colorScheme: colorScheme,
             transparentBackground: transparentBackground,
+            fontFamily: terminalFontFamily,
           ),
         ),
         TerminalSessionAdapterOption(
@@ -287,6 +291,7 @@ final terminalSessionAdapterOptionsProvider =
           factory: XtermTerminalSessionAdapterFactory(
             colorScheme: colorScheme,
             transparentBackground: transparentBackground,
+            fontFamily: terminalFontFamily,
           ),
         ),
       ];
@@ -421,6 +426,74 @@ class TerminalBrandingEnvironmentEnabledNotifier extends Notifier<bool> {
         .saveBrandingEnvironmentEnabled(enabled);
     state = enabled;
   }
+}
+
+final terminalFontFamilyProvider =
+    NotifierProvider<TerminalFontFamilyNotifier, String>(
+      TerminalFontFamilyNotifier.new,
+    );
+
+class TerminalFontFamilyNotifier extends Notifier<String> {
+  @override
+  String build() {
+    final value = TerminalFonts.sanitize(
+      ref.read(terminalAdapterPreferencesProvider).terminalFontFamily,
+    );
+    unawaited(_loadFont(value));
+    return value;
+  }
+
+  Future<void> setFontFamily(String family) async {
+    final value = TerminalFonts.sanitize(family);
+    await _loadFont(value);
+    await ref
+        .read(terminalAdapterPreferencesProvider)
+        .saveTerminalFontFamily(value);
+    state = value;
+  }
+
+  Future<void> _loadFont(String family) async {
+    try {
+      await SystemFonts().loadFont(family);
+    } on Object {
+      // Font not available on this system; rendering falls back.
+    }
+  }
+}
+
+final availableTerminalFontsProvider = FutureProvider<List<TerminalFontOption>>(
+  (ref) async {
+    final options = TerminalFonts.dedupe(SystemFonts().getFontList());
+    final defaultOption = TerminalFontOption(
+      label: TerminalFonts.defaultFamily,
+      family: TerminalFonts.defaultFamily,
+    );
+    if (!options.any(
+      (option) => option.family == TerminalFonts.defaultFamily,
+    )) {
+      options.insert(0, defaultOption);
+    }
+    final persisted = ref.read(terminalFontFamilyProvider);
+    if (!options.any((option) => option.family == persisted)) {
+      options.insert(
+        0,
+        TerminalFontOption(label: persisted, family: persisted),
+      );
+    }
+    return List.unmodifiable(options);
+  },
+);
+
+final monospaceTerminalFontsOnlyProvider =
+    NotifierProvider<MonospaceTerminalFontsOnlyNotifier, bool>(
+      MonospaceTerminalFontsOnlyNotifier.new,
+    );
+
+class MonospaceTerminalFontsOnlyNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void setEnabled(bool enabled) => state = enabled;
 }
 
 final platformBrightnessProvider =

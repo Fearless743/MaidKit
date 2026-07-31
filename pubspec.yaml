@@ -62,6 +62,7 @@ dependencies:
     path: packages/flterm
   shared_preferences: ^2.5.5
   super_context_menu: ^0.9.1
+  system_fonts: ^1.0.1
   uuid: ^4.6.0
   xterm: ^4.0.0
   yaml: ^3.1.3

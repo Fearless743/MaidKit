@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flterm/flterm.dart' as flterm;
 import 'package:flutter/material.dart';
 
+import 'package:maid_kit/theme.dart';
 import 'terminal_color_scheme.dart';
 import 'terminal_session_adapter.dart';
 
@@ -18,17 +19,20 @@ class GhosttyTerminalSessionAdapterFactory
     required this.cursorAnimationEnabled,
     required this.colorScheme,
     this.transparentBackground = false,
+    this.fontFamily = MaidKitFonts.mono,
   });
 
   final bool cursorAnimationEnabled;
   final TerminalColorScheme colorScheme;
   final bool transparentBackground;
+  final String fontFamily;
 
   @override
   TerminalSessionAdapter create() => GhosttyTerminalSessionAdapter(
     cursorAnimationEnabled: cursorAnimationEnabled,
     colorScheme: colorScheme,
     transparentBackground: transparentBackground,
+    fontFamily: fontFamily,
   );
 }
 
@@ -37,6 +41,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
     this.cursorAnimationEnabled = true,
     this.colorScheme = TerminalColorSchemes.defaultScheme,
     this.transparentBackground = false,
+    this.fontFamily = MaidKitFonts.mono,
   }) : _controller = flterm.TerminalController(
          config: flterm.TerminalConfig(
            scrollbackLimit: 10 * 1024 * 1024,
@@ -55,6 +60,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
   final bool cursorAnimationEnabled;
   final TerminalColorScheme colorScheme;
   final bool transparentBackground;
+  final String fontFamily;
   final flterm.TerminalController _controller;
   final flterm.TerminalScrollController _scrollController =
       flterm.TerminalScrollController();
@@ -161,7 +167,7 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
         backgroundOpacity: (transparentBackground ?? this.transparentBackground)
             ? 0
             : 1,
-        fontFamily: 'IBM Plex Mono',
+        fontFamily: fontFamily,
       ),
     );
     if (readOnly) terminal = ExcludeFocus(child: terminal);

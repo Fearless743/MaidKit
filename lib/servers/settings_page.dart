@@ -5,9 +5,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
@@ -16,6 +18,7 @@ import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'database_backup_service.dart';
 import 'cloud_sync_service.dart';
 import 'server_providers.dart';
+import 'terminal_adapter_preferences.dart';
 import 'terminal_color_scheme.dart';
 import 'vault_service.dart';
 
@@ -285,6 +288,8 @@ class SettingsPage extends ConsumerWidget {
                             'settingsTerminalRendererHint',
                             style: Theme.of(context).textTheme.bodySmall,
                           ).tr(),
+                          const SizedBox(height: 16),
+                          const _TerminalFontDropdown(),
                           const SizedBox(height: 16),
                           _TerminalThemeTile(
                             mode: Brightness.light,
@@ -1788,11 +1793,14 @@ class _LanguageSwitcher extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('settingsDisplayLanguage').tr(),
+              Text(
+                'settingsDisplayLanguage'.tr(),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 2),
               Text(
                 _languageDisplayName(currentLocale),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -1824,6 +1832,111 @@ class _LanguageSwitcher extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _TerminalFontDropdown extends HookConsumerWidget {
+  const _TerminalFontDropdown();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fonts = ref.watch(availableTerminalFontsProvider);
+    final monoOnly = ref.watch(monospaceTerminalFontsOnlyProvider);
+    final current = ref.watch(terminalFontFamilyProvider);
+
+    final all = fonts.value ?? const <TerminalFontOption>[];
+    final filtered = <TerminalFontOption>[
+      for (final option in all)
+        if (!monoOnly || option.label.toLowerCase().contains('mono')) option,
+    ];
+    if (!filtered.any((option) => option.family == current)) {
+      filtered.insert(0, TerminalFontOption(label: current, family: current));
+    }
+
+    final loaded = useState<Set<String>>(const {});
+    useEffect(
+      () {
+        final missing = filtered
+            .map((option) => option.family)
+            .where((family) => !loaded.value.contains(family))
+            .toList();
+        if (missing.isEmpty) return null;
+        () async {
+          for (final family in missing) {
+            try {
+              await SystemFonts().loadFont(family);
+            } on Object {
+              // Bundled or unavailable fonts need no engine loading.
+            }
+            loaded.value = {...loaded.value, family};
+          }
+        }();
+        return null;
+      },
+      [
+        monoOnly,
+        filtered.map((option) => option.family).join(','),
+        fonts.value,
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownMenu<String>(
+              width: constraints.maxWidth,
+              enableFilter: true,
+              initialSelection: current,
+              label: Text('settingsTerminalFont'.tr()),
+              onSelected: (family) {
+                if (family != null) {
+                  ref
+                      .read(terminalFontFamilyProvider.notifier)
+                      .setFontFamily(family);
+                }
+              },
+              dropdownMenuEntries: [
+                for (final option in filtered)
+                  DropdownMenuEntry(
+                    value: option.family,
+                    label: option.label,
+                    labelWidget: Text(
+                      option.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontFamily: option.family),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'settingsTerminalFontHint',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ).tr(),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'settingsTerminalFontMonospaceOnly'.tr(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(width: 4),
+                Switch(
+                  value: monoOnly,
+                  onChanged: (value) => ref
+                      .read(monospaceTerminalFontsOnlyProvider.notifier)
+                      .setEnabled(value),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }

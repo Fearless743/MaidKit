@@ -5,16 +5,125 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'terminal_color_scheme.dart';
 
+class TerminalFontOption {
+  const TerminalFontOption({required this.label, required this.family});
+
+  /// Display name, without weight/style suffixes (e.g. `SFMono`).
+  final String label;
+
+  /// Font file name registered in the engine and used for rendering
+  /// (e.g. `SFMono-Regular`).
+  final String family;
+}
+
+abstract final class TerminalFonts {
+  static const defaultFamily = 'IBM Plex Mono';
+
+  static const _variantKeywords = <String>[
+    // Longest-first so greedy decomposition splits compound variants
+    // (e.g. `ExtraLightItalic` -> extra + light + italic).
+    'extralightitalic',
+    'extrabolditalic',
+    'semibolditalic',
+    'mediumitalic',
+    'lightitalic',
+    'blackitalic',
+    'thinitalic',
+    'bolditalic',
+    'extralight',
+    'extrabold',
+    'semilight',
+    'condensed',
+    'semibold',
+    'expanded',
+    'regular',
+    'oblique',
+    'medium',
+    'italic',
+    'retina',
+    'heavy',
+    'black',
+    'light',
+    'ultra',
+    'book',
+    'bold',
+    'demi',
+    'thin',
+    'text',
+  ];
+
+  static String sanitize(String family) {
+    final trimmed = family.trim();
+    return trimmed.isEmpty ? defaultFamily : trimmed;
+  }
+
+  static bool _isVariantSegment(String segment) {
+    var rest = segment.toLowerCase();
+    var matched = false;
+    while (rest.isNotEmpty) {
+      String? keyword;
+      for (final candidate in _variantKeywords) {
+        if (rest.startsWith(candidate)) {
+          keyword = candidate;
+          break;
+        }
+      }
+      if (keyword == null) return false;
+      matched = true;
+      rest = rest.substring(keyword.length);
+    }
+    return matched;
+  }
+
+  static String _stripVariantSuffix(String name) {
+    final dash = name.lastIndexOf('-');
+    if (dash == -1) return name;
+    final segment = name.substring(dash + 1);
+    if (_isVariantSegment(segment)) {
+      return name.substring(0, dash);
+    }
+    return name;
+  }
+
+  static String _pickRegular(List<String> names) {
+    for (final name in names) {
+      if (name.toLowerCase().endsWith('-regular')) return name;
+    }
+    final sorted = [...names]
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted.first;
+  }
+
+  /// Collapses font files of the same family into a single [TerminalFontOption],
+  /// preferring the regular weight variant over bold/light/italic files.
+  static List<TerminalFontOption> dedupe(List<String> families) {
+    final byBase = <String, List<String>>{};
+    for (final family in families) {
+      byBase.putIfAbsent(_stripVariantSuffix(family), () => []).add(family);
+    }
+    final options = [
+      for (final entry in byBase.entries)
+        TerminalFontOption(label: entry.key, family: _pickRegular(entry.value)),
+    ];
+    options.sort(
+      (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+    );
+    return options;
+  }
+}
+
 abstract interface class TerminalAdapterSettings {
   String get selectedAdapterId;
   bool get cursorAnimationEnabled;
   bool get brandingEnvironmentEnabled;
+  String get terminalFontFamily;
   TerminalColorScheme get lightTheme;
   TerminalColorScheme get darkTheme;
 
   Future<void> saveSelectedAdapterId(String adapterId);
   Future<void> saveCursorAnimationEnabled(bool enabled);
   Future<void> saveBrandingEnvironmentEnabled(bool enabled);
+  Future<void> saveTerminalFontFamily(String family);
   Future<void> saveLightTheme(TerminalColorScheme theme);
   Future<void> saveDarkTheme(TerminalColorScheme theme);
 }
@@ -25,6 +134,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
     this.selectedAdapterId,
     this.cursorAnimationEnabled,
     this.brandingEnvironmentEnabled,
+    this.terminalFontFamily,
     this.lightTheme,
     this.darkTheme,
   );
@@ -33,6 +143,7 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
   static const _cursorAnimationEnabledKey = 'cursor_animation_enabled';
   static const _brandingEnvironmentEnabledKey =
       'terminal_branding_environment_enabled';
+  static const _terminalFontFamilyKey = 'terminal_font_family';
   static const _lightThemeKey = 'terminal_light_theme';
   static const _darkThemeKey = 'terminal_dark_theme';
 
@@ -43,6 +154,8 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
   final bool cursorAnimationEnabled;
   @override
   final bool brandingEnvironmentEnabled;
+  @override
+  final String terminalFontFamily;
   @override
   final TerminalColorScheme lightTheme;
   @override
@@ -57,6 +170,10 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
       await store.getString(_adapterIdKey) ?? 'ghostty',
       await store.getBool(_cursorAnimationEnabledKey) ?? true,
       await store.getBool(_brandingEnvironmentEnabledKey) ?? true,
+      TerminalFonts.sanitize(
+        await store.getString(_terminalFontFamilyKey) ??
+            TerminalFonts.defaultFamily,
+      ),
       _decodeTheme(await store.getString(_lightThemeKey)) ??
           TerminalColorSchemes.defaultLightScheme,
       _decodeTheme(await store.getString(_darkThemeKey)) ??
@@ -75,6 +192,10 @@ class TerminalAdapterPreferences implements TerminalAdapterSettings {
   @override
   Future<void> saveBrandingEnvironmentEnabled(bool enabled) =>
       _preferences.setBool(_brandingEnvironmentEnabledKey, enabled);
+
+  @override
+  Future<void> saveTerminalFontFamily(String family) =>
+      _preferences.setString(_terminalFontFamilyKey, family);
 
   @override
   Future<void> saveLightTheme(TerminalColorScheme theme) =>
@@ -121,6 +242,7 @@ class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
     this.selectedAdapterId = 'ghostty',
     this.cursorAnimationEnabled = true,
     this.brandingEnvironmentEnabled = true,
+    this.terminalFontFamily = TerminalFonts.defaultFamily,
     this.lightTheme = TerminalColorSchemes.defaultLightScheme,
     this.darkTheme = TerminalColorSchemes.defaultScheme,
   });
@@ -131,6 +253,8 @@ class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
   bool cursorAnimationEnabled;
   @override
   bool brandingEnvironmentEnabled;
+  @override
+  String terminalFontFamily;
   @override
   TerminalColorScheme lightTheme;
   @override
@@ -149,6 +273,11 @@ class InMemoryTerminalAdapterSettings implements TerminalAdapterSettings {
   @override
   Future<void> saveBrandingEnvironmentEnabled(bool enabled) async {
     brandingEnvironmentEnabled = enabled;
+  }
+
+  @override
+  Future<void> saveTerminalFontFamily(String family) async {
+    terminalFontFamily = family;
   }
 
   @override
