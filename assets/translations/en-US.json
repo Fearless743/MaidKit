@@ -353,6 +353,10 @@
   "serversRefreshStatistics": "Refresh statistics",
   "serversConnect": "Connect",
   "serversReconnectAll": "Reconnect all",
+  "serversDisconnectedCount": {
+    "one": "{} server disconnected",
+    "other": "{} servers disconnected"
+  },
   "serverConnectionLostTitle": "Connection lost",
   "serverConnectionLostRetry": "{} is disconnected. Connect and retry this action?",
   "serverConnectAndRetry": "Connect and retry",

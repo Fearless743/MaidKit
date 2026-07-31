@@ -269,20 +269,27 @@ class _ServerGridState extends State<_ServerGrid> {
 
     return Column(
       children: [
-        if (disconnectedServers.length > 1)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.tonalIcon(
-                onPressed: _isReconnecting
-                    ? null
-                    : () => _reconnectAll(disconnectedServers),
-                icon: const Icon(Symbols.sync),
-                label: Text('serversReconnectAll'.tr()),
-              ),
-            ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 240),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => SizeTransition(
+            sizeFactor: animation,
+            alignment: Alignment.topCenter,
+            child: FadeTransition(opacity: animation, child: child),
           ),
+          child: disconnectedServers.length > 1
+              ? Padding(
+                  key: const ValueKey('servers-reconnect-all'),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  child: _ReconnectAllCard(
+                    count: disconnectedServers.length,
+                    isReconnecting: _isReconnecting,
+                    onPressed: () => _reconnectAll(disconnectedServers),
+                  ),
+                )
+              : const SizedBox.shrink(key: ValueKey('servers-reconnect-none')),
+        ),
         Expanded(
           child: GridView.builder(
             padding: const EdgeInsets.all(24),
@@ -325,6 +332,65 @@ class _ServerGridState extends State<_ServerGrid> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ReconnectAllCard extends StatelessWidget {
+  const _ReconnectAllCard({
+    required this.count,
+    required this.isReconnecting,
+    required this.onPressed,
+  });
+
+  final int count;
+  final bool isReconnecting;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+        child: Row(
+          children: [
+            Icon(
+              Symbols.cloud_off,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'serversDisconnectedCount'.plural(count),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.titleSmall,
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.tonalIcon(
+              onPressed: isReconnecting ? null : onPressed,
+              icon: isReconnecting
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : const Icon(Symbols.sync, size: 18),
+              label: Text('serversReconnectAll'.tr()),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

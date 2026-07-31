@@ -350,6 +350,10 @@
   "serversRefreshStatistics": "刷新统计",
   "serversConnect": "连接",
   "serversReconnectAll": "全部重连",
+  "serversDisconnectedCount": {
+    "one": "{} 台服务器已断开",
+    "other": "{} 台服务器已断开"
+  },
   "serverConnectionLostTitle": "连接已断开",
   "serverConnectionLostRetry": "{} 已断开连接。要连接并重试此操作吗？",
   "serverConnectAndRetry": "连接并重试",
