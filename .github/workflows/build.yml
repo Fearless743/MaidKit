@@ -15,7 +15,7 @@ on:
           - all
           - windows
           - linux
-          - macos
+          - android
 
 jobs:
   build-windows:
@@ -73,6 +73,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y libwebkit2gtk-4.0-dev
           sudo apt-get install -y libmpv-dev mpv
           sudo apt-get install -y libayatana-appindicator3-dev
           sudo apt-get install -y keybinder-3.0
@@ -88,28 +89,53 @@ jobs:
           name: build-output-linux
           path: build/linux/x64/release/bundle/
 
-  build-macos:
-    if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos'
-    runs-on: macos-latest
+  build-android:
+    if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android'
+    runs-on: ubuntu-latest
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android build dependencies
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.13113456"
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyPassword=$ANDROID_KEYSTORE_PASSWORD"
+          } > android/key.properties
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter build macos --release
-      - name: Archive production artifacts
+      - run: flutter build apk --release --split-per-abi
+      - name: Archive Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-output-macos
-          path: build/macos/Build/Products/Release/MaidKit.app
+          name: build-output-android
+          path: build/app/outputs/flutter-apk/app-*-release.apk
 
   upload-to-s3:
-    needs: [build-windows, build-linux, build-macos]
+    needs: [build-windows, build-linux, build-android]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -125,12 +151,12 @@ jobs:
         with:
           name: build-output-linux
           path: ./artifacts/linux
-      - if: needs.build-macos.result == 'success'
-        name: Download macOS artifact
+      - if: needs.build-android.result == 'success'
+        name: Download Android artifact
         uses: actions/download-artifact@v4
         with:
-          name: build-output-macos
-          path: ./artifacts/macos
+          name: build-output-android
+          path: ./artifacts/android
       - if: needs.build-windows.result == 'success'
         name: Zip Windows installer
         run: |
@@ -141,11 +167,11 @@ jobs:
         run: |
           cd ./artifacts/linux
           zip -r ../build-output-linux.zip .
-      - if: needs.build-macos.result == 'success'
-        name: Zip macOS build
+      - if: needs.build-android.result == 'success'
+        name: Prepare Android APKs for upload
         run: |
-          cd ./artifacts/macos
-          zip -r ../build-output-macos.zip .
+          mkdir -p ./artifacts/android-r2
+          find ./artifacts/android -type f -name 'app-*-release.apk' -exec cp {} ./artifacts/android-r2/ \;
       - if: needs.build-windows.result == 'success'
         name: Upload Windows installer to R2
         uses: ryand56/r2-upload-action@latest
@@ -166,13 +192,13 @@ jobs:
           r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
           source-dir: ./artifacts/build-output-linux.zip
           destination-dir: maidkit
-      - if: needs.build-macos.result == 'success'
-        name: Upload macOS to R2
+      - if: needs.build-android.result == 'success'
+        name: Upload Android split APKs to R2
         uses: ryand56/r2-upload-action@latest
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.S3_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.S3_SECRET_ACCESS_KEY }}
           r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
-          source-dir: ./artifacts/build-output-macos.zip
+          source-dir: ./artifacts/android-r2
           destination-dir: maidkit
