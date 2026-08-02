@@ -300,18 +300,29 @@ class SshConnectionManager {
     if (server.collectStats) await _refreshStats(client, state);
   }
 
-  Future<void> _refreshLatency(SSHClient client, SshSessionInfo state) async {
+  /// Measures one SSH command round trip on [client], or returns `null` if
+  /// the probe fails.
+  ///
+  /// The first request on a fresh connection absorbs a one-time per-connection
+  /// cost (session spawn / first fork) that is unrelated to the network round
+  /// trip. Callers displaying steady-state latency should discard one round
+  /// trip as a warm-up before relying on the next measurement.
+  Future<Duration?> _probeLatency(SSHClient client) async {
     final stopwatch = Stopwatch()..start();
     try {
       final session = await client.execute(':');
       await session.done;
-      if (!identical(_sessions[state.serverId], client)) return;
-      _set(
-        (_states[state.serverId] ?? state).copyWith(latency: stopwatch.elapsed),
-      );
+      return stopwatch.elapsed;
     } catch (_) {
-      // Keep the last successful measurement if a transient probe fails.
+      return null;
     }
+  }
+
+  Future<void> _refreshLatency(SSHClient client, SshSessionInfo state) async {
+    final latency = await _probeLatency(client);
+    if (latency == null) return;
+    if (!identical(_sessions[state.serverId], client)) return;
+    _set((_states[state.serverId] ?? state).copyWith(latency: latency));
   }
 
   /// Process list for the detail page. Caps output so busy hosts (thousands of
@@ -3240,6 +3251,12 @@ fi
       // SSH handshake can delay this probe and make the first displayed
       // response time include local connection work rather than the server's
       // SSH round trip.
+      //
+      // The very first request on a fresh connection also pays a one-time
+      // per-connection cost that is unrelated to the network round trip, so
+      // discard that round trip as a warm-up before taking the measurement
+      // that is actually displayed.
+      await _probeLatency(client);
       await _refreshLatency(client, _states[server.id]!);
       unawaited(_refreshConnectionDetails(server, client));
       unawaited(
