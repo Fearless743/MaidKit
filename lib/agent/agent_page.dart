@@ -25,6 +25,7 @@ import 'package:maid_kit/agent/mcp_repository.dart';
 import 'package:maid_kit/agent/skill_repository.dart';
 import 'package:maid_kit/agent/skill_registry.dart';
 import 'agent_input_focus.dart';
+import 'conversation_store.dart';
 import 'personality_service.dart';
 import 'agent_repository.dart';
 import 'agent_run_policy.dart';
@@ -43,8 +44,8 @@ const _providerPresets = [
     'gpt-4.1-mini',
   ]),
   _AgentProviderPreset('DeepSeek', 'https://api.deepseek.com', [
-    'deepseek-chat',
-    'deepseek-reasoner',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
   ]),
   _AgentProviderPreset('OpenRouter', 'https://openrouter.ai/api', [
     'anthropic/claude-sonnet-4',
@@ -563,13 +564,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         if (serverId == null) {
           throw StateError('agentMcpServerGone'.tr());
         }
-        final server =
-            ref
-                    .read(mcpServersProvider)
-                    .asData
-                    ?.value
-                    .where((server) => server.id == serverId)
-                    .firstOrNull;
+        final server = ref
+            .read(mcpServersProvider)
+            .asData
+            ?.value
+            .where((server) => server.id == serverId)
+            .firstOrNull;
         if (server == null) {
           throw StateError('agentMcpServerGone'.tr());
         }
@@ -577,11 +577,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             .read(mcpClientManagerProvider)
             .clientFor(server);
         final result = await clientForServer.callTool(
-          AgentMcpToolTarget.bareName(
-            proposal.toolCall.function.name ?? '',
-          ),
-          Map<String, dynamic>.from(proposal.arguments)
-            ..remove('safe_to_run'),
+          AgentMcpToolTarget.bareName(proposal.toolCall.function.name ?? ''),
+          Map<String, dynamic>.from(proposal.arguments)..remove('safe_to_run'),
           cancelToken: cancelToken,
         );
         return _formatMcpResult(result);
@@ -601,7 +598,9 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   String _formatMcpResult(McpToolResult result) {
     var text = result.text;
     if (text.isEmpty) {
-      text = result.content.isEmpty ? '(empty result)' : jsonEncode(result.content);
+      text = result.content.isEmpty
+          ? '(empty result)'
+          : jsonEncode(result.content);
     }
     if (result.isError) text = 'MCP tool error:\n$text';
     return _limitMcpText(text);
@@ -671,7 +670,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     final providerId = _activeProviderId;
     final modelId = _activeModelId;
     final savedId = await ref
-        .read(agentRepositoryProvider)
+        .read(conversationStoreProvider)
         .saveConversation(
           AgentConversationDraft(
             title: _conversationTitle(snapshot),
@@ -725,13 +724,16 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     if (_working || _conversationId == id) return;
     await _persistConversation();
     final conversation = await ref
-        .read(agentRepositoryProvider)
+        .read(conversationStoreProvider)
         .conversation(id);
     if (!mounted || conversation == null) return;
     setState(() {
       _messages
         ..clear()
-        ..addAll(_decodeMessages(conversation.messages));
+        ..addAll([
+          for (final message in conversation.messages)
+            _AgentMessage(message.text, _roleKind(message.role)),
+        ]);
       _agentContext
         ..clear()
         ..addAll(_contextFromMessages(_messages));
@@ -757,7 +759,9 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       isDanger: true,
     );
     if (!confirmed) return;
-    await ref.read(agentRepositoryProvider).deleteConversation(conversation.id);
+    await ref
+        .read(conversationStoreProvider)
+        .deleteConversation(conversation.id);
     if (mounted && _conversationId == conversation.id) {
       setState(() {
         _messages.clear();
@@ -949,11 +953,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ...selectors,
-                      historyButton,
-                      capabilitiesButton,
-                    ],
+                    children: [...selectors, historyButton, capabilitiesButton],
                   ),
                 )
               else ...[
@@ -1262,10 +1262,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         ? ''
         : pendingProposal.kind == AgentActionKind.mcpToolCall
         ? mcpServers
-                  .where(
-                    (server) =>
-                        server.id == pendingProposal.mcpServerId,
-                  )
+                  .where((server) => server.id == pendingProposal.mcpServerId)
                   .map((server) => server.name)
                   .firstOrNull ??
               'agentUnavailableServer'.tr()
@@ -1383,24 +1380,6 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     return text.length <= 48 ? text : '${text.substring(0, 48)}…';
-  }
-
-  static List<_AgentMessage> _decodeMessages(String raw) {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(raw);
-    } catch (_) {
-      return const [];
-    }
-    if (decoded is! List) return const [];
-    return [
-      for (final item in decoded)
-        if (item is Map<String, dynamic>)
-          _AgentMessage(
-            item['text'] as String? ?? '',
-            _roleKind(item['role'] as String?),
-          ),
-    ];
   }
 }
 
@@ -2167,16 +2146,15 @@ class _AgentCapabilitiesSheet extends ConsumerStatefulWidget {
       _AgentCapabilitiesSheetState();
 }
 
-class _AgentCapabilitiesSheetState extends ConsumerState<_AgentCapabilitiesSheet>
+class _AgentCapabilitiesSheetState
+    extends ConsumerState<_AgentCapabilitiesSheet>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(
-    length: 2,
-    vsync: this,
-  )..addListener(() {
-    if (_tabController.index != _tabIndex) {
-      setState(() => _tabIndex = _tabController.index);
-    }
-  });
+  late final TabController _tabController =
+      TabController(length: 2, vsync: this)..addListener(() {
+        if (_tabController.index != _tabIndex) {
+          setState(() => _tabIndex = _tabController.index);
+        }
+      });
   int _tabIndex = 0;
 
   @override
@@ -2248,26 +2226,23 @@ class _AgentCapabilitiesSheetState extends ConsumerState<_AgentCapabilitiesSheet
     builder: (_) => const _SkillRegistrySheet(),
   );
 
-  Future<void> _editSkill([AgentSkill? existing]) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        useRootNavigator: true,
-        builder: (sheetContext) => _SkillEditorSheet(
-          existing: existing,
-          onSave: (draft) async {
-            try {
-              await ref
-                  .read(skillRepositoryProvider)
-                  .save(draft, id: existing?.id);
-              if (sheetContext.mounted) Navigator.pop(sheetContext);
-            } catch (error) {
-              showMaidKitErrorAlert(error, title: 'agentCouldNotSaveSkill'.tr());
-            }
-          },
-        ),
-      );
+  Future<void> _editSkill([AgentSkill? existing]) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (sheetContext) => _SkillEditorSheet(
+      existing: existing,
+      onSave: (draft) async {
+        try {
+          await ref.read(skillRepositoryProvider).save(draft, id: existing?.id);
+          if (sheetContext.mounted) Navigator.pop(sheetContext);
+        } catch (error) {
+          showMaidKitErrorAlert(error, title: 'agentCouldNotSaveSkill'.tr());
+        }
+      },
+    ),
+  );
 
   Future<void> _deleteSkill(AgentSkill skill) async {
     final confirmed = await showMaidKitConfirmAlert(
@@ -2356,7 +2331,11 @@ class _AgentCapabilitiesSheetState extends ConsumerState<_AgentCapabilitiesSheet
             horizontal: 12,
             vertical: 2,
           ),
-          title: Text(server.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(
+            server.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           subtitle: Text(
             '${server.command} ${decodeMcpArguments(server.arguments).join(' ')}',
             maxLines: 1,
@@ -2483,8 +2462,9 @@ class _McpServerEditorSheetState extends State<_McpServerEditorSheet> {
   late final _environment = TextEditingController(
     text: widget.existing == null
         ? ''
-        : const JsonEncoder.withIndent('  ')
-              .convert(decodeMcpEnvironment(widget.existing!.environment)),
+        : const JsonEncoder.withIndent(
+            '  ',
+          ).convert(decodeMcpEnvironment(widget.existing!.environment)),
   );
   late bool _enabled = widget.existing?.enabled ?? true;
   var _saving = false;
@@ -2579,10 +2559,7 @@ class _McpServerEditorSheetState extends State<_McpServerEditorSheet> {
           maxLines: 6,
           autocorrect: false,
           enableSuggestions: false,
-          style: TextStyle(
-            fontFamily: MaidKitFonts.mono,
-            fontSize: 13,
-          ),
+          style: TextStyle(fontFamily: MaidKitFonts.mono, fontSize: 13),
           decoration: InputDecoration(
             labelText: 'agentMcpServerArguments'.tr(),
             hintText: 'agentMcpServerArgumentsHint'.tr(),
@@ -2595,10 +2572,7 @@ class _McpServerEditorSheetState extends State<_McpServerEditorSheet> {
           maxLines: 6,
           autocorrect: false,
           enableSuggestions: false,
-          style: TextStyle(
-            fontFamily: MaidKitFonts.mono,
-            fontSize: 13,
-          ),
+          style: TextStyle(fontFamily: MaidKitFonts.mono, fontSize: 13),
           decoration: InputDecoration(
             labelText: 'agentMcpServerEnvironment'.tr(),
             hintText: 'agentMcpServerEnvironmentHint'.tr(),
@@ -2947,15 +2921,9 @@ class _SkillRegistrySheetState extends ConsumerState<_SkillRegistrySheet> {
   ) async {
     final repository = ref.read(skillRepositoryProvider);
     final existing = await repository.all();
-    final current = existing
-        .where((saved) => saved.name == name)
-        .firstOrNull;
+    final current = existing.where((saved) => saved.name == name).firstOrNull;
     await repository.save(
-      AgentSkillDraft(
-        name: name,
-        description: description,
-        content: content,
-      ),
+      AgentSkillDraft(name: name, description: description, content: content),
       id: current?.id,
     );
     setState(() => _added.add(name));
@@ -3069,7 +3037,10 @@ class _SkillRegistrySheetState extends ConsumerState<_SkillRegistrySheet> {
         if (hits.isEmpty) {
           return _buildEmpty(scheme, 'agentSkillRegistryNoMatch'.tr());
         }
-        final savedNames = ref.watch(agentSkillsProvider).asData
+        final savedNames =
+            ref
+                .watch(agentSkillsProvider)
+                .asData
                 ?.value
                 .map((skill) => skill.name)
                 .toSet() ??
@@ -3088,7 +3059,11 @@ class _SkillRegistrySheetState extends ConsumerState<_SkillRegistrySheet> {
                 horizontal: 12,
                 vertical: 2,
               ),
-              title: Text(hit.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text(
+                hit.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               subtitle: Text(
                 installs.isEmpty ? hit.source : '${hit.source} · $installs',
                 maxLines: 1,
@@ -3128,7 +3103,10 @@ class _SkillRegistrySheetState extends ConsumerState<_SkillRegistrySheet> {
         if (skills.isEmpty) {
           return _buildEmpty(scheme, 'agentSkillRegistryEmpty'.tr());
         }
-        final savedNames = ref.watch(agentSkillsProvider).asData
+        final savedNames =
+            ref
+                .watch(agentSkillsProvider)
+                .asData
                 ?.value
                 .map((skill) => skill.name)
                 .toSet() ??
@@ -3146,7 +3124,11 @@ class _SkillRegistrySheetState extends ConsumerState<_SkillRegistrySheet> {
                 horizontal: 12,
                 vertical: 2,
               ),
-              title: Text(skill.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text(
+                skill.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               subtitle: Text(
                 skill.description.isEmpty
                     ? 'agentNoSkillDescription'.tr()

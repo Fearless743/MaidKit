@@ -15,6 +15,7 @@ import 'package:maid_kit/agent/mcp_repository.dart';
 import 'package:maid_kit/agent/skill_repository.dart';
 import 'package:maid_kit/agent/skill_registry.dart';
 import 'package:maid_kit/agent/agent_repository.dart';
+import 'package:maid_kit/agent/conversation_store.dart';
 import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/agent/agent_selection.dart';
@@ -351,8 +352,12 @@ final agentProviderModelsProvider =
       return ref.watch(agentRepositoryProvider).watchModels(providerId);
     });
 
+final conversationStoreProvider = Provider<AgentConversationStore>((ref) {
+  return AgentConversationStore();
+});
+
 final agentConversationsProvider = StreamProvider<List<AgentConversation>>(
-  (ref) => ref.watch(agentRepositoryProvider).watchConversations(),
+  (ref) => ref.watch(conversationStoreProvider).watchConversations(),
 );
 
 final mcpRepositoryProvider = Provider<McpRepository>((ref) {

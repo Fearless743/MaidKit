@@ -145,19 +145,6 @@ class AgentProviderModels extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
-/// A saved agent conversation. Messages are stored as a JSON array of
-/// `{role, text}` records so a conversation can be restored without replaying
-/// any tool execution. Ghost chats are never written here.
-class AgentConversations extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get title => text()();
-  IntColumn get providerId => integer().nullable()();
-  IntColumn get modelId => integer().nullable()();
-  TextColumn get messages => text()();
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
-}
-
 /// A locally launched Model Context Protocol server the agent can call tools
 /// on. The command is executed as a child process speaking JSON-RPC over
 /// stdio; arguments and environment are JSON-encoded. Environment entries are
@@ -200,7 +187,6 @@ class AgentSkills extends Table {
     AgentSettings,
     AgentProviders,
     AgentProviderModels,
-    AgentConversations,
     McpServers,
     AgentSkills,
   ],
@@ -219,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -360,11 +346,28 @@ class AppDatabase extends _$AppDatabase {
         ''');
       }
       if (from < 15) {
-        await m.createTable(agentConversations);
+        // Table removed in schema 17; kept as raw SQL so upgrades from older
+        // schemas still reproduce the historical layout.
+        await customStatement('''
+          CREATE TABLE agent_conversations (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            provider_id INTEGER,
+            model_id INTEGER,
+            messages TEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL
+          )
+        ''');
       }
       if (from < 16) {
         await m.createTable(mcpServers);
         await m.createTable(agentSkills);
+      }
+      if (from < 17) {
+        // Conversation history moved out of the vault database into JSONL
+        // files under the app's internal storage.
+        await customStatement('DROP TABLE IF EXISTS agent_conversations');
       }
     },
   );
@@ -400,10 +403,6 @@ class AppDatabase extends _$AppDatabase {
             ..where((table) => table.providerId.equals(providerId))
             ..orderBy([(table) => OrderingTerm.asc(table.model)]))
           .watch();
-
-  Stream<List<AgentConversation>> watchAgentConversations() => (select(
-    agentConversations,
-  )..orderBy([(table) => OrderingTerm.desc(table.updatedAt)])).watch();
 
   Stream<List<McpServer>> watchMcpServers() => (select(
     mcpServers,

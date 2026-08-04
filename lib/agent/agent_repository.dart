@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/servers/vault_service.dart';
@@ -36,112 +34,16 @@ class AgentProviderDraft {
   final String model;
 }
 
-/// One message stored in a saved conversation. Only the rendered text is kept;
-/// pending tool proposals are intentionally not restored.
-class AgentConversationMessage {
-  const AgentConversationMessage({required this.role, required this.text});
-  final String role;
-  final String text;
-
-  Map<String, dynamic> toJson() => {'role': role, 'text': text};
-
-  factory AgentConversationMessage.fromJson(Map<String, dynamic> json) =>
-      AgentConversationMessage(
-        role: json['role'] as String? ?? 'assistant',
-        text: json['text'] as String? ?? '',
-      );
-}
-
-class AgentConversationDraft {
-  const AgentConversationDraft({
-    required this.title,
-    required this.messages,
-    this.providerId,
-    this.modelId,
-  });
-  final String title;
-  final List<AgentConversationMessage> messages;
-  final int? providerId;
-  final int? modelId;
-}
-
 class AgentRepository {
   AgentRepository(this._database, this._vault);
   final AppDatabase _database;
   final VaultService _vault;
-
-  /// Maximum number of saved conversations kept in history. Oldest entries are
-  /// evicted first when this is exceeded.
-  static const int maxConversations = 20;
 
   Stream<List<AgentProvider>> watchProviders() =>
       _database.watchAgentProviders();
 
   Stream<List<AgentProviderModel>> watchModels(int providerId) =>
       _database.watchAgentProviderModels(providerId);
-
-  Stream<List<AgentConversation>> watchConversations() =>
-      _database.watchAgentConversations();
-
-  Future<AgentConversation?> conversation(int id) => (_database.select(
-    _database.agentConversations,
-  )..where((table) => table.id.equals(id))).getSingleOrNull();
-
-  Future<int> saveConversation(AgentConversationDraft draft, {int? id}) async {
-    final now = DateTime.now().toUtc();
-    final messages = jsonEncode([
-      for (final message in draft.messages) message.toJson(),
-    ]);
-    await _database.transaction(() async {
-      if (id == null) {
-        id = await _database
-            .into(_database.agentConversations)
-            .insert(
-              AgentConversationsCompanion.insert(
-                title: draft.title,
-                providerId: Value(draft.providerId),
-                modelId: Value(draft.modelId),
-                messages: messages,
-                createdAt: now,
-                updatedAt: now,
-              ),
-            );
-        await _evictOldestConversations();
-      } else {
-        await (_database.update(
-          _database.agentConversations,
-        )..where((table) => table.id.equals(id!))).write(
-          AgentConversationsCompanion(
-            title: Value(draft.title),
-            providerId: Value(draft.providerId),
-            modelId: Value(draft.modelId),
-            messages: Value(messages),
-            updatedAt: Value(now),
-          ),
-        );
-      }
-    });
-    return id!;
-  }
-
-  Future<void> _evictOldestConversations() async {
-    final count = await _database.agentConversations.count().getSingle();
-    if (count <= maxConversations) return;
-    final oldest =
-        await (_database.select(_database.agentConversations)
-              ..orderBy([(table) => OrderingTerm.asc(table.updatedAt)])
-              ..limit(count - maxConversations))
-            .get();
-    for (final conversation in oldest) {
-      await (_database.delete(
-        _database.agentConversations,
-      )..where((table) => table.id.equals(conversation.id))).go();
-    }
-  }
-
-  Future<void> deleteConversation(int id) => (_database.delete(
-    _database.agentConversations,
-  )..where((table) => table.id.equals(id))).go();
 
   Future<void> save(AgentProviderDraft draft, {int? id}) async {
     final name = draft.name.trim();
