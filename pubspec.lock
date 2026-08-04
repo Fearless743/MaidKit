@@ -473,10 +473,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_app_update
-      sha256: "336a87c9b8f5c2f040ac314939f61a567e812a3ec3c066d8c99a524d95171d81"
+      sha256: cb373a9d011c7c7d7e3d027e71d3fa3c4049d41e4be7364124bd93a95fe311a7
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.4"
+    version: "3.2.3"
   flutter_code_editor:
     dependency: "direct main"
     description:
