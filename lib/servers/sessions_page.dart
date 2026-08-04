@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show kMiddleMouseButton;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -1088,7 +1089,8 @@ class _TerminalStatusBarState extends ConsumerState<_TerminalStatusBar> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (MediaQuery.sizeOf(context).width <= 768)
+              if (defaultTargetPlatform == TargetPlatform.iOS ||
+                  defaultTargetPlatform == TargetPlatform.android)
                 _TerminalQuickKeys(terminal: widget.terminal),
               if (segments.isNotEmpty)
                 SizedBox(
@@ -1119,42 +1121,103 @@ class _TerminalStatusBarState extends ConsumerState<_TerminalStatusBar> {
   }
 }
 
-class _TerminalQuickKeys extends StatelessWidget {
+class _TerminalQuickKeys extends StatefulWidget {
   const _TerminalQuickKeys({required this.terminal});
 
   final TerminalSessionAdapter terminal;
 
   @override
+  State<_TerminalQuickKeys> createState() => _TerminalQuickKeysState();
+}
+
+class _TerminalQuickKeysState extends State<_TerminalQuickKeys> {
+  static const _commonKeys = [
+    ('Ctrl+C', '\u0003'),
+    ('Ctrl+D', '\u0004'),
+    ('Ctrl+L', '\u000c'),
+    ('Tab', '\t'),
+    ('Esc', '\u001b'),
+    ('↑', '\u001b[A'),
+    ('↓', '\u001b[B'),
+    ('←', '\u001b[D'),
+    ('→', '\u001b[C'),
+    ('Enter', '\r'),
+  ];
+
+  static const _extraKeys = [
+    ('Ctrl+Z', '\u001a'),
+    ('Ctrl+A', '\u0001'),
+    ('Ctrl+E', '\u0005'),
+    ('Ctrl+U', '\u0015'),
+    ('PgUp', '\u001b[5~'),
+    ('PgDn', '\u001b[6~'),
+  ];
+
+  static const _allKeys = [..._commonKeys, ..._extraKeys];
+
+  final _scrollController = ScrollController();
+  var _expanded = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    final expanded = !_expanded;
+    setState(() => _expanded = expanded);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(
+        expanded ? _scrollController.position.maxScrollExtent : 0,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const shortcuts = [
-      ('Ctrl+C', '\u0003'),
-      ('Tab', '\t'),
-      ('Esc', '\u001b'),
-      ('↑', '\u001b[A'),
-      ('↓', '\u001b[B'),
-      ('←', '\u001b[D'),
-      ('→', '\u001b[C'),
-      ('Enter', '\r'),
-    ];
+    final terminal = widget.terminal;
+    final keys = _expanded ? _allKeys : _commonKeys;
 
     return SizedBox(
       height: 48,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        scrollDirection: Axis.horizontal,
-        itemCount: shortcuts.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 4),
-        itemBuilder: (context, index) {
-          final (label, input) = shortcuts[index];
-          return TextButton(
-            onPressed: () => terminal.sendInput(input),
-            style: TextButton.styleFrom(
-              minimumSize: const Size(48, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: ListView.separated(
+                key: ValueKey(_expanded),
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+                scrollDirection: Axis.horizontal,
+                itemCount: keys.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 4),
+                itemBuilder: (context, index) {
+                  final (label, input) = keys[index];
+                  return TextButton(
+                    onPressed: () => terminal.sendInput(input),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    child: Text(label),
+                  );
+                },
+              ),
             ),
-            child: Text(label),
-          );
-        },
+          ),
+          IconButton(
+            tooltip: _expanded
+                ? 'terminalKeysFewer'.tr()
+                : 'terminalKeysMore'.tr(),
+            onPressed: _toggle,
+            icon: Icon(
+              _expanded ? Symbols.expand_less : Symbols.expand_more,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
 
+import 'agent/local_mcp_server.dart';
 import 'routing/app_router.dart';
 import 'shared/presentation/maidkit_window_scaffold.dart';
 import 'servers/server_providers.dart';
@@ -46,6 +47,9 @@ class _MaidKitAppState extends ConsumerState<MaidKitApp> {
     final themeMode = ref.watch(themeModeProvider);
     final appSeedColor = ref.watch(appSeedColorProvider);
     ref.watch(serverMetricsRefreshSchedulerProvider);
+    // Starts the local MCP server when the user enabled it, so other agents
+    // can connect right after the app launches.
+    ref.watch(localMcpServerProvider);
     IslandUIFoundation.configureOverlay(maidKitOverlayKey);
     IslandUIFoundation.configureNavigator(maidKitNavigatorKey);
     return MaterialApp.router(

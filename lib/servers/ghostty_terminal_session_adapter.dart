@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flterm/flterm.dart' as flterm;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:maid_kit/theme.dart';
 import 'terminal_color_scheme.dart';
@@ -170,8 +171,22 @@ class GhosttyTerminalSessionAdapter implements TerminalSessionAdapter {
         fontFamily: fontFamily,
       ),
     );
-    if (readOnly) terminal = ExcludeFocus(child: terminal);
+    if (readOnly) {
+      terminal = _ReadOnlyLogSurface(
+        onCopy: _copySelectionToClipboard,
+        onSelectAll: _controller.selectAll,
+        child: terminal,
+      );
+    }
     return terminal;
+  }
+
+  void _copySelectionToClipboard() {
+    if (_disposed) return;
+    final text = _controller.selectedText();
+    if (text.isNotEmpty) {
+      unawaited(Clipboard.setData(ClipboardData(text: text)));
+    }
   }
 
   @override
@@ -248,4 +263,77 @@ class _FltermMatch {
   final int row;
   final int start;
   final int end;
+}
+
+/// Focus host for read-only log surfaces on the ghostty renderer.
+///
+/// flterm's [flterm.TerminalView] has no read-only keyboard mode: any focused
+/// view encodes keystrokes into the terminal buffer. Like the xterm adapter's
+/// read-only path, the view stays excluded from focus so typing never mutates
+/// the log, while this host owns the focus and routes copy/select-all.
+///
+/// Other keys are intentionally left to bubble: the excluded view can never
+/// receive them, and ancestors (find shortcuts, app shortcuts) still work.
+class _ReadOnlyLogSurface extends StatefulWidget {
+  const _ReadOnlyLogSurface({
+    required this.onCopy,
+    required this.onSelectAll,
+    required this.child,
+  });
+
+  final VoidCallback onCopy;
+  final VoidCallback onSelectAll;
+  final Widget child;
+
+  @override
+  State<_ReadOnlyLogSurface> createState() => _ReadOnlyLogSurfaceState();
+}
+
+class _ReadOnlyLogSurfaceState extends State<_ReadOnlyLogSurface> {
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final apple =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final command = apple
+        ? HardwareKeyboard.instance.isMetaPressed
+        : HardwareKeyboard.instance.isControlPressed;
+
+    if (command && event.logicalKey == LogicalKeyboardKey.keyC) {
+      widget.onCopy();
+      return KeyEventResult.handled;
+    }
+    if (command && event.logicalKey == LogicalKeyboardKey.keyA) {
+      widget.onSelectAll();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        // flterm's own tap handler cannot focus an ExcludeFocus'd subtree, so
+        // focus this host on any pointer press inside the log surface.
+        onPointerDown: (_) => _focusNode.requestFocus(),
+        child: ExcludeFocus(child: widget.child),
+      ),
+    );
+  }
 }

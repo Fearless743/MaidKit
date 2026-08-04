@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:xterm/xterm.dart' as xterm;
@@ -272,6 +273,91 @@ void main() {
     expect(resizes, isNotEmpty);
     expect(resizes.last.columns, greaterThan(0));
     expect(resizes.last.rows, greaterThan(0));
+  });
+
+  testWidgets('read-only ghostty view copies the selection with Cmd+C', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add(
+              (call.arguments as Map<Object?, Object?>)['text']! as String,
+            );
+          }
+          return null;
+        },
+      );
+
+      final adapter = GhosttyTerminalSessionAdapter();
+      addTearDown(adapter.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 800,
+            height: 600,
+            child: adapter.buildView(readOnly: true, showCursor: false),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      adapter.write(Uint8List.fromList(utf8.encode('hello world\r\n')));
+
+      // Clicking the read-only surface must focus it.
+      await tester.tap(find.byType(flterm.TerminalView));
+      await tester.pump();
+
+      // Select the log text through the public find API.
+      expect(adapter.find('hello world'), 1);
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+
+      expect(copied, ['hello world']);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('read-only ghostty view blocks typing from mutating the log', (
+    tester,
+  ) async {
+    final adapter = GhosttyTerminalSessionAdapter();
+    addTearDown(adapter.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 800,
+          height: 600,
+          child: adapter.buildView(readOnly: true, showCursor: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    adapter.write(Uint8List.fromList(utf8.encode('original line\r\n')));
+
+    await tester.tap(find.byType(flterm.TerminalView));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyZ);
+    await tester.pump();
+
+    // Typing must not reach the log buffer.
+    expect(adapter.find('original line'), 1);
+    expect(adapter.find('z'), 0);
   });
 
   test('Ghostty adapter sends terminal control sequences', () async {

@@ -180,6 +180,12 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
   _FileSide? _focusedSide;
   _FileClipboard? _clipboard;
   var _localCollapsed = false;
+  var _leftSearchOpen = false;
+  var _rightSearchOpen = false;
+  late final TextEditingController _leftSearchController;
+  late final TextEditingController _rightSearchController;
+  late final FocusNode _leftSearchFocusNode;
+  late final FocusNode _rightSearchFocusNode;
 
   /// Phone-width layouts always keep the local pane visible (no collapse).
   static const _mobileLocalBreakpoint = 900.0;
@@ -187,6 +193,33 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
   bool get _isMobileLayout {
     final width = MediaQuery.sizeOf(context).width;
     return width < _mobileLocalBreakpoint;
+  }
+
+  List<FileSystemEntity> get _displayedLocalEntries {
+    final query = _leftSearchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _localEntries;
+    return [
+      for (final entry in _localEntries)
+        if (_entityName(entry).toLowerCase().contains(query)) entry,
+    ];
+  }
+
+  List<SftpName> get _displayedLeftRemoteEntries {
+    final query = _leftSearchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _leftRemoteEntries;
+    return [
+      for (final entry in _leftRemoteEntries)
+        if (entry.filename.toLowerCase().contains(query)) entry,
+    ];
+  }
+
+  List<SftpName> get _displayedRemoteEntries {
+    final query = _rightSearchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _remoteEntries;
+    return [
+      for (final entry in _remoteEntries)
+        if (entry.filename.toLowerCase().contains(query)) entry,
+    ];
   }
 
   @override
@@ -198,6 +231,12 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     _remotePathController = TextEditingController(text: _remotePath);
     _remotePathFocusNode = FocusNode();
     _shortcutFocusNode = FocusNode(debugLabel: 'file-management-shortcuts');
+    _leftSearchController = TextEditingController();
+    _rightSearchController = TextEditingController();
+    _leftSearchFocusNode = FocusNode(debugLabel: 'file-management-left-search');
+    _rightSearchFocusNode = FocusNode(
+      debugLabel: 'file-management-right-search',
+    );
     _refreshLocal();
     _refreshRemote();
   }
@@ -316,6 +355,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     _remotePathController.dispose();
     _remotePathFocusNode.dispose();
     _shortcutFocusNode.dispose();
+    _leftSearchController.dispose();
+    _rightSearchController.dispose();
+    _leftSearchFocusNode.dispose();
+    _rightSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -532,23 +575,19 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (range && _localAnchorIndex != null) {
         final start = math.min(_localAnchorIndex!, index);
         final end = math.max(_localAnchorIndex!, index);
-        _selectedLocalPaths = {
-          for (
-            var i = start;
-            i <= end &&
-                i <
-                    (_leftIsRemote
-                        ? _leftRemoteEntries.length
-                        : _localEntries.length);
-            i++
-          )
-            _leftIsRemote
-                ? _joinRemotePath(
-                    _leftRemotePath,
-                    _leftRemoteEntries[i].filename,
-                  )
-                : _localEntries[i].path,
-        };
+        if (_leftIsRemote) {
+          final displayed = _displayedLeftRemoteEntries;
+          _selectedLocalPaths = {
+            for (var i = start; i <= end && i < displayed.length; i++)
+              _joinRemotePath(_leftRemotePath, displayed[i].filename),
+          };
+        } else {
+          final displayed = _displayedLocalEntries;
+          _selectedLocalPaths = {
+            for (var i = start; i <= end && i < displayed.length; i++)
+              displayed[i].path,
+          };
+        }
       } else if (toggle) {
         final next = {..._selectedLocalPaths};
         if (!next.add(entry.path)) next.remove(entry.path);
@@ -576,9 +615,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (range && _remoteAnchorIndex != null) {
         final start = math.min(_remoteAnchorIndex!, index);
         final end = math.max(_remoteAnchorIndex!, index);
+        final displayed = _displayedRemoteEntries;
         _selectedRemotePaths = {
-          for (var i = start; i <= end && i < _remoteEntries.length; i++)
-            _joinRemotePath(_remotePath, _remoteEntries[i].filename),
+          for (var i = start; i <= end && i < displayed.length; i++)
+            _joinRemotePath(_remotePath, displayed[i].filename),
         };
       } else if (toggle) {
         final next = {..._selectedRemotePaths};
@@ -607,9 +647,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (range && _localAnchorIndex != null) {
         final start = math.min(_localAnchorIndex!, index);
         final end = math.max(_localAnchorIndex!, index);
+        final displayed = _displayedLeftRemoteEntries;
         _selectedLocalPaths = {
-          for (var i = start; i <= end && i < _leftRemoteEntries.length; i++)
-            _joinRemotePath(_leftRemotePath, _leftRemoteEntries[i].filename),
+          for (var i = start; i <= end && i < displayed.length; i++)
+            _joinRemotePath(_leftRemotePath, displayed[i].filename),
         };
       } else if (toggle) {
         final next = {..._selectedLocalPaths};
@@ -664,29 +705,139 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
     setState(() => _focusedSide = side);
   }
 
+  void _toggleSearch(_FileSide side) {
+    final isLocal = side == _FileSide.local;
+    final opening = !(isLocal ? _leftSearchOpen : _rightSearchOpen);
+    setState(() {
+      if (isLocal) {
+        _leftSearchOpen = opening;
+        if (!opening) _leftSearchController.clear();
+        _localAnchorIndex = null;
+      } else {
+        _rightSearchOpen = opening;
+        if (!opening) _rightSearchController.clear();
+        _remoteAnchorIndex = null;
+      }
+    });
+    if (opening) {
+      final node = isLocal ? _leftSearchFocusNode : _rightSearchFocusNode;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) node.requestFocus();
+      });
+    }
+  }
+
+  /// Opens the pane search and focuses it, ready to replace any query
+  /// (used by the backslash shortcut).
+  void _wakeSearch(_FileSide side) {
+    final isLocal = side == _FileSide.local;
+    setState(() {
+      if (isLocal) {
+        _leftSearchOpen = true;
+        _localAnchorIndex = null;
+      } else {
+        _rightSearchOpen = true;
+        _remoteAnchorIndex = null;
+      }
+    });
+    final controller = isLocal ? _leftSearchController : _rightSearchController;
+    final node = isLocal ? _leftSearchFocusNode : _rightSearchFocusNode;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      node.requestFocus();
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+    });
+  }
+
+  Widget _searchInput(_FileSide side) {
+    final isLocal = side == _FileSide.local;
+    final controller = isLocal ? _leftSearchController : _rightSearchController;
+    final focusNode = isLocal ? _leftSearchFocusNode : _rightSearchFocusNode;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        style: Theme.of(context).textTheme.bodySmall,
+        textInputAction: TextInputAction.search,
+        onChanged: (_) => setState(() {
+          if (isLocal) {
+            _localAnchorIndex = null;
+          } else {
+            _remoteAnchorIndex = null;
+          }
+        }),
+        decoration: InputDecoration(
+          hintText: 'fileManagerSearch'.tr(),
+          isDense: true,
+          prefixIcon: const Icon(Symbols.search, size: 16),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'fileManagerClearSearch'.tr(),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  icon: const Icon(Symbols.close, size: 16),
+                  onPressed: () => setState(() => controller.clear()),
+                ),
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _searchToggle(_FileSide side) {
+    final isLocal = side == _FileSide.local;
+    final open = isLocal ? _leftSearchOpen : _rightSearchOpen;
+    return IconButton(
+      tooltip: open ? 'fileManagerCloseSearch'.tr() : 'fileManagerSearch'.tr(),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      onPressed: () => _toggleSearch(side),
+      icon: Icon(open ? Symbols.close : Symbols.search, size: 18),
+    );
+  }
+
   void _selectAllOnFocusedSide() {
     final side = _focusedSide;
     if (side == null) return;
     setState(() {
       if (side == _FileSide.local) {
-        _selectedLocalPaths = _leftIsRemote
-            ? {
-                for (final entry in _leftRemoteEntries)
-                  _joinRemotePath(_leftRemotePath, entry.filename),
-              }
-            : {for (final entry in _localEntries) entry.path};
+        if (_leftIsRemote) {
+          final displayed = _displayedLeftRemoteEntries;
+          _selectedLocalPaths = {
+            for (final entry in displayed)
+              _joinRemotePath(_leftRemotePath, entry.filename),
+          };
+          _localAnchorIndex = displayed.isEmpty ? null : 0;
+        } else {
+          final displayed = _displayedLocalEntries;
+          _selectedLocalPaths = {
+            for (final entry in displayed) entry.path,
+          };
+          _localAnchorIndex = displayed.isEmpty ? null : 0;
+        }
         _selectedRemotePaths = {};
-        _localAnchorIndex =
-            (_leftIsRemote ? _leftRemoteEntries : _localEntries).isEmpty
-            ? null
-            : 0;
       } else {
+        final displayed = _displayedRemoteEntries;
         _selectedRemotePaths = {
-          for (final entry in _remoteEntries)
+          for (final entry in displayed)
             _joinRemotePath(_remotePath, entry.filename),
         };
         _selectedLocalPaths = {};
-        _remoteAnchorIndex = _remoteEntries.isEmpty ? null : 0;
+        _remoteAnchorIndex = displayed.isEmpty ? null : 0;
       }
     });
   }
@@ -2773,6 +2924,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       if (side != null) _pasteInto(side);
       return KeyEventResult.handled;
     }
+    if (event.logicalKey == LogicalKeyboardKey.backslash) {
+      _wakeSearch(_focusedSide ?? _FileSide.remote);
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.backspace ||
         event.logicalKey == LogicalKeyboardKey.delete) {
       _deleteSelection();
@@ -2794,6 +2949,9 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
             title: 'fileManagerLocal'.tr(),
             path: _localDirectory.path,
             pathTextStyle: pathTextStyle,
+            searchInput: _leftSearchOpen
+                ? _searchInput(_FileSide.local)
+                : null,
             focused: _focusedSide == _FileSide.local,
             dropHighlighted: _dropTargetSide == _FileSide.local,
             canGoUp: _localDirectory.parent.path != _localDirectory.path,
@@ -2815,6 +2973,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
             },
             onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.local),
             headerActions: [
+              _searchToggle(_FileSide.local),
               IconButton(
                 tooltip: 'fileManagerCreateFolder'.tr(),
                 visualDensity: VisualDensity.compact,
@@ -2856,7 +3015,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
                 ),
             ],
             child: _LocalFileList(
-              entries: _localEntries,
+              entries: _displayedLocalEntries,
+              emptyMessage: _leftSearchController.text.trim().isEmpty
+                  ? null
+                  : 'fileManagerNoMatches'.tr(),
               selectedPaths: _selectedLocalPaths,
               cutPaths: _cutPathsFor(_FileSide.local),
               onTapEntry: (entry, index) {
@@ -2880,6 +3042,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       title: 'fileManagerRemote'.tr(),
       path: _remotePath,
       pathTextStyle: pathTextStyle,
+      searchInput: _rightSearchOpen ? _searchInput(_FileSide.remote) : null,
       focused: _focusedSide == _FileSide.remote,
       dropHighlighted: _dropTargetSide == _FileSide.remote,
       canGoUp: _remotePath != '/',
@@ -2922,6 +3085,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       },
       onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.remote),
       headerActions: [
+        _searchToggle(_FileSide.remote),
         IconButton(
           tooltip: 'fileManagerCreateFolder'.tr(),
           visualDensity: VisualDensity.compact,
@@ -2943,7 +3107,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           ),
       ],
       child: _RemoteFileList(
-        entries: _remoteEntries,
+        entries: _displayedRemoteEntries,
+        emptyMessage: _rightSearchController.text.trim().isEmpty
+            ? null
+            : 'fileManagerNoMatches'.tr(),
         currentPath: _remotePath,
         selectedPaths: _selectedRemotePaths,
         cutPaths: _cutPathsFor(_FileSide.remote),
@@ -3066,6 +3233,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       title: serverName,
       path: _leftRemotePath,
       pathTextStyle: pathTextStyle,
+      searchInput: _leftSearchOpen ? _searchInput(_FileSide.local) : null,
       focused: _focusedSide == _FileSide.local,
       dropHighlighted: _dropTargetSide == _FileSide.local,
       canGoUp: _leftRemotePath != '/',
@@ -3113,6 +3281,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
       },
       onAcceptDrop: (data) => _handleInternalDrop(data, _FileSide.local),
       headerActions: [
+        _searchToggle(_FileSide.local),
         IconButton(
           tooltip: 'fileManagerCreateFolder'.tr(),
           visualDensity: VisualDensity.compact,
@@ -3142,7 +3311,10 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           ),
       ],
       child: _RemoteFileList(
-        entries: _leftRemoteEntries,
+        entries: _displayedLeftRemoteEntries,
+        emptyMessage: _leftSearchController.text.trim().isEmpty
+            ? null
+            : 'fileManagerNoMatches'.tr(),
         currentPath: _leftRemotePath,
         selectedPaths: _selectedLocalPaths,
         cutPaths: _cutPathsFor(_FileSide.local),
@@ -3321,6 +3493,7 @@ class _FilePane extends StatelessWidget {
     required this.child,
     this.onPathTap,
     this.pathInput,
+    this.searchInput,
     this.onCopyPath,
     this.onOpenTerminal,
     this.clipboardHint,
@@ -3346,6 +3519,7 @@ class _FilePane extends StatelessWidget {
   final Future<void> Function(_FileDragData data) onAcceptDrop;
   final Widget child;
   final Widget? pathInput;
+  final Widget? searchInput;
   final Future<void> Function()? onCopyPath;
   final Future<void> Function()? onOpenTerminal;
   final String? clipboardHint;
@@ -3481,6 +3655,7 @@ class _FilePane extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 1),
+                  ?searchInput,
                   Expanded(
                     child: loading
                         ? const Center(child: CircularProgressIndicator())
@@ -3514,11 +3689,13 @@ class _LocalFileList extends StatelessWidget {
     required this.dragDataFor,
     required this.onContextPrepare,
     required this.menuProvider,
+    this.emptyMessage,
   });
 
   final List<FileSystemEntity> entries;
   final Set<String> selectedPaths;
   final Set<String> cutPaths;
+  final String? emptyMessage;
   final void Function(FileSystemEntity entry, int index) onTapEntry;
   final ValueChanged<FileSystemEntity> onOpen;
   final ValueChanged<FileSystemEntity> onEdit;
@@ -3529,7 +3706,7 @@ class _LocalFileList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) {
-      return const _EmptyPane(message: 'This folder is empty.');
+      return _EmptyPane(message: emptyMessage ?? 'This folder is empty.');
     }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -3576,12 +3753,14 @@ class _RemoteFileList extends StatelessWidget {
     required this.dragDataFor,
     required this.onContextPrepare,
     required this.menuProvider,
+    this.emptyMessage,
   });
 
   final List<SftpName> entries;
   final String currentPath;
   final Set<String> selectedPaths;
   final Set<String> cutPaths;
+  final String? emptyMessage;
   final void Function(SftpName entry, int index) onTapEntry;
   final ValueChanged<SftpName> onOpen;
   final ValueChanged<SftpName> onEdit;
@@ -3592,7 +3771,7 @@ class _RemoteFileList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) {
-      return const _EmptyPane(message: 'This folder is empty.');
+      return _EmptyPane(message: emptyMessage ?? 'This folder is empty.');
     }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),

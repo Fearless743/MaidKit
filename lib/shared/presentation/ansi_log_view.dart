@@ -6,6 +6,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'app_scaffold.dart';
 import '../../servers/server_providers.dart';
 import '../../servers/terminal_find_host.dart';
 import '../../servers/terminal_session_adapter.dart';
@@ -213,6 +214,12 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // Mirror the interactive terminal: a transparent terminal lets the app
+    // surface show through; otherwise fall back to the opaque terminal slab.
+    // Passing [transparentBackground] through also keeps the opacity in sync
+    // when the user toggles the setting while a log is on screen.
+    final transparent = ref.watch(transparentTerminalBackgroundProvider);
+
     // If a dump never landed (e.g. interrupted by dispose/recreate), schedule
     // a write — never force-recreate here, or we cancel the deferred write.
     if (!widget.streaming && _writtenText != widget.text && !_writeScheduled) {
@@ -228,7 +235,7 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
     return ClipRRect(
       borderRadius: widget.borderRadius,
       child: ColoredBox(
-        color: const Color(0xFF111315),
+        color: transparent ? Colors.transparent : const Color(0xFF111315),
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(
             scrollbars: true,
@@ -249,6 +256,7 @@ class _AnsiLogViewState extends ConsumerState<AnsiLogView> {
                 autofocus: false,
                 readOnly: true,
                 showCursor: false,
+                transparentBackground: transparent,
               ),
             ),
           ),

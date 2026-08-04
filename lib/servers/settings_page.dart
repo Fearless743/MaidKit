@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:island_ui_foundation/island_ui_foundation.dart';
@@ -14,6 +15,7 @@ import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/agent/agent_personality.dart';
+import 'package:maid_kit/agent/local_mcp_server.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/agent/billing_service.dart';
 import 'package:maid_kit/agent/personality_service.dart';
@@ -484,6 +486,12 @@ class SettingsPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsLocalMcpServer',
+                padding: EdgeInsets.zero,
+                child: const _LocalMcpServerSection(),
               ),
               const SizedBox(height: 24),
               _SettingsSection(
@@ -2156,6 +2164,203 @@ class _SettingsSection extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Padding(padding: padding, child: child),
         ),
+      ],
+    );
+  }
+}
+
+/// Toggle and configuration for the in-app MCP server that exposes
+/// MaidKit's resources to other agents on this machine.
+class _LocalMcpServerSection extends ConsumerStatefulWidget {
+  const _LocalMcpServerSection();
+
+  @override
+  ConsumerState<_LocalMcpServerSection> createState() =>
+      _LocalMcpServerSectionState();
+}
+
+class _LocalMcpServerSectionState
+    extends ConsumerState<_LocalMcpServerSection> {
+  final _portController = TextEditingController();
+  bool _portPrefilled = false;
+  String? _portError;
+
+  @override
+  void dispose() {
+    _portController.dispose();
+    super.dispose();
+  }
+
+  void _copyUrl() {
+    final url = ref.read(localMcpServerProvider).value?.url;
+    if (url == null) return;
+    Clipboard.setData(ClipboardData(text: url));
+    showSnackBar('settingsLocalMcpServerCopied'.tr());
+  }
+
+  Future<void> _applyPort(String value) async {
+    final port = int.tryParse(value.trim());
+    if (port == null || port < 1024 || port > 65535) {
+      setState(() => _portError = 'settingsLocalMcpServerPortInvalid'.tr());
+      return;
+    }
+    setState(() => _portError = null);
+    await ref.read(localMcpServerProvider.notifier).setPort(port);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final localMcp = ref.watch(localMcpServerProvider);
+    return localMcp.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(16),
+        child: LinearProgressIndicator(),
+      ),
+      error: (error, _) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(error.toString()),
+      ),
+      data: (state) {
+        if (!_portPrefilled) {
+          _portPrefilled = true;
+          _portController.text = '${state.port}';
+        }
+        final scheme = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('settingsLocalMcpServerEnabled').tr(),
+                subtitle: const Text('settingsLocalMcpServerHint').tr(),
+                value: state.enabled,
+                onChanged: (value) =>
+                    ref.read(localMcpServerProvider.notifier).setEnabled(value),
+              ),
+              if (state.enabled) ...[
+                const SizedBox(height: 4),
+                _statusRow(state, scheme),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Symbols.link, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SelectableText(
+                        state.url,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'IBM Plex Mono',
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'settingsLocalMcpServerCopy'.tr(),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _copyUrl,
+                      icon: const Icon(Symbols.content_copy),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      'settingsLocalMcpServerPort'.tr(),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 140,
+                      child: TextField(
+                        controller: _portController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          errorText: _portError,
+                          errorMaxLines: 2,
+                        ),
+                        onSubmitted: _applyPort,
+                        onChanged: (_) {
+                          if (_portError != null) {
+                            setState(() => _portError = null);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'settingsLocalMcpServerConfigTitle',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ).tr(),
+                const SizedBox(height: 4),
+                Text(
+                  'settingsLocalMcpServerConfigHint',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ).tr(),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    '"mcpServers": {\n'
+                    '  "maidkit": {\n'
+                    '    "url": "${state.url}"\n'
+                    '  }\n'
+                    '}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontFamily: 'IBM Plex Mono',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _statusRow(LocalMcpServerState state, ColorScheme scheme) {
+    final (color, labelKey) = switch (state.status) {
+      LocalMcpServerStatus.running => (
+        scheme.primary,
+        'settingsLocalMcpServerStatusRunning',
+      ),
+      LocalMcpServerStatus.failed => (
+        scheme.error,
+        'settingsLocalMcpServerStatusFailed',
+      ),
+      LocalMcpServerStatus.stopped => (
+        scheme.onSurfaceVariant,
+        'settingsLocalMcpServerStatusStopped',
+      ),
+    };
+    return Row(
+      children: [
+        Icon(Symbols.circle, size: 10, color: color),
+        const SizedBox(width: 8),
+        Text(labelKey.tr(), style: Theme.of(context).textTheme.bodyMedium),
+        if (state.error != null) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              state.error!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.error),
+            ),
+          ),
+        ],
       ],
     );
   }
