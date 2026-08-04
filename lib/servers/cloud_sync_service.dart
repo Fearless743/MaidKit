@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:uuid/uuid.dart';
@@ -185,6 +186,13 @@ class CloudSyncService {
   static const _clientId = 'maidkit';
   static const _callbackScheme = 'maidkit';
   static const _redirectUri = '$_callbackScheme://oauth/callback';
+  // On Windows/Linux flutter_web_auth_2's default in-app WebView2 window runs
+  // a second Flutter engine that crashes the app; the browser + loopback
+  // callback flow is used instead there. The port must stay fixed so the
+  // redirect URI can be registered with the Solarpass OIDC client.
+  static const _loopbackPort = 42871;
+  static const _loopbackCallbackScheme = 'http://127.0.0.1:$_loopbackPort';
+  static const _loopbackRedirectUri = '$_loopbackCallbackScheme/oauth/callback';
   static const _sessionKey = 'maidkit_solar_network_oauth_session';
   static const _schemeVersion = 1;
 
@@ -487,11 +495,19 @@ class CloudSyncService {
     final challenge = base64UrlEncode(
       sha256.convert(utf8.encode(verifier)).bytes,
     ).replaceAll('=', '');
+    // Windows/Linux: use the system browser with a loopback callback instead
+    // of the in-app WebView2 window, which crashes the app (its title bar
+    // runs a second Flutter engine without the window_manager plugin).
+    final useLoopback =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
+    final redirectUri = useLoopback ? _loopbackRedirectUri : _redirectUri;
     final url = configuration.authorizationEndpoint.replace(
       queryParameters: {
         'response_type': 'code',
         'client_id': _clientId,
-        'redirect_uri': _redirectUri,
+        'redirect_uri': redirectUri,
         'scope': '*',
         'state': state,
         'code_challenge': challenge,
@@ -501,7 +517,12 @@ class CloudSyncService {
     final callback = Uri.parse(
       await FlutterWebAuth2.authenticate(
         url: url.toString(),
-        callbackUrlScheme: _callbackScheme,
+        callbackUrlScheme: useLoopback
+            ? _loopbackCallbackScheme
+            : _callbackScheme,
+        options: useLoopback
+            ? const FlutterWebAuth2Options(useWebview: false)
+            : const FlutterWebAuth2Options(),
       ),
     );
     if (callback.queryParameters['state'] != state) {
@@ -525,7 +546,7 @@ class CloudSyncService {
       'grant_type': 'authorization_code',
       'client_id': _clientId,
       'code': code,
-      'redirect_uri': _redirectUri,
+      'redirect_uri': redirectUri,
       'code_verifier': verifier,
     });
     await _saveSession(session);
