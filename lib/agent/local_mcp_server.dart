@@ -1,0 +1,1050 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dart_openai/dart_openai.dart';
+import 'package:dartssh2/dartssh2.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:maid_kit/agent/agent_run_policy.dart';
+import 'package:maid_kit/agent/mcp_client.dart' show mcpProtocolVersion;
+import 'package:maid_kit/agent/ssh_agent_service.dart';
+import 'package:maid_kit/servers/server_models.dart';
+import 'package:maid_kit/servers/server_providers.dart';
+import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
+import 'package:maid_kit/snippets/snippet_repository.dart';
+
+/// Lifecycle of the in-app MCP server exposed to other local agents.
+enum LocalMcpServerStatus { stopped, running, failed }
+
+/// Observable state of the local MCP server. [enabled] reflects the user's
+/// preference even when binding failed, so the settings UI can surface the
+/// error and let the user pick a different port.
+class LocalMcpServerState {
+  const LocalMcpServerState({
+    required this.enabled,
+    required this.port,
+    required this.status,
+    this.error,
+  });
+
+  final bool enabled;
+  final int port;
+  final LocalMcpServerStatus status;
+  final String? error;
+
+  /// The MCP SSE endpoint other agents configure as their server URL.
+  String get url => 'http://127.0.0.1:$port/sse';
+
+  LocalMcpServerState copyWith({
+    bool? enabled,
+    int? port,
+    LocalMcpServerStatus? status,
+    String? error,
+  }) => LocalMcpServerState(
+    enabled: enabled ?? this.enabled,
+    port: port ?? this.port,
+    status: status ?? this.status,
+    error: error ?? this.error,
+  );
+}
+
+/// Persisted preference for the local MCP server. Plain app preferences, not
+/// vault data: the port and a boolean carry no secrets.
+class LocalMcpServerPreferences {
+  LocalMcpServerPreferences(this._preferences, this.enabled, this.port);
+
+  static const _enabledKey = 'local_mcp_server_enabled';
+  static const _portKey = 'local_mcp_server_port';
+
+  /// Port picked to avoid common dev-server ranges.
+  static const int defaultPort = 8746;
+
+  final SharedPreferencesAsync _preferences;
+  final bool enabled;
+  final int port;
+
+  static Future<LocalMcpServerPreferences> load({
+    SharedPreferencesAsync? preferences,
+  }) async {
+    final store = preferences ?? SharedPreferencesAsync();
+    final enabled = await store.getBool(_enabledKey) ?? false;
+    final port = await store.getInt(_portKey) ?? defaultPort;
+    return LocalMcpServerPreferences(store, enabled, port);
+  }
+
+  Future<void> saveEnabled(bool value) =>
+      _preferences.setBool(_enabledKey, value);
+
+  Future<void> savePort(int value) => _preferences.setInt(_portKey, value);
+}
+
+/// The tool surface the protocol serves. Split from the HTTP/JSON-RPC layer
+/// so tests can drive the protocol with a fake tool set.
+abstract interface class LocalMcpToolInvoker {
+  List<Map<String, dynamic>> get toolDefinitions;
+
+  /// Executes [name] with [arguments] and returns an MCP `tools/call` result
+  /// map (`content` + `isError`). Throws [ArgumentError] or
+  /// [McpActionDeclinedException] for failures the caller should see as a
+  /// tool error rather than a protocol error.
+  Future<Map<String, dynamic>> call(
+    String name,
+    Map<String, dynamic> arguments,
+  );
+}
+
+/// Raised when the user declines a proposed action in the approval dialog.
+class McpActionDeclinedException implements Exception {
+  const McpActionDeclinedException();
+
+  @override
+  String toString() => 'Action declined by the user.';
+}
+
+/// JSON-RPC request handling for one MCP session. Transport-agnostic: the
+/// session feeds decoded messages in and emits response maps out.
+class LocalMcpProtocolHandler {
+  LocalMcpProtocolHandler(this.invoker);
+
+  final LocalMcpToolInvoker invoker;
+
+  /// Handles one incoming JSON-RPC message. Returns the response to send
+  /// back, or null when the message is a notification or otherwise
+  /// unanswered.
+  Future<Map<String, dynamic>?> handle(Map<String, dynamic> message) async {
+    final id = message['id'];
+    final method = message['method'];
+    if (method is! String) {
+      return id == null ? null : _error(id, -32600, 'Invalid Request');
+    }
+    if (id == null) {
+      // Notifications (initialized, cancelled, …) need no reply.
+      return null;
+    }
+    switch (method) {
+      case 'initialize':
+        return _result(id, {
+          'protocolVersion': mcpProtocolVersion,
+          'capabilities': const {
+            'tools': {'listChanged': false},
+          },
+          'serverInfo': const {'name': 'MaidKit', 'version': '1.0.0'},
+        });
+      case 'ping':
+        return _result(id, const <String, Object?>{});
+      case 'tools/list':
+        return _result(id, {'tools': invoker.toolDefinitions});
+      case 'tools/call':
+        return _handleCall(id, message['params']);
+      default:
+        return _error(id, -32601, 'Method not found: $method');
+    }
+  }
+
+  Future<Map<String, dynamic>> _handleCall(
+    Object? id,
+    Object? rawParams,
+  ) async {
+    final params = rawParams is Map<String, dynamic> ? rawParams : null;
+    final name = params?['name'];
+    if (name is! String || name.isEmpty) {
+      return _error(id, -32602, 'tools/call requires a tool name.');
+    }
+    final rawArguments = params?['arguments'];
+    final arguments = rawArguments is Map<String, dynamic>
+        ? rawArguments
+        : <String, dynamic>{};
+    try {
+      return _result(id, await invoker.call(name, arguments));
+    } on ArgumentError catch (error) {
+      return _result(id, _toolError(error.toString()));
+    } on McpActionDeclinedException {
+      return _result(id, _toolError('Action declined by the user.'));
+    } catch (error) {
+      debugPrint('[local mcp] tool "$name" failed: $error');
+      return _error(id, -32603, 'Internal error: $error');
+    }
+  }
+
+  Map<String, dynamic> _toolError(String message) => {
+    'content': [
+      {'type': 'text', 'text': message},
+    ],
+    'isError': true,
+  };
+
+  Map<String, dynamic> _result(Object? id, Map<String, Object?> result) => {
+    'jsonrpc': '2.0',
+    'id': id,
+    'result': result,
+  };
+
+  Map<String, dynamic> _error(Object? id, int code, String message) => {
+    'jsonrpc': '2.0',
+    'id': id,
+    'error': {'code': code, 'message': message},
+  };
+}
+
+/// A local Model Context Protocol server exposing MaidKit's resources to
+/// other agents on this machine. Speaks the MCP HTTP+SSE transport: `GET
+/// /sse` opens a session event stream, `POST /message` delivers JSON-RPC
+/// requests whose replies come back over that stream. Bound to loopback only.
+class LocalMcpServer {
+  LocalMcpServer({required this.executor, required this.port});
+
+  final LocalMcpToolInvoker executor;
+  final int port;
+
+  late final _handler = LocalMcpProtocolHandler(executor);
+  final _sessions = <String, _LocalMcpSession>{};
+  String? _latestSessionId;
+  HttpServer? _server;
+
+  bool get isRunning => _server != null;
+
+  /// The port actually bound. Differs from [port] when 0 was requested
+  /// (ephemeral), which tests use.
+  int get boundPort => _server?.port ?? port;
+
+  Future<void> start() async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    _server = server;
+    server.listen(
+      _handleRequest,
+      onError: (Object error) => debugPrint('[local mcp] server error: $error'),
+    );
+  }
+
+  Future<void> stop() async {
+    final sessions = _sessions.values.toList();
+    _sessions.clear();
+    _latestSessionId = null;
+    for (final session in sessions) {
+      await session.close();
+    }
+    final server = _server;
+    _server = null;
+    await server?.close(force: true);
+  }
+
+  void _handleRequest(HttpRequest request) {
+    final path = request.uri.path;
+    if (request.method == 'GET' && path == '/sse') {
+      _handleSse(request);
+      return;
+    }
+    if (request.method == 'POST' && path == '/message') {
+      unawaited(_handleMessage(request));
+      return;
+    }
+    if (request.method == 'GET' && (path == '/' || path.isEmpty)) {
+      unawaited(_handleStatus(request));
+      return;
+    }
+    request.response.statusCode = HttpStatus.notFound;
+    unawaited(request.response.close());
+  }
+
+  void _handleSse(HttpRequest request) {
+    final session = _LocalMcpSession(_handler);
+    _sessions[session.id] = session;
+    _latestSessionId = session.id;
+    final response = request.response;
+    response
+      ..statusCode = HttpStatus.ok
+      // dart:io buffers response bodies by default and `flush()` alone does
+      // not push buffered bytes to the client before the response closes.
+      // Unbuffered writes are what keep SSE events flowing incrementally.
+      ..bufferOutput = false
+      ..headers.set('Content-Type', 'text/event-stream')
+      ..headers.set('Cache-Control', 'no-cache')
+      ..headers.set('Connection', 'keep-alive')
+      ..headers.set('Access-Control-Allow-Origin', '*')
+      ..headers.set('Mcp-Session-Id', session.id);
+    // Legacy SSE handshake: announce the message endpoint, then stream
+    // replies as `message` events.
+    response.write(
+      'event: endpoint\ndata: /message?sessionId=${session.id}\n\n',
+    );
+    session.outgoing.listen((payload) {
+      response.write('event: message\ndata: $payload\n\n');
+    }, onDone: () => unawaited(response.close()));
+    // The client hung up or the server closed the stream; drop the session.
+    unawaited(
+      response.done
+          .then((_) {
+            if (_sessions.remove(session.id) != null &&
+                session.id == _latestSessionId) {
+              _latestSessionId = null;
+            }
+            unawaited(session.close());
+          })
+          .catchError((_) {}),
+    );
+  }
+
+  Future<void> _handleMessage(HttpRequest request) async {
+    final session = _sessionFor(request);
+    if (session == null) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      return;
+    }
+    final body = await utf8.decoder.bind(request).join();
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } catch (_) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    // The reply arrives over the SSE stream; 202 is the spec's acknowledgement.
+    request.response.statusCode = HttpStatus.accepted;
+    await request.response.close();
+    await session.enqueue(decoded);
+  }
+
+  Future<void> _handleStatus(HttpRequest request) async {
+    final response = request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.set('Content-Type', 'application/json');
+    response.write(
+      jsonEncode({
+        'name': 'MaidKit',
+        'status': 'running',
+        'tools': [for (final tool in executor.toolDefinitions) tool['name']],
+      }),
+    );
+    await response.close();
+  }
+
+  _LocalMcpSession? _sessionFor(HttpRequest request) {
+    final header = request.headers.value('Mcp-Session-Id');
+    final query = request.uri.queryParameters['sessionId'];
+    final id = header ?? query ?? _latestSessionId;
+    if (id == null) return null;
+    return _sessions[id];
+  }
+}
+
+class _LocalMcpSession {
+  _LocalMcpSession(this._handler) : id = _newSessionId();
+
+  static String _newSessionId() {
+    final random = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    return 'maidkit-$random';
+  }
+
+  final String id;
+  final LocalMcpProtocolHandler _handler;
+  final _outgoing = StreamController<String>();
+  Future<void> _tail = Future.value();
+
+  Stream<String> get outgoing => _outgoing.stream;
+
+  /// Processes [message] after every earlier message on this session has
+  /// finished. Tool calls can wait on user approval, so interleaving requests
+  /// would reorder replies and stack dialogs.
+  Future<void> enqueue(Map<String, dynamic> message) {
+    final completer = Completer<void>();
+    _tail = _tail
+        .then((_) => _handle(message))
+        .catchError((Object error) {
+          debugPrint('[local mcp] request failed: $error');
+        })
+        .whenComplete(completer.complete);
+    return completer.future;
+  }
+
+  Future<void> _handle(Map<String, dynamic> message) async {
+    final response = await _handler.handle(message);
+    if (response != null) _emit(response);
+  }
+
+  void _emit(Map<String, dynamic> message) {
+    if (_outgoing.isClosed) return;
+    _outgoing.add(jsonEncode(message));
+  }
+
+  Future<void> close() async {
+    if (!_outgoing.isClosed) await _outgoing.close();
+  }
+}
+
+/// Executes MCP tool calls against MaidKit's own resources — the saved SSH
+/// servers, snippets, and skills. Mutating actions go through the same
+/// run policy and approval dialogs as the chat agent.
+class LocalMcpToolExecutor implements LocalMcpToolInvoker {
+  LocalMcpToolExecutor(this.ref);
+
+  final Ref ref;
+
+  @override
+  List<Map<String, dynamic>> get toolDefinitions => definitions;
+
+  /// The tool surface this executor serves, kept static so tests can inspect
+  /// it without constructing a Riverpod-backed instance.
+  static List<Map<String, dynamic>> get definitions => _toolDefinitions;
+
+  static final List<Map<String, dynamic>> _toolDefinitions = [
+    {
+      'name': 'list_servers',
+      'description':
+          'List the SSH servers configured in MaidKit. Returns id, name, '
+          'host, port, and username for each server. Use the returned id as '
+          'server_id for other tools.',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'run_command',
+      'description':
+          'Run one shell command on a server through its saved SSH '
+          'connection. Mutating commands are shown to the user for approval '
+          'before they run.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'server_id': {
+            'type': 'integer',
+            'description': 'Id of the target server, from list_servers.',
+          },
+          'command': {'type': 'string', 'description': 'Shell command to run.'},
+        },
+        'required': ['server_id', 'command'],
+      },
+    },
+    {
+      'name': 'read_file',
+      'description': 'Read a UTF-8 text file from a server over SFTP.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'server_id': {
+            'type': 'integer',
+            'description': 'Id of the target server, from list_servers.',
+          },
+          'path': {
+            'type': 'string',
+            'description': 'Absolute path of the file to read.',
+          },
+        },
+        'required': ['server_id', 'path'],
+      },
+    },
+    {
+      'name': 'write_file',
+      'description':
+          'Create or replace a UTF-8 text file on a server over SFTP. '
+          'Requires user approval.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'server_id': {
+            'type': 'integer',
+            'description': 'Id of the target server, from list_servers.',
+          },
+          'path': {
+            'type': 'string',
+            'description': 'Absolute path of the file to write.',
+          },
+          'content': {
+            'type': 'string',
+            'description': 'UTF-8 content to write.',
+          },
+        },
+        'required': ['server_id', 'path', 'content'],
+      },
+    },
+    {
+      'name': 'delete_file',
+      'description':
+          'Permanently delete a file from a server over SFTP. '
+          'Requires user approval.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'server_id': {
+            'type': 'integer',
+            'description': 'Id of the target server, from list_servers.',
+          },
+          'path': {
+            'type': 'string',
+            'description': 'Absolute path of the file to delete.',
+          },
+        },
+        'required': ['server_id', 'path'],
+      },
+    },
+    {
+      'name': 'list_snippets',
+      'description':
+          'List the reusable shell snippets saved in MaidKit. Returns id and '
+          'name for each snippet; read the full script with get_snippet.',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'get_snippet',
+      'description': 'Read the full script of a saved MaidKit snippet.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'snippet_id': {
+            'type': 'integer',
+            'description': 'Id of the snippet, from list_snippets.',
+          },
+        },
+        'required': ['snippet_id'],
+      },
+    },
+    {
+      'name': 'create_snippet',
+      'description':
+          'Save a reusable POSIX shell snippet in MaidKit. '
+          'Requires user approval.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'name': {
+            'type': 'string',
+            'description': 'Short name for the snippet.',
+          },
+          'script': {
+            'type': 'string',
+            'description': 'POSIX shell script body.',
+          },
+        },
+        'required': ['name', 'script'],
+      },
+    },
+    {
+      'name': 'run_snippet',
+      'description':
+          'Run a saved MaidKit snippet on a server. Requires user approval.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'server_id': {
+            'type': 'integer',
+            'description': 'Id of the target server, from list_servers.',
+          },
+          'snippet_id': {
+            'type': 'integer',
+            'description': 'Id of the snippet, from list_snippets.',
+          },
+        },
+        'required': ['server_id', 'snippet_id'],
+      },
+    },
+    {
+      'name': 'list_skills',
+      'description':
+          'List the reusable expertise packs (skills) saved in MaidKit. '
+          'Returns id, name, description, and enabled for each skill.',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'get_skill',
+      'description':
+          'Read the full instructions of a saved skill by its skill_id.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'skill_id': {
+            'type': 'integer',
+            'description': 'Id of the skill, from list_skills.',
+          },
+        },
+        'required': ['skill_id'],
+      },
+    },
+  ];
+
+  /// Largest tool result handed to the calling agent. Mirrors the chat
+  /// agent's truncation so replies stay small enough for model context.
+  static const int maxResultLength = 12000;
+
+  @override
+  Future<Map<String, dynamic>> call(
+    String name,
+    Map<String, dynamic> arguments,
+  ) async {
+    final String text;
+    switch (name) {
+      case 'list_servers':
+        text = jsonEncode(await _listServers());
+      case 'run_command':
+        text = await _runRemoteAction(
+          AgentActionKind.command,
+          arguments,
+          toolName: name,
+        );
+      case 'read_file':
+        text = await _runRemoteAction(
+          AgentActionKind.readFile,
+          arguments,
+          toolName: name,
+        );
+      case 'write_file':
+        text = await _runRemoteAction(
+          AgentActionKind.writeFile,
+          arguments,
+          toolName: name,
+        );
+      case 'delete_file':
+        text = await _runRemoteAction(
+          AgentActionKind.deleteFile,
+          arguments,
+          toolName: name,
+        );
+      case 'list_snippets':
+        text = jsonEncode(await _listSnippets());
+      case 'get_snippet':
+        text = await _getSnippet(arguments);
+      case 'create_snippet':
+        text = await _createSnippet(arguments);
+      case 'run_snippet':
+        text = await _runSnippet(arguments);
+      case 'list_skills':
+        text = jsonEncode(await _listSkills());
+      case 'get_skill':
+        text = await _getSkill(arguments);
+      default:
+        throw ArgumentError('Unknown tool: $name');
+    }
+    return {
+      'content': [
+        {
+          'type': 'text',
+          'text': text.length <= maxResultLength
+              ? text
+              : '${text.substring(0, maxResultLength)}\n[output truncated]',
+        },
+      ],
+      'isError': false,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> _listServers() async {
+    final servers = await ref.read(serverRepositoryProvider).all();
+    return [
+      for (final server in servers)
+        {
+          'id': server.id,
+          'name': server.name,
+          'host': server.host,
+          'port': server.port,
+          'username': server.username,
+        },
+    ];
+  }
+
+  Future<List<Map<String, dynamic>>> _listSnippets() async {
+    final snippets = await ref.read(snippetRepositoryProvider).all();
+    return [
+      for (final snippet in snippets) {'id': snippet.id, 'name': snippet.name},
+    ];
+  }
+
+  Future<String> _getSnippet(Map<String, dynamic> arguments) async {
+    final snippet = await ref
+        .read(snippetRepositoryProvider)
+        .snippet(_int(arguments, 'snippet_id'));
+    if (snippet == null) throw ArgumentError('Unknown snippet_id.');
+    return 'Snippet #${snippet.id}: ${snippet.name}\n\n${snippet.script}';
+  }
+
+  Future<String> _createSnippet(Map<String, dynamic> arguments) async {
+    final name = _string(arguments, 'name');
+    final script = _string(arguments, 'script');
+    if (name.trim().isEmpty || script.trim().isEmpty) {
+      throw ArgumentError('name and script are required.');
+    }
+    if (!await _approve(
+      _proposal(AgentActionKind.createSnippet, arguments, 'create_snippet'),
+    )) {
+      throw const McpActionDeclinedException();
+    }
+    final id = await ref
+        .read(snippetRepositoryProvider)
+        .save(name: name, script: script);
+    return 'Created saved snippet #$id: $name';
+  }
+
+  Future<String> _runSnippet(Map<String, dynamic> arguments) async {
+    final serverId = _int(arguments, 'server_id');
+    final snippet = await ref
+        .read(snippetRepositoryProvider)
+        .snippet(_int(arguments, 'snippet_id'));
+    if (snippet == null) throw ArgumentError('Unknown snippet_id.');
+    final proposal = _proposal(
+      AgentActionKind.runSnippet,
+      arguments,
+      'run_snippet',
+    );
+    if (!await _approve(proposal)) throw const McpActionDeclinedException();
+    final client = await _clientForServer(serverId);
+    return SshAgentService.executeProposal(
+      client,
+      proposal,
+      snippetScript: snippet.script,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _listSkills() async {
+    final skills = await ref.read(skillRepositoryProvider).all();
+    return [
+      for (final skill in skills)
+        {
+          'id': skill.id,
+          'name': skill.name,
+          'description': skill.description,
+          'enabled': skill.enabled,
+        },
+    ];
+  }
+
+  Future<String> _getSkill(Map<String, dynamic> arguments) async {
+    final skill = await ref
+        .read(skillRepositoryProvider)
+        .skill(_int(arguments, 'skill_id'));
+    if (skill == null) throw ArgumentError('Unknown skill_id.');
+    return 'Skill "${skill.name}":\n\n${skill.content}';
+  }
+
+  /// Runs a proposal that targets a server. The approval check happens before
+  /// any connection work so a declined action never touches the network.
+  Future<String> _runRemoteAction(
+    AgentActionKind kind,
+    Map<String, dynamic> arguments, {
+    required String toolName,
+  }) async {
+    final serverId = _int(arguments, 'server_id');
+    switch (kind) {
+      case AgentActionKind.command:
+        _string(arguments, 'command');
+      case AgentActionKind.readFile:
+      case AgentActionKind.deleteFile:
+        _string(arguments, 'path');
+      case AgentActionKind.writeFile:
+        _string(arguments, 'path');
+        _string(arguments, 'content');
+      default:
+        break;
+    }
+    final proposal = _proposal(kind, arguments, toolName);
+    if (!await _approve(proposal)) throw const McpActionDeclinedException();
+    return SshAgentService.executeProposal(
+      await _clientForServer(serverId),
+      proposal,
+    );
+  }
+
+  /// Mirrors the chat page's run policy: read-only actions auto-run under
+  /// auto-review, everything else is shown to the user unless the policy
+  /// approves it outright.
+  Future<bool> _approve(AgentProposal proposal) async {
+    final policy = await ref.read(agentRunPolicyProvider.future);
+    final shouldAutoRun = switch (policy) {
+      AgentRunPolicy.alwaysApprove => true,
+      AgentRunPolicy.autoReview => proposal.safeToRun,
+      AgentRunPolicy.alwaysAsk => false,
+    };
+    if (shouldAutoRun) return true;
+    return await showMaidKitOverlayDialog<bool>(
+          barrierDismissible: false,
+          builder: (context, close) =>
+              _McpApprovalCard(proposal: proposal, onResult: close),
+        ) ??
+        false;
+  }
+
+  Future<SSHClient> _clientForServer(int serverId) async {
+    final repository = ref.read(serverRepositoryProvider);
+    final servers = await repository.all();
+    final server = servers.where((server) => server.id == serverId).firstOrNull;
+    if (server == null) throw ArgumentError('Unknown server_id: $serverId');
+    final manager = ref.read(connectionManagerProvider);
+    final existing = manager.clientFor(serverId);
+    if (existing != null) return existing;
+    final credential = await repository.credentialFor(server);
+    HostKeyPrompt? approvedHostKey;
+    await manager.connect(server, credential, (prompt) async {
+      final approved = await _approveHostKey(prompt);
+      if (approved) approvedHostKey = prompt;
+      return approved;
+    }, knownHostKeyFingerprint: server.hostKeyFingerprint);
+    if (approvedHostKey != null) {
+      await repository.rememberHostKey(server.id, approvedHostKey!);
+    }
+    await repository.markConnected(server.id);
+    return manager.clientFor(serverId) ??
+        (throw StateError('The SSH connection was lost.'));
+  }
+
+  Future<bool> _approveHostKey(HostKeyPrompt prompt) async {
+    return await showMaidKitOverlayDialog<bool>(
+          barrierDismissible: false,
+          builder: (context, close) => ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
+            child: Material(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Symbols.verified_user,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 36,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'serverVerifyHostKey'.tr(),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      prompt.replacesExisting
+                          ? 'serverHostKeyChanged'.tr()
+                          : 'serverHostKeyNew'.tr(),
+                    ),
+                    const SizedBox(height: 16),
+                    SelectableText(
+                      '${prompt.algorithm}\n${prompt.fingerprint}',
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => close(false),
+                          child: const Text('serverReject').tr(),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () => close(true),
+                          child: const Text('serverApprove').tr(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ) ??
+        false;
+  }
+
+  AgentProposal _proposal(
+    AgentActionKind kind,
+    Map<String, dynamic> arguments,
+    String toolName,
+  ) => AgentProposal(
+    kind: kind,
+    arguments: arguments,
+    toolCall: OpenAIResponseToolCall.fromMap({
+      'id': 'local-mcp-${DateTime.now().microsecondsSinceEpoch}',
+      'type': 'function',
+      'function': {'name': toolName, 'arguments': jsonEncode(arguments)},
+    }),
+    assistantMessage: OpenAIChatCompletionChoiceMessageModel(
+      role: OpenAIChatMessageRole.assistant,
+      content: null,
+    ),
+  );
+
+  int _int(Map<String, dynamic> arguments, String name) {
+    final value = arguments[name];
+    if (value is int) return value;
+    throw ArgumentError('$name must be an integer.');
+  }
+
+  String _string(Map<String, dynamic> arguments, String name) {
+    final value = arguments[name];
+    if (value is String) return value;
+    throw ArgumentError('$name must be a string.');
+  }
+}
+
+/// Approval card for actions requested through the local MCP server. Mirrors
+/// the chat agent's proposal presentation but as a modal overlay.
+class _McpApprovalCard extends StatelessWidget {
+  const _McpApprovalCard({required this.proposal, required this.onResult});
+
+  final AgentProposal proposal;
+  final void Function(bool approved) onResult;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Symbols.rule, color: scheme.primary, size: 36),
+              const SizedBox(height: 16),
+              Text(
+                'mcpApprovalTitle'.tr(),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'mcpApprovalHint'.tr(),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                proposal.title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    proposal.detail,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'IBM Plex Mono',
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => onResult(false),
+                    child: Text('agentDecline'.tr()),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => onResult(true),
+                    child: Text('agentApproveRun'.tr()),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final localMcpServerProvider =
+    AsyncNotifierProvider<LocalMcpServerNotifier, LocalMcpServerState>(
+      LocalMcpServerNotifier.new,
+    );
+
+class LocalMcpServerNotifier extends AsyncNotifier<LocalMcpServerState> {
+  LocalMcpServer? _server;
+
+  @override
+  Future<LocalMcpServerState> build() async {
+    final settings = await LocalMcpServerPreferences.load();
+    await _server?.stop();
+    _server = LocalMcpServer(
+      executor: LocalMcpToolExecutor(ref),
+      port: settings.port,
+    );
+    if (!settings.enabled) {
+      return LocalMcpServerState(
+        enabled: false,
+        port: settings.port,
+        status: LocalMcpServerStatus.stopped,
+      );
+    }
+    return _start(settings.port);
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    final current = state.value;
+    await LocalMcpServerPreferences.load().then(
+      (settings) => settings.saveEnabled(enabled),
+    );
+    if (!enabled) {
+      await _server?.stop();
+      state = AsyncData(
+        (current ??
+                const LocalMcpServerState(
+                  enabled: false,
+                  port: LocalMcpServerPreferences.defaultPort,
+                  status: LocalMcpServerStatus.stopped,
+                ))
+            .copyWith(
+              enabled: false,
+              status: LocalMcpServerStatus.stopped,
+              error: null,
+            ),
+      );
+      return;
+    }
+    final port = current?.port ?? LocalMcpServerPreferences.defaultPort;
+    // The port may have changed while disabled; bind what the state reports.
+    await _server?.stop();
+    _server = LocalMcpServer(executor: LocalMcpToolExecutor(ref), port: port);
+    state = AsyncData(await _start(port));
+  }
+
+  Future<void> setPort(int port) async {
+    await LocalMcpServerPreferences.load().then(
+      (settings) => settings.savePort(port),
+    );
+    final current = state.value;
+    if (current == null || !current.enabled) {
+      state = AsyncData(
+        LocalMcpServerState(
+          enabled: current?.enabled ?? false,
+          port: port,
+          status: LocalMcpServerStatus.stopped,
+        ),
+      );
+      return;
+    }
+    await _server?.stop();
+    _server = LocalMcpServer(executor: LocalMcpToolExecutor(ref), port: port);
+    state = AsyncData(await _start(port));
+  }
+
+  Future<LocalMcpServerState> _start(int port) async {
+    try {
+      await _server!.start();
+      return LocalMcpServerState(
+        enabled: true,
+        port: port,
+        status: LocalMcpServerStatus.running,
+      );
+    } catch (error) {
+      return LocalMcpServerState(
+        enabled: true,
+        port: port,
+        status: LocalMcpServerStatus.failed,
+        error: '$error',
+      );
+    }
+  }
+}

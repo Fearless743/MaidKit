@@ -88,8 +88,9 @@ class AgentProposal {
     AgentActionKind.writeFile => arguments['path'] as String? ?? '',
     AgentActionKind.createSnippet =>
       '${arguments['name'] as String? ?? ''}\n\n${arguments['script'] as String? ?? ''}',
-    AgentActionKind.runSnippet =>
-      'agentActionSnippetId'.tr(args: ['${arguments['snippet_id'] as int? ?? ''}']),
+    AgentActionKind.runSnippet => 'agentActionSnippetId'.tr(
+      args: ['${arguments['snippet_id'] as int? ?? ''}'],
+    ),
     AgentActionKind.mcpToolCall => _mcpDetail(),
     AgentActionKind.getSkill => 'agentSkillId'.tr(
       args: ['${arguments['skill_id'] as int? ?? ''}'],
@@ -116,8 +117,7 @@ class AgentProposal {
   /// the action is read-only by nature.
   bool get safeToRun =>
       arguments['safe_to_run'] as bool? ??
-      kind == AgentActionKind.readFile ||
-      kind == AgentActionKind.getSkill;
+      kind == AgentActionKind.readFile || kind == AgentActionKind.getSkill;
 }
 
 class AgentTurn {
@@ -184,7 +184,9 @@ class AgentMcpToolTarget {
 
   static String bareName(String qualifiedName) {
     final separator = qualifiedName.indexOf('__');
-    return separator < 0 ? qualifiedName : qualifiedName.substring(separator + 2);
+    return separator < 0
+        ? qualifiedName
+        : qualifiedName.substring(separator + 2);
   }
 
   /// The OpenAI tool declaration for this MCP tool. `safe_to_run` is injected
@@ -428,6 +430,20 @@ class SshAgentService {
     AgentProposal proposal, {
     String? snippetScript,
     AgentCancelToken? cancelToken,
+  }) => executeProposal(
+    client,
+    proposal,
+    snippetScript: snippetScript,
+    cancelToken: cancelToken,
+  );
+
+  /// Runs the remote half of [proposal] over [client]. Shared by the chat page
+  /// and the local MCP server so both entry points execute actions identically.
+  static Future<String> executeProposal(
+    SSHClient client,
+    AgentProposal proposal, {
+    String? snippetScript,
+    AgentCancelToken? cancelToken,
   }) async {
     SSHSession? session;
     cancelToken?.register(() => session?.close());
@@ -515,7 +531,7 @@ class SshAgentService {
     }
   }
 
-  String _limit(String value) => value.length <= 12000
+  static String _limit(String value) => value.length <= 12000
       ? value
       : '${value.substring(0, 12000)}\n[output truncated]';
 
@@ -534,14 +550,14 @@ class SshAgentService {
     final mcpSection = mcpTools.isEmpty
         ? ''
         : '\nConnected MCP servers expose extra tools:\n'
-            '${mcpTools.map((tool) => '- ${tool.qualifiedName}: ${tool.description}').join('\n')}\n';
+              '${mcpTools.map((tool) => '- ${tool.qualifiedName}: ${tool.description}').join('\n')}\n';
     final mcpErrorSection = mcpUnavailable == null || mcpUnavailable.isEmpty
         ? ''
         : '\nUnreachable MCP servers (their tools are unavailable):\n$mcpUnavailable\n';
     final skillsSection = skills.isEmpty
         ? ''
         : '\nSaved skills (call get_skill with the exact skill_id to read the full instructions):\n'
-            '${skills.map((skill) => '- ${skill.descriptionLine}').join('\n')}\n';
+              '${skills.map((skill) => '- ${skill.descriptionLine}').join('\n')}\n';
     return '''
 You are MaidKit's SSH management assistant. Respond in the user's current UI language: $_uiLanguage. Available servers are:
 ${servers.map((server) => server.description).join('\n')}
