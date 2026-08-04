@@ -70,7 +70,11 @@ class FileManagementTab extends SessionTab {
     required super.id,
     required super.serverId,
     required super.serverName,
+    this.initialPath,
   });
+
+  /// Remote directory to show on first load (e.g. a linked project folder).
+  final String? initialPath;
 
   @override
   SessionTabType get type => SessionTabType.fileManagement;
@@ -281,12 +285,17 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     _watchTerminalDone(handle);
   }
 
-  void openFileManagement(Server server, {String? paneId}) {
+  void openFileManagement(
+    Server server, {
+    String? initialPath,
+    String? paneId,
+  }) {
     if (paneId != null) focusPane(paneId);
     final tab = FileManagementTab(
       id: 'files-${DateTime.now().microsecondsSinceEpoch}',
       serverId: server.id,
       serverName: server.name,
+      initialPath: initialPath,
     );
     _insertTab(tab, targetPaneId: paneId);
   }

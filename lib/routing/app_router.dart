@@ -31,6 +31,7 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: ServerDetailRoute.page, path: '/server-detail'),
     AutoRoute(page: ProjectDetailRoute.page, path: '/project-detail'),
     AutoRoute(page: ContainerDetailRoute.page, path: '/container-detail'),
+    AutoRoute(page: ComposeDetailRoute.page, path: '/compose-detail'),
     AutoRoute(page: AboutRoute.page, path: '/about'),
   ];
 }

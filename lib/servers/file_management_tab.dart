@@ -226,6 +226,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
   void initState() {
     super.initState();
     _localDirectory = Directory.current;
+    _remotePath = widget.tab.initialPath ?? '.';
     _leftRemotePathController = TextEditingController(text: _leftRemotePath);
     _leftRemotePathFocusNode = FocusNode();
     _remotePathController = TextEditingController(text: _remotePath);
@@ -824,9 +825,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
           _localAnchorIndex = displayed.isEmpty ? null : 0;
         } else {
           final displayed = _displayedLocalEntries;
-          _selectedLocalPaths = {
-            for (final entry in displayed) entry.path,
-          };
+          _selectedLocalPaths = {for (final entry in displayed) entry.path};
           _localAnchorIndex = displayed.isEmpty ? null : 0;
         }
         _selectedRemotePaths = {};
@@ -2949,9 +2948,7 @@ class _FileManagementTabViewState extends ConsumerState<FileManagementTabView> {
             title: 'fileManagerLocal'.tr(),
             path: _localDirectory.path,
             pathTextStyle: pathTextStyle,
-            searchInput: _leftSearchOpen
-                ? _searchInput(_FileSide.local)
-                : null,
+            searchInput: _leftSearchOpen ? _searchInput(_FileSide.local) : null,
             focused: _focusedSide == _FileSide.local,
             dropHighlighted: _dropTargetSide == _FileSide.local,
             canGoUp: _localDirectory.parent.path != _localDirectory.path,

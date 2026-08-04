@@ -14,6 +14,7 @@ import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/servers/systemd_models.dart';
+import 'package:maid_kit/servers/terminal_tabs_provider.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/shared/presentation/cloud_file_picker.dart';
 import 'package:maid_kit/theme.dart';
@@ -1136,28 +1137,48 @@ class _ResourceTileState extends ConsumerState<_ResourceTile> {
     }
   }
 
-  void _openOnServer() {
+  Future<void> _openOnServer() async {
     final host = server;
     if (host == null) return;
     if (kind == DeploymentResourceKind.serverFolder) {
-      pickRemotePaths(
-        context,
-        ref,
-        host,
-        title: resource.name,
-        initialPath: '${effectiveConfig['path'] ?? '.'}',
-        selection: CloudFilePickerSelection.fileOrFolder,
+      final manager = ref.read(connectionManagerProvider);
+      if (manager.clientFor(host.id) == null &&
+          !await connectForStatistics(context, ref, host)) {
+        return;
+      }
+      if (!mounted) return;
+      final path = '${effectiveConfig['path'] ?? ''}'.trim();
+      // Land on the Servers workspace tab with a file-management tab opened
+      // at the linked folder instead of a transient picker.
+      ref
+          .read(terminalTabsProvider.notifier)
+          .openFileManagement(host, initialPath: path.isEmpty ? null : path);
+      context.router.root.navigate(
+        const ServerWorkspaceRoute(children: [ServersRoute()]),
+      );
+      return;
+    }
+    if (kind == DeploymentResourceKind.compose) {
+      if (!_composeReady) {
+        // Missing identity — fall back to the server's container tab.
+        context.router.root.push(
+          ServerDetailRoute(server: host, initialTab: 4),
+        );
+        return;
+      }
+      context.router.root.push(
+        ComposeDetailRoute(
+          server: host,
+          runtime: _runtime,
+          scope: _scope,
+          projectName: _composeName,
+          directory: _composeDirectory,
+        ),
       );
       return;
     }
     context.router.root.push(
-      ServerDetailRoute(
-        server: host,
-        initialTab: _serverTabFor(kind),
-        initialComposeProject: kind == DeploymentResourceKind.compose
-            ? _composeName
-            : null,
-      ),
+      ServerDetailRoute(server: host, initialTab: _serverTabFor(kind)),
     );
   }
 
@@ -1700,10 +1721,12 @@ class _ComposeLivePanelState extends ConsumerState<_ComposeLivePanel> {
                 container: item,
                 contentPadding: EdgeInsets.zero,
                 onOpen: () => context.router.root.push(
-                  ServerDetailRoute(
+                  ContainerDetailRoute(
                     server: widget.server,
-                    initialTab: 4,
-                    initialComposeProject: _name,
+                    runtime: _runtime,
+                    scope: _scope,
+                    containerId: item.id,
+                    containerName: item.name,
                   ),
                 ),
                 trailing: PopupMenuButton<String>(
