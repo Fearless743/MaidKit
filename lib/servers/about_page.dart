@@ -5,6 +5,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:maid_kit/shared/services/update_service.dart';
+
 final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
   return PackageInfo.fromPlatform();
 });
@@ -118,6 +120,24 @@ class AboutPage extends ConsumerWidget {
                           ),
                         ],
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'updateSection'.tr(),
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: const Icon(Symbols.update),
+                      title: Text('checkForUpdates'.tr()),
+                      subtitle: Text('checkForUpdatesHint'.tr()),
+                      trailing: const Icon(Symbols.chevron_right),
+                      onTap: () async {
+                        await UpdateService().checkForUpdates(context);
+                      },
                     ),
                   ),
                   const SizedBox(height: 24),
