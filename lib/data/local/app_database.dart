@@ -158,6 +158,35 @@ class AgentConversations extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
+/// A locally launched Model Context Protocol server the agent can call tools
+/// on. The command is executed as a child process speaking JSON-RPC over
+/// stdio; arguments and environment are JSON-encoded. Environment entries are
+/// merged over the app's own environment.
+class McpServers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get command => text()();
+  TextColumn get arguments => text().withDefault(const Constant('[]'))();
+  TextColumn get environment => text().withDefault(const Constant('{}'))();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
+/// Reusable expertise packs (skills) the agent can consult. Enabled skills
+/// are listed in the system prompt; the agent reads full instructions through
+/// the `get_skill` tool when a skill matches the task. Content is plain
+/// markdown and contains no credentials.
+class AgentSkills extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  TextColumn get content => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     Servers,
@@ -172,6 +201,8 @@ class AgentConversations extends Table {
     AgentProviders,
     AgentProviderModels,
     AgentConversations,
+    McpServers,
+    AgentSkills,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -188,7 +219,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -331,6 +362,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 15) {
         await m.createTable(agentConversations);
       }
+      if (from < 16) {
+        await m.createTable(mcpServers);
+        await m.createTable(agentSkills);
+      }
     },
   );
 
@@ -369,4 +404,12 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<AgentConversation>> watchAgentConversations() => (select(
     agentConversations,
   )..orderBy([(table) => OrderingTerm.desc(table.updatedAt)])).watch();
+
+  Stream<List<McpServer>> watchMcpServers() => (select(
+    mcpServers,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
+
+  Stream<List<AgentSkill>> watchAgentSkills() => (select(
+    agentSkills,
+  )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
 }

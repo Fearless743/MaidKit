@@ -6,7 +6,12 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:maid_kit/agent/mcp_client.dart' show withSafeToRunProperty;
+
+import 'agent_cancel_token.dart';
 import 'agent_repository.dart';
+
+export 'agent_cancel_token.dart';
 
 enum AgentActionKind {
   command,
@@ -15,6 +20,8 @@ enum AgentActionKind {
   deleteFile,
   createSnippet,
   runSnippet,
+  mcpToolCall,
+  getSkill,
 }
 
 class AgentSnippetTarget {
@@ -70,6 +77,8 @@ class AgentProposal {
     AgentActionKind.deleteFile => 'agentActionDeleteFile'.tr(),
     AgentActionKind.createSnippet => 'agentActionCreateSnippet'.tr(),
     AgentActionKind.runSnippet => 'agentActionRunSnippet'.tr(),
+    AgentActionKind.mcpToolCall => 'agentActionMcpTool'.tr(),
+    AgentActionKind.getSkill => 'agentActionGetSkill'.tr(),
   };
 
   String get detail => switch (kind) {
@@ -81,12 +90,34 @@ class AgentProposal {
       '${arguments['name'] as String? ?? ''}\n\n${arguments['script'] as String? ?? ''}',
     AgentActionKind.runSnippet =>
       'agentActionSnippetId'.tr(args: ['${arguments['snippet_id'] as int? ?? ''}']),
+    AgentActionKind.mcpToolCall => _mcpDetail(),
+    AgentActionKind.getSkill => 'agentSkillId'.tr(
+      args: ['${arguments['skill_id'] as int? ?? ''}'],
+    ),
   };
+
+  String _mcpDetail() {
+    final map = Map<String, dynamic>.from(arguments)..remove('safe_to_run');
+    return '${toolCall.function.name}\n${jsonEncode(map)}';
+  }
+
+  /// The MCP server id embedded in the qualified tool name
+  /// (`mcp_<serverId>__<toolName>`).
+  int? get mcpServerId => _mcpServerIdFromName(toolCall.function.name ?? '');
+
+  static int? _mcpServerIdFromName(String name) {
+    if (!name.startsWith('mcp_')) return null;
+    final underscore = name.indexOf('__');
+    if (underscore < 0) return null;
+    return int.tryParse(name.substring(4, underscore));
+  }
 
   /// True when the model flagged the action as safe to run without review, or
   /// the action is read-only by nature.
   bool get safeToRun =>
-      arguments['safe_to_run'] as bool? ?? kind == AgentActionKind.readFile;
+      arguments['safe_to_run'] as bool? ??
+      kind == AgentActionKind.readFile ||
+      kind == AgentActionKind.getSkill;
 }
 
 class AgentTurn {
@@ -131,35 +162,65 @@ class _AgentChatResult {
   final String? reasoningContent;
 }
 
-/// Cancellation token for an in-flight agent operation. The UI calls [cancel]
-/// and the service aborts the current HTTP stream or SSH session.
-class AgentCancelToken {
-  final _callbacks = <void Function()>[];
-  bool _cancelled = false;
+/// A tool exposed by a connected MCP server, projected for the OpenAI request.
+/// [name] is the bare MCP tool name; the model sees it qualified as
+/// `mcp_<serverId>__<name>` so every server's tools stay unique.
+class AgentMcpToolTarget {
+  const AgentMcpToolTarget({
+    required this.serverId,
+    required this.serverName,
+    required this.name,
+    required this.description,
+    required this.inputSchema,
+  });
 
-  bool get isCancelled => _cancelled;
+  final int serverId;
+  final String serverName;
+  final String name;
+  final String description;
+  final Map<String, dynamic> inputSchema;
 
-  void _register(void Function() callback) => _callbacks.add(callback);
+  String get qualifiedName => 'mcp_${serverId}__$name';
 
-  void _unregister(void Function() callback) => _callbacks.remove(callback);
-
-  void cancel() {
-    if (_cancelled) return;
-    _cancelled = true;
-    for (final callback in _callbacks.toList()) {
-      callback();
-    }
+  static String bareName(String qualifiedName) {
+    final separator = qualifiedName.indexOf('__');
+    return separator < 0 ? qualifiedName : qualifiedName.substring(separator + 2);
   }
 
-  void throwIfCancelled() {
-    if (_cancelled) throw const AgentCancelledException();
+  /// The OpenAI tool declaration for this MCP tool. `safe_to_run` is injected
+  /// when the schema allows it so the run policy applies uniformly.
+  Map<String, dynamic> toOpenAiToolMap() {
+    final parameters =
+        withSafeToRunProperty(inputSchema) ??
+        Map<String, dynamic>.from(inputSchema);
+    return {
+      'type': 'function',
+      'function': {
+        'name': qualifiedName,
+        'description': description.isEmpty
+            ? 'Tool from MCP server "$serverName".'
+            : '$description\nProvided by MCP server "$serverName".',
+        'parameters': parameters,
+      },
+    };
   }
 }
 
-class AgentCancelledException implements Exception {
-  const AgentCancelledException();
-  @override
-  String toString() => 'AgentCancelledException';
+/// An enabled skill the model may consult. Listed in the system prompt; full
+/// instructions are fetched through the `get_skill` tool.
+class AgentSkillTarget {
+  const AgentSkillTarget({
+    required this.id,
+    required this.name,
+    required this.description,
+  });
+
+  final int id;
+  final String name;
+  final String description;
+
+  String get descriptionLine =>
+      description.isEmpty ? '#$id: $name' : '#$id: $name — $description';
 }
 
 /// A deliberately small remote-tool boundary. The model can propose actions,
@@ -234,9 +295,26 @@ class SshAgentService {
     ),
   );
 
+  static final _getSkillTool = OpenAIToolModel(
+    type: 'function',
+    function: OpenAIFunctionModel.withParameters(
+      name: 'get_skill',
+      description:
+          'Read the full instructions of a saved skill by its exact '
+          'skill_id. Skills contain reusable expertise for common tasks; '
+          'call this only when a skill matches the current task.',
+      parameters: [
+        OpenAIFunctionProperty.integer(name: 'skill_id', isRequired: true),
+      ],
+    ),
+  );
+
   Future<AgentTurn> request({
     required List<AgentServerTarget> servers,
     List<AgentSnippetTarget> snippets = const [],
+    List<AgentMcpToolTarget> mcpTools = const [],
+    List<AgentSkillTarget> skills = const [],
+    String? mcpUnavailable,
     required String prompt,
     List<Map<String, dynamic>> history = const [],
     void Function(String text)? onText,
@@ -244,11 +322,16 @@ class SshAgentService {
   }) async {
     final result = await _streamChat(
       [
-        _rawMessage('system', _systemPrompt(servers, snippets)),
+        _rawMessage(
+          'system',
+          _systemPrompt(servers, snippets, mcpTools, skills, mcpUnavailable),
+        ),
         ...history,
         _rawMessage('user', prompt),
       ],
       onText,
+      mcpTools: mcpTools,
+      skills: skills,
       cancelToken: cancelToken,
     );
     return _turn(result);
@@ -257,6 +340,9 @@ class SshAgentService {
   Future<AgentTurn> continueAfterExecution({
     required List<AgentServerTarget> servers,
     List<AgentSnippetTarget> snippets = const [],
+    List<AgentMcpToolTarget> mcpTools = const [],
+    List<AgentSkillTarget> skills = const [],
+    String? mcpUnavailable,
     required List<Map<String, dynamic>> history,
     required AgentProposal proposal,
     required String result,
@@ -274,7 +360,10 @@ class SshAgentService {
     assistant['tool_calls'] = [proposal.toolCall.toMap()];
     final resultMessage = await _streamChat(
       [
-        _rawMessage('system', _systemPrompt(servers, snippets)),
+        _rawMessage(
+          'system',
+          _systemPrompt(servers, snippets, mcpTools, skills, mcpUnavailable),
+        ),
         ...history,
         assistant,
         {
@@ -284,6 +373,8 @@ class SshAgentService {
         },
       ],
       onText,
+      mcpTools: mcpTools,
+      skills: skills,
       cancelToken: cancelToken,
     );
     // The API requires the assistant message with its tool call. Reconstruct it
@@ -310,6 +401,9 @@ class SshAgentService {
       'delete_file' => AgentActionKind.deleteFile,
       'create_snippet' => AgentActionKind.createSnippet,
       'run_snippet' => AgentActionKind.runSnippet,
+      'get_skill' => AgentActionKind.getSkill,
+      final String name when name.startsWith('mcp_') =>
+        AgentActionKind.mcpToolCall,
       _ => throw StateError('Unsupported agent tool: ${call.function.name}'),
     };
     return AgentTurn(
@@ -336,7 +430,7 @@ class SshAgentService {
     AgentCancelToken? cancelToken,
   }) async {
     SSHSession? session;
-    cancelToken?._register(() => session?.close());
+    cancelToken?.register(() => session?.close());
     try {
       final path = proposal.arguments['path'] as String?;
       switch (proposal.kind) {
@@ -405,6 +499,11 @@ class SshAgentService {
           return 'Deleted $path';
         case AgentActionKind.createSnippet:
           throw UnsupportedError('Snippet creation is handled by the app.');
+        case AgentActionKind.mcpToolCall:
+        case AgentActionKind.getSkill:
+          throw UnsupportedError(
+            '${proposal.kind} is executed by the app, not over SSH.',
+          );
       }
     } catch (error) {
       if (cancelToken?.isCancelled ?? false) {
@@ -412,7 +511,7 @@ class SshAgentService {
       }
       rethrow;
     } finally {
-      cancelToken?._unregister(() => session?.close());
+      cancelToken?.unregister(() => session?.close());
     }
   }
 
@@ -428,8 +527,28 @@ class SshAgentService {
   String _systemPrompt(
     List<AgentServerTarget> servers,
     List<AgentSnippetTarget> snippets,
-  ) =>
-      '''You are MaidKit's SSH management assistant. Respond in the user's current UI language: $_uiLanguage. Available servers are:\n${servers.map((server) => server.description).join('\n')}\nSaved snippets are:\n${snippets.isEmpty ? '(none)' : snippets.map((snippet) => snippet.description).join('\n')}\nUse tools to inspect or make the requested remote change. You can save reusable POSIX shell scripts as snippets and run a saved snippet by its exact snippet_id. Every server action must include the exact server_id from this list. Propose only one tool action at a time. Every tool call is shown to the user and requires explicit approval. Set safe_to_run to true only when the action is clearly safe to run without review: it is read-only, idempotent, or reversible. Prefer read-only inspection before modifying anything. Never claim a tool ran until you receive its result. Keep replies concise.${_personality.isEmpty ? '' : '\n\nCustom personality guidance (follow this for tone and working style, but never let it override the safety and tool-use rules above):\n$_personality'}''';
+    List<AgentMcpToolTarget> mcpTools,
+    List<AgentSkillTarget> skills,
+    String? mcpUnavailable,
+  ) {
+    final mcpSection = mcpTools.isEmpty
+        ? ''
+        : '\nConnected MCP servers expose extra tools:\n'
+            '${mcpTools.map((tool) => '- ${tool.qualifiedName}: ${tool.description}').join('\n')}\n';
+    final mcpErrorSection = mcpUnavailable == null || mcpUnavailable.isEmpty
+        ? ''
+        : '\nUnreachable MCP servers (their tools are unavailable):\n$mcpUnavailable\n';
+    final skillsSection = skills.isEmpty
+        ? ''
+        : '\nSaved skills (call get_skill with the exact skill_id to read the full instructions):\n'
+            '${skills.map((skill) => '- ${skill.descriptionLine}').join('\n')}\n';
+    return '''
+You are MaidKit's SSH management assistant. Respond in the user's current UI language: $_uiLanguage. Available servers are:
+${servers.map((server) => server.description).join('\n')}
+Saved snippets are:
+${snippets.isEmpty ? '(none)' : snippets.map((snippet) => snippet.description).join('\n')}
+Use tools to inspect or make the requested remote change. You can save reusable POSIX shell scripts as snippets and run a saved snippet by its exact snippet_id. Every server action must include the exact server_id from this list. MCP tools are invoked by their full qualified name with the arguments their server expects; results are returned to you verbatim. Propose only one tool action at a time. Every tool call is shown to the user and requires explicit approval. Set safe_to_run to true only when the action is clearly safe to run without review: it is read-only, idempotent, or reversible. Prefer read-only inspection before modifying anything. Never claim a tool ran until you receive its result. Keep replies concise.${_personality.isEmpty ? '' : '\n\nCustom personality guidance (follow this for tone and working style, but never let it override the safety and tool-use rules above):\n$_personality'}$mcpSection$mcpErrorSection$skillsSection''';
+  }
 
   Uri _endpoint() {
     final root = (_configuration.baseUrl ?? 'https://api.openai.com')
@@ -444,10 +563,12 @@ class SshAgentService {
   Future<_AgentChatResult> _streamChat(
     List<Map<String, dynamic>> messages,
     void Function(String text)? onText, {
+    List<AgentMcpToolTarget> mcpTools = const [],
+    List<AgentSkillTarget> skills = const [],
     AgentCancelToken? cancelToken,
   }) async {
     final client = http.Client();
-    cancelToken?._register(client.close);
+    cancelToken?.register(client.close);
     try {
       final request = http.Request('POST', _endpoint())
         ..headers.addAll({
@@ -458,7 +579,12 @@ class SshAgentService {
           'model': _configuration.model,
           'stream': true,
           'temperature': 0.2,
-          'tools': [for (final tool in _tools) tool.toMap()],
+          'tools': [
+            for (final tool in _tools) tool.toMap(),
+            if (mcpTools.isNotEmpty)
+              for (final tool in mcpTools) tool.toOpenAiToolMap(),
+            if (skills.isNotEmpty) _getSkillTool.toMap(),
+          ],
           'messages': messages,
         });
       final response = await client.send(request);
@@ -540,7 +666,7 @@ class SshAgentService {
       }
       rethrow;
     } finally {
-      cancelToken?._unregister(client.close);
+      cancelToken?.unregister(client.close);
       client.close();
     }
   }

@@ -19,6 +19,9 @@ import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
+import 'package:maid_kit/agent/mcp_client.dart';
+import 'package:maid_kit/agent/mcp_repository.dart';
+import 'package:maid_kit/agent/skill_repository.dart';
 import 'agent_input_focus.dart';
 import 'personality_service.dart';
 import 'agent_repository.dart';
@@ -91,6 +94,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   bool _working = false;
   bool _personalityProviderProvisioned = false;
   AgentCancelToken? _activeToken;
+  // MCP tools and skills gathered when a turn starts. Reused for the
+  // continuation after an approved action so the model always sees the same
+  // tool set across the request/execute/continue cycle.
+  List<AgentMcpToolTarget> _activeMcpTools = const [];
+  List<AgentSkillTarget> _activeSkills = const [];
+  String? _activeMcpUnavailable;
 
   @override
   void initState() {
@@ -225,6 +234,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       }
       final personality = await ref.read(agentPersonalityProvider.future);
       if (!mounted) return;
+      final (mcpTools, skillTargets, mcpUnavailable) =
+          await _gatherCapabilities();
+      if (!mounted) return;
+      _activeMcpTools = mcpTools;
+      _activeSkills = skillTargets;
+      _activeMcpUnavailable = mcpUnavailable;
       var streamedMessageIndex = -1;
       final cancelToken = AgentCancelToken();
       _activeToken = cancelToken;
@@ -236,6 +251,9 @@ class _AgentPageState extends ConsumerState<AgentPage> {
           ).request(
             servers: targets,
             snippets: _snippetTargets(snippets),
+            mcpTools: mcpTools,
+            skills: skillTargets,
+            mcpUnavailable: mcpUnavailable,
             prompt: text,
             history: conversationContext,
             onText: (streamedText) {
@@ -365,6 +383,9 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         snippets: _snippetTargets(
           await ref.read(snippetRepositoryProvider).all(),
         ),
+        mcpTools: _activeMcpTools,
+        skills: _activeSkills,
+        mcpUnavailable: _activeMcpUnavailable,
         history: _pendingContext,
         proposal: approvedProposal,
         result: result,
@@ -449,6 +470,52 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       AgentSnippetTarget(id: snippet.id, name: snippet.name),
   ];
 
+  /// Collects the tools of every enabled MCP server and the enabled skills at
+  /// the start of a turn. A broken server never blocks the chat: its tools
+  /// are dropped and the failure is surfaced to the model in the system
+  /// prompt instead.
+  Future<(List<AgentMcpToolTarget>, List<AgentSkillTarget>, String?)>
+  _gatherCapabilities() async {
+    final mcpTools = <AgentMcpToolTarget>[];
+    final mcpErrors = <String>[];
+    final servers =
+        ref.read(mcpServersProvider).asData?.value ?? const <McpServer>[];
+    for (final server in servers.where((server) => server.enabled)) {
+      try {
+        final client = await ref
+            .read(mcpClientManagerProvider)
+            .clientFor(server);
+        final tools = await client.listTools();
+        mcpTools.addAll([
+          for (final tool in tools)
+            AgentMcpToolTarget(
+              serverId: server.id,
+              serverName: server.name,
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+            ),
+        ]);
+      } catch (error) {
+        mcpErrors.add('${server.name}: $error');
+      }
+    }
+    final skills = await ref.read(skillRepositoryProvider).all();
+    final skillTargets = [
+      for (final skill in skills.where((skill) => skill.enabled))
+        AgentSkillTarget(
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+        ),
+    ];
+    return (
+      mcpTools,
+      skillTargets,
+      mcpErrors.isEmpty ? null : mcpErrors.join('\n'),
+    );
+  }
+
   Future<String> _executeProposal(
     SshAgentService agent,
     SSHClient? client,
@@ -489,8 +556,58 @@ class _AgentPageState extends ConsumerState<AgentPage> {
           proposal,
           cancelToken: cancelToken,
         );
+      case AgentActionKind.mcpToolCall:
+        final serverId = proposal.mcpServerId;
+        if (serverId == null) {
+          throw StateError('agentMcpServerGone'.tr());
+        }
+        final server =
+            ref
+                    .read(mcpServersProvider)
+                    .asData
+                    ?.value
+                    .where((server) => server.id == serverId)
+                    .firstOrNull;
+        if (server == null) {
+          throw StateError('agentMcpServerGone'.tr());
+        }
+        final clientForServer = await ref
+            .read(mcpClientManagerProvider)
+            .clientFor(server);
+        final result = await clientForServer.callTool(
+          AgentMcpToolTarget.bareName(
+            proposal.toolCall.function.name ?? '',
+          ),
+          Map<String, dynamic>.from(proposal.arguments)
+            ..remove('safe_to_run'),
+          cancelToken: cancelToken,
+        );
+        return _formatMcpResult(result);
+      case AgentActionKind.getSkill:
+        final skillId = proposal.arguments['skill_id'] as int?;
+        if (skillId == null) {
+          throw ArgumentError('agentSkillIdRequired'.tr());
+        }
+        final skill = await ref.read(skillRepositoryProvider).skill(skillId);
+        if (skill == null) {
+          throw StateError('agentSkillGone'.tr(args: ['$skillId']));
+        }
+        return _limitMcpText('Skill "${skill.name}":\n\n${skill.content}');
     }
   }
+
+  String _formatMcpResult(McpToolResult result) {
+    var text = result.text;
+    if (text.isEmpty) {
+      text = result.content.isEmpty ? '(empty result)' : jsonEncode(result.content);
+    }
+    if (result.isError) text = 'MCP tool error:\n$text';
+    return _limitMcpText(text);
+  }
+
+  static String _limitMcpText(String value) => value.length <= 12000
+      ? value
+      : '${value.substring(0, 12000)}\n[output truncated]';
 
   SSHClient _requireClient(SSHClient? client) =>
       client ?? (throw StateError('agentRequiresConnection'.tr()));
@@ -677,6 +794,14 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     );
   }
 
+  Future<void> _showCapabilitiesSheet() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (_) => const _AgentCapabilitiesSheet(),
+  );
+
   Future<void> _deleteProvider(AgentProvider provider) async {
     final confirmed = await showMaidKitConfirmAlert(
       'agentDeleteProviderConfirm'.tr(args: [provider.name]),
@@ -765,6 +890,8 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     if (cloudUser == null) _personalityProviderProvisioned = false;
     final servers =
         ref.watch(serversProvider).asData?.value ?? const <Server>[];
+    final mcpServers =
+        ref.watch(mcpServersProvider).asData?.value ?? const <McpServer>[];
     final providers =
         ref.watch(agentProvidersProvider).asData?.value ??
         const <AgentProvider>[];
@@ -806,6 +933,12 @@ class _AgentPageState extends ConsumerState<AgentPage> {
           visualDensity: VisualDensity.compact,
           icon: const Icon(Symbols.history),
         );
+        final capabilitiesButton = IconButton(
+          tooltip: 'agentCapabilities'.tr(),
+          onPressed: () => _showCapabilitiesSheet(),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Symbols.extension),
+        );
         return MaidKitAppScaffold(
           appBar: AppBar(
             actions: [
@@ -814,12 +947,17 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: [...selectors, historyButton],
+                    children: [
+                      ...selectors,
+                      historyButton,
+                      capabilitiesButton,
+                    ],
                   ),
                 )
               else ...[
                 ...selectors,
                 historyButton,
+                capabilitiesButton,
               ],
               const SizedBox(width: 8),
             ],
@@ -842,6 +980,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                 ),
                 mainContent: _buildChatColumn(
                   servers: servers,
+                  mcpServers: mcpServers,
                   scheme: scheme,
                   compact: compact,
                 ),
@@ -1018,6 +1157,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
 
   Widget _buildChatColumn({
     required List<Server> servers,
+    required List<McpServer> mcpServers,
     required ColorScheme scheme,
     required bool compact,
   }) {
@@ -1030,7 +1170,11 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: _buildMessageList(servers: servers, scheme: scheme),
+                  child: _buildMessageList(
+                    servers: servers,
+                    mcpServers: mcpServers,
+                    scheme: scheme,
+                  ),
                 ),
                 if (_showScrollToBottom)
                   Positioned(
@@ -1107,12 +1251,22 @@ class _AgentPageState extends ConsumerState<AgentPage> {
 
   Widget _buildMessageList({
     required List<Server> servers,
+    required List<McpServer> mcpServers,
     required ColorScheme scheme,
   }) {
     final pendingProposal = _proposal;
     final showThinking = _working && pendingProposal == null;
     final serverName = pendingProposal == null
         ? ''
+        : pendingProposal.kind == AgentActionKind.mcpToolCall
+        ? mcpServers
+                  .where(
+                    (server) =>
+                        server.id == pendingProposal.mcpServerId,
+                  )
+                  .map((server) => server.name)
+                  .firstOrNull ??
+              'agentUnavailableServer'.tr()
         : pendingProposal.serverId == null
         ? 'MaidKit'
         : servers
@@ -2001,4 +2155,555 @@ class _AgentThinkingIndicator extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AgentCapabilitiesSheet extends ConsumerStatefulWidget {
+  const _AgentCapabilitiesSheet();
+
+  @override
+  ConsumerState<_AgentCapabilitiesSheet> createState() =>
+      _AgentCapabilitiesSheetState();
+}
+
+class _AgentCapabilitiesSheetState extends ConsumerState<_AgentCapabilitiesSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController = TabController(
+    length: 2,
+    vsync: this,
+  )..addListener(() {
+    if (_tabController.index != _tabIndex) {
+      setState(() => _tabIndex = _tabController.index);
+    }
+  });
+  int _tabIndex = 0;
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _editMcpServer([McpServer? existing]) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        useRootNavigator: true,
+        builder: (sheetContext) => _McpServerEditorSheet(
+          existing: existing,
+          onSave: (draft) async {
+            try {
+              final id = await ref
+                  .read(mcpRepositoryProvider)
+                  .save(draft, id: existing?.id);
+              if (existing != null) {
+                // Relaunch with the new configuration on next use.
+                await ref.read(mcpClientManagerProvider).dispose(id);
+              }
+              if (sheetContext.mounted) Navigator.pop(sheetContext);
+            } catch (error) {
+              showMaidKitErrorAlert(
+                error,
+                title: 'agentCouldNotSaveMcpServer'.tr(),
+              );
+            }
+          },
+        ),
+      );
+
+  Future<void> _deleteMcpServer(McpServer server) async {
+    final confirmed = await showMaidKitConfirmAlert(
+      'agentDeleteMcpServerConfirm'.tr(args: [server.name]),
+      'agentDeleteMcpServer'.tr(),
+      icon: Symbols.delete_outline,
+      isDanger: true,
+    );
+    if (!confirmed) return;
+    await ref.read(mcpClientManagerProvider).dispose(server.id);
+    await ref.read(mcpRepositoryProvider).delete(server.id);
+  }
+
+  Future<void> _setMcpEnabled(McpServer server, bool enabled) async {
+    await ref.read(mcpRepositoryProvider).setEnabled(server.id, enabled);
+    if (!enabled) {
+      await ref.read(mcpClientManagerProvider).dispose(server.id);
+    }
+  }
+
+  Future<void> _editSkill([AgentSkill? existing]) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        useRootNavigator: true,
+        builder: (sheetContext) => _SkillEditorSheet(
+          existing: existing,
+          onSave: (draft) async {
+            try {
+              await ref
+                  .read(skillRepositoryProvider)
+                  .save(draft, id: existing?.id);
+              if (sheetContext.mounted) Navigator.pop(sheetContext);
+            } catch (error) {
+              showMaidKitErrorAlert(error, title: 'agentCouldNotSaveSkill'.tr());
+            }
+          },
+        ),
+      );
+
+  Future<void> _deleteSkill(AgentSkill skill) async {
+    final confirmed = await showMaidKitConfirmAlert(
+      'agentDeleteSkillConfirm'.tr(args: [skill.name]),
+      'agentDeleteSkill'.tr(),
+      icon: Symbols.delete_outline,
+      isDanger: true,
+    );
+    if (!confirmed) return;
+    await ref.read(skillRepositoryProvider).delete(skill.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final mcpServers =
+        ref.watch(mcpServersProvider).asData?.value ?? const <McpServer>[];
+    final skills =
+        ref.watch(agentSkillsProvider).asData?.value ?? const <AgentSkill>[];
+    return SheetScaffold(
+      titleText: 'agentCapabilities'.tr(),
+      heightFactor: 0.85,
+      actions: [
+        IconButton(
+          tooltip: _tabIndex == 0
+              ? 'agentAddMcpServer'.tr()
+              : 'agentAddSkill'.tr(),
+          onPressed: _tabIndex == 0 ? () => _editMcpServer() : () => _editSkill(),
+          icon: const Icon(Symbols.add),
+        ),
+      ],
+      child: Column(
+        children: [
+          TabBar(
+            controller: _tabController,
+            tabs: [
+              Tab(text: 'agentMcpServers'.tr()),
+              Tab(text: 'agentSkills'.tr()),
+            ],
+          ),
+          Expanded(
+            child: _tabIndex == 0
+                ? _buildMcpServerList(scheme, mcpServers)
+                : _buildSkillList(scheme, skills),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMcpServerList(ColorScheme scheme, List<McpServer> servers) {
+    if (servers.isEmpty) {
+      return Center(
+        child: Text(
+          'agentNoMcpServers'.tr(),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: servers.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, index) {
+        final server = servers[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 2,
+          ),
+          title: Text(server.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            '${server.command} ${decodeMcpArguments(server.arguments).join(' ')}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: MaidKitFonts.mono,
+              fontSize: 11,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Switch(
+                value: server.enabled,
+                onChanged: (value) => _setMcpEnabled(server, value),
+              ),
+              IconButton(
+                tooltip: 'agentRestartMcpServer'.tr(),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Symbols.restart_alt, size: 18),
+                onPressed: () =>
+                    ref.read(mcpClientManagerProvider).dispose(server.id),
+              ),
+              IconButton(
+                tooltip: 'agentEditMcpServer'.tr(),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Symbols.edit, size: 18),
+                onPressed: () => _editMcpServer(server),
+              ),
+              IconButton(
+                tooltip: 'agentDeleteMcpServer'.tr(),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Symbols.delete_outline, size: 18),
+                onPressed: () => _deleteMcpServer(server),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSkillList(ColorScheme scheme, List<AgentSkill> skills) {
+    if (skills.isEmpty) {
+      return Center(
+        child: Text(
+          'agentNoSkills'.tr(),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: skills.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, index) {
+        final skill = skills[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 2,
+          ),
+          title: Text(skill.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            skill.description.isEmpty
+                ? 'agentNoSkillDescription'.tr()
+                : skill.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Switch(
+                value: skill.enabled,
+                onChanged: (value) => ref
+                    .read(skillRepositoryProvider)
+                    .setEnabled(skill.id, value),
+              ),
+              IconButton(
+                tooltip: 'agentEditSkill'.tr(),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Symbols.edit, size: 18),
+                onPressed: () => _editSkill(skill),
+              ),
+              IconButton(
+                tooltip: 'agentDeleteSkill'.tr(),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Symbols.delete_outline, size: 18),
+                onPressed: () => _deleteSkill(skill),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _McpServerEditorSheet extends StatefulWidget {
+  const _McpServerEditorSheet({required this.existing, required this.onSave});
+
+  final McpServer? existing;
+  final Future<void> Function(McpServerDraft draft) onSave;
+
+  @override
+  State<_McpServerEditorSheet> createState() => _McpServerEditorSheetState();
+}
+
+class _McpServerEditorSheetState extends State<_McpServerEditorSheet> {
+  late final _name = TextEditingController(text: widget.existing?.name ?? '');
+  late final _command = TextEditingController(
+    text: widget.existing?.command ?? '',
+  );
+  late final _arguments = TextEditingController(
+    text: widget.existing == null
+        ? ''
+        : decodeMcpArguments(widget.existing!.arguments).join('\n'),
+  );
+  late final _environment = TextEditingController(
+    text: widget.existing == null
+        ? ''
+        : const JsonEncoder.withIndent('  ')
+              .convert(decodeMcpEnvironment(widget.existing!.environment)),
+  );
+  late bool _enabled = widget.existing?.enabled ?? true;
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _command.dispose();
+    _arguments.dispose();
+    _environment.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final environment = <String, String>{};
+    final rawEnvironment = _environment.text.trim();
+    if (rawEnvironment.isNotEmpty) {
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(rawEnvironment);
+      } catch (_) {
+        showMaidKitErrorAlert(
+          FormatException('agentEnvironmentInvalidJson'.tr()),
+          title: 'agentCouldNotSaveMcpServer'.tr(),
+        );
+        return;
+      }
+      if (decoded is! Map) {
+        showMaidKitErrorAlert(
+          FormatException('agentEnvironmentInvalidJson'.tr()),
+          title: 'agentCouldNotSaveMcpServer'.tr(),
+        );
+        return;
+      }
+      for (final entry in decoded.entries) {
+        if (entry.key is String) {
+          environment[entry.key as String] = '${entry.value}';
+        }
+      }
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(
+        McpServerDraft(
+          name: _name.text,
+          command: _command.text,
+          arguments: [
+            for (final line in _arguments.text.split('\n'))
+              if (line.trim().isNotEmpty) line.trim(),
+          ],
+          environment: environment,
+          enabled: _enabled,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SheetScaffold(
+    titleText: widget.existing == null
+        ? 'agentAddMcpServer'.tr()
+        : 'agentEditMcpServer'.tr(),
+    heightFactor: 0.85,
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        Text('agentMcpServerInfo'.tr()),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _name,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(labelText: 'agentMcpServerName'.tr()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _command,
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: InputDecoration(
+            labelText: 'agentMcpServerCommand'.tr(),
+            hintText: 'agentMcpServerCommandHint'.tr(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _arguments,
+          minLines: 2,
+          maxLines: 6,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: TextStyle(
+            fontFamily: MaidKitFonts.mono,
+            fontSize: 13,
+          ),
+          decoration: InputDecoration(
+            labelText: 'agentMcpServerArguments'.tr(),
+            hintText: 'agentMcpServerArgumentsHint'.tr(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _environment,
+          minLines: 2,
+          maxLines: 6,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: TextStyle(
+            fontFamily: MaidKitFonts.mono,
+            fontSize: 13,
+          ),
+          decoration: InputDecoration(
+            labelText: 'agentMcpServerEnvironment'.tr(),
+            hintText: 'agentMcpServerEnvironmentHint'.tr(),
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text('agentEnabled'.tr()),
+          value: _enabled,
+          onChanged: (value) => setState(() => _enabled = value),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Symbols.save),
+            label: Text('agentSaveMcpServer'.tr()),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SkillEditorSheet extends StatefulWidget {
+  const _SkillEditorSheet({required this.existing, required this.onSave});
+
+  final AgentSkill? existing;
+  final Future<void> Function(AgentSkillDraft draft) onSave;
+
+  @override
+  State<_SkillEditorSheet> createState() => _SkillEditorSheetState();
+}
+
+class _SkillEditorSheetState extends State<_SkillEditorSheet> {
+  late final _name = TextEditingController(text: widget.existing?.name ?? '');
+  late final _description = TextEditingController(
+    text: widget.existing?.description ?? '',
+  );
+  late final _content = TextEditingController(
+    text: widget.existing?.content ?? '',
+  );
+  late bool _enabled = widget.existing?.enabled ?? true;
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    _content.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(
+        AgentSkillDraft(
+          name: _name.text,
+          description: _description.text,
+          content: _content.text,
+          enabled: _enabled,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SheetScaffold(
+    titleText: widget.existing == null
+        ? 'agentAddSkill'.tr()
+        : 'agentEditSkill'.tr(),
+    heightFactor: 0.8,
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        Text('agentSkillInfo'.tr()),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _name,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(labelText: 'agentSkillName'.tr()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _description,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            labelText: 'agentSkillDescription'.tr(),
+            hintText: 'agentSkillDescriptionHint'.tr(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _content,
+          minLines: 8,
+          maxLines: 16,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: TextStyle(
+            fontFamily: MaidKitFonts.mono,
+            fontSize: 13,
+            height: 1.4,
+          ),
+          decoration: InputDecoration(
+            labelText: 'agentSkillContent'.tr(),
+            alignLabelWithHint: true,
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text('agentEnabled'.tr()),
+          value: _enabled,
+          onChanged: (value) => setState(() => _enabled = value),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Symbols.save),
+            label: Text('agentSaveSkill'.tr()),
+          ),
+        ),
+      ],
+    ),
+  );
 }

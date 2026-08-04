@@ -10,6 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/agent/mcp_client.dart';
+import 'package:maid_kit/agent/mcp_repository.dart';
+import 'package:maid_kit/agent/skill_repository.dart';
 import 'package:maid_kit/agent/agent_repository.dart';
 import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
@@ -350,6 +353,31 @@ final agentProviderModelsProvider =
 final agentConversationsProvider = StreamProvider<List<AgentConversation>>(
   (ref) => ref.watch(agentRepositoryProvider).watchConversations(),
 );
+
+final mcpRepositoryProvider = Provider<McpRepository>((ref) {
+  return McpRepository(ref.watch(databaseProvider));
+});
+
+final mcpServersProvider = StreamProvider<List<McpServer>>((ref) {
+  return ref.watch(mcpRepositoryProvider).watchAll();
+});
+
+final skillRepositoryProvider = Provider<SkillRepository>((ref) {
+  return SkillRepository(ref.watch(databaseProvider));
+});
+
+final agentSkillsProvider = StreamProvider<List<AgentSkill>>((ref) {
+  return ref.watch(skillRepositoryProvider).watchAll();
+});
+
+/// Owns live MCP server processes for the whole app session. Processes are
+/// killed when the provider is disposed (app teardown) or a server is
+/// deleted, disabled, or edited.
+final mcpClientManagerProvider = Provider<McpClientManager>((ref) {
+  final manager = McpClientManager();
+  ref.onDispose(manager.disposeAll);
+  return manager;
+});
 
 final agentSelectionProvider =
     AsyncNotifierProvider<AgentSelectionNotifier, AgentSelectionSettings>(

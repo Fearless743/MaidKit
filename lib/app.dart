@@ -13,11 +13,35 @@ import 'theme.dart';
 
 final maidKitOverlayKey = GlobalKey<OverlayState>();
 
-class MaidKitApp extends ConsumerWidget {
+class MaidKitApp extends ConsumerStatefulWidget {
   const MaidKitApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MaidKitApp> createState() => _MaidKitAppState();
+}
+
+class _MaidKitAppState extends ConsumerState<MaidKitApp> {
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    // MCP servers run as child processes. Riverpod's onDispose never fires on
+    // a non-autoDispose provider, so kill them when the app actually exits;
+    // otherwise npx/uvx children outlive MaidKit.
+    _lifecycleListener = AppLifecycleListener(
+      onDetach: () => ref.read(mcpClientManagerProvider).disposeAll(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycleListener.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final appRouter = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
     final appSeedColor = ref.watch(appSeedColorProvider);
