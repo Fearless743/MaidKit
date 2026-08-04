@@ -13,6 +13,7 @@ import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/agent/mcp_client.dart';
 import 'package:maid_kit/agent/mcp_repository.dart';
 import 'package:maid_kit/agent/skill_repository.dart';
+import 'package:maid_kit/agent/skill_registry.dart';
 import 'package:maid_kit/agent/agent_repository.dart';
 import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
@@ -368,6 +369,10 @@ final skillRepositoryProvider = Provider<SkillRepository>((ref) {
 
 final agentSkillsProvider = StreamProvider<List<AgentSkill>>((ref) {
   return ref.watch(skillRepositoryProvider).watchAll();
+});
+
+final skillRegistryClientProvider = Provider<SkillRegistryClient>((ref) {
+  return SkillRegistryClient();
 });
 
 /// Owns live MCP server processes for the whole app session. Processes are

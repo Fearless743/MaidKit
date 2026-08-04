@@ -25,7 +25,8 @@ class SkillRepository {
 
   /// Largest skill payload handed to the model. Keeps the system prompt and
   /// `get_skill` results bounded regardless of how many skills are saved.
-  static const int maxContentLength = 16384;
+  /// Sized to fit the largest skill in Vercel's official registry.
+  static const int maxContentLength = 32768;
 
   Stream<List<AgentSkill>> watchAll() => _database.watchAgentSkills();
 

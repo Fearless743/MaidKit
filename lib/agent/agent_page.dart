@@ -20,8 +20,10 @@ import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'package:maid_kit/agent/mcp_client.dart';
+import 'package:maid_kit/agent/mcp_config_parser.dart';
 import 'package:maid_kit/agent/mcp_repository.dart';
 import 'package:maid_kit/agent/skill_repository.dart';
+import 'package:maid_kit/agent/skill_registry.dart';
 import 'agent_input_focus.dart';
 import 'personality_service.dart';
 import 'agent_repository.dart';
@@ -2230,6 +2232,22 @@ class _AgentCapabilitiesSheetState extends ConsumerState<_AgentCapabilitiesSheet
     }
   }
 
+  Future<void> _importMcpConfig() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (_) => const _McpConfigImportSheet(),
+  );
+
+  Future<void> _browseSkillRegistry() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    useRootNavigator: true,
+    builder: (_) => const _SkillRegistrySheet(),
+  );
+
   Future<void> _editSkill([AgentSkill? existing]) =>
       showModalBottomSheet<void>(
         context: context,
@@ -2273,13 +2291,29 @@ class _AgentCapabilitiesSheetState extends ConsumerState<_AgentCapabilitiesSheet
       titleText: 'agentCapabilities'.tr(),
       heightFactor: 0.85,
       actions: [
-        IconButton(
-          tooltip: _tabIndex == 0
-              ? 'agentAddMcpServer'.tr()
-              : 'agentAddSkill'.tr(),
-          onPressed: _tabIndex == 0 ? () => _editMcpServer() : () => _editSkill(),
-          icon: const Icon(Symbols.add),
-        ),
+        if (_tabIndex == 0) ...[
+          IconButton(
+            tooltip: 'agentImportMcpConfig'.tr(),
+            onPressed: () => _importMcpConfig(),
+            icon: const Icon(Symbols.content_paste),
+          ),
+          IconButton(
+            tooltip: 'agentAddMcpServer'.tr(),
+            onPressed: () => _editMcpServer(),
+            icon: const Icon(Symbols.add),
+          ),
+        ] else ...[
+          IconButton(
+            tooltip: 'agentSkillRegistry'.tr(),
+            onPressed: () => _browseSkillRegistry(),
+            icon: const Icon(Symbols.travel_explore),
+          ),
+          IconButton(
+            tooltip: 'agentAddSkill'.tr(),
+            onPressed: () => _editSkill(),
+            icon: const Icon(Symbols.add),
+          ),
+        ],
       ],
       child: Column(
         children: [
@@ -2595,6 +2629,136 @@ class _McpServerEditorSheetState extends State<_McpServerEditorSheet> {
   );
 }
 
+class _McpConfigImportSheet extends ConsumerStatefulWidget {
+  const _McpConfigImportSheet();
+
+  @override
+  ConsumerState<_McpConfigImportSheet> createState() =>
+      _McpConfigImportSheetState();
+}
+
+class _McpConfigImportSheetState extends ConsumerState<_McpConfigImportSheet> {
+  final _config = TextEditingController();
+  var _busy = false;
+  String? _summary;
+  List<String>? _errors;
+
+  @override
+  void dispose() {
+    _config.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    if (_busy) return;
+    final result = parseMcpConfigJson(_config.text);
+    if (result.servers.isEmpty) {
+      setState(() {
+        _summary = null;
+        _errors = result.errors;
+      });
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final repository = ref.read(mcpRepositoryProvider);
+      final existing = await repository.all();
+      final byName = {for (final server in existing) server.name: server};
+      var added = 0;
+      var updated = 0;
+      for (final draft in result.servers) {
+        final current = byName[draft.name];
+        if (current == null) {
+          await repository.save(draft);
+          added++;
+        } else {
+          await repository.save(draft, id: current.id);
+          // Relaunch with the imported configuration on next use.
+          await ref.read(mcpClientManagerProvider).dispose(current.id);
+          updated++;
+        }
+      }
+      final parts = <String>[
+        if (added > 0) 'agentImportMcpAdded'.tr(args: ['$added']),
+        if (updated > 0) 'agentImportMcpUpdated'.tr(args: ['$updated']),
+      ];
+      setState(() {
+        _summary = parts.join(', ');
+        _errors = result.hasErrors ? result.errors : null;
+      });
+    } catch (error) {
+      setState(() {
+        _summary = null;
+        _errors = ['$error'];
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SheetScaffold(
+      titleText: 'agentImportMcpConfig'.tr(),
+      heightFactor: 0.8,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          Text('agentImportMcpConfigInfo'.tr()),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _config,
+            minLines: 10,
+            maxLines: 18,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: TextStyle(
+              fontFamily: MaidKitFonts.mono,
+              fontSize: 13,
+              height: 1.4,
+            ),
+            decoration: InputDecoration(
+              hintText: 'agentImportMcpConfigHint'.tr(),
+            ),
+          ),
+          if (_summary != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              _summary!,
+              style: TextStyle(
+                color: scheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          if (_errors != null && _errors!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errors!.join('\n'),
+              style: TextStyle(color: scheme.error, fontSize: 13, height: 1.4),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _import,
+              icon: _busy
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Symbols.upload),
+              label: Text('agentImportMcpConfigParse'.tr()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SkillEditorSheet extends StatefulWidget {
   const _SkillEditorSheet({required this.existing, required this.onSave});
 
@@ -2706,4 +2870,342 @@ class _SkillEditorSheetState extends State<_SkillEditorSheet> {
       ],
     ),
   );
+}
+
+class _SkillRegistrySheet extends ConsumerStatefulWidget {
+  const _SkillRegistrySheet();
+
+  @override
+  ConsumerState<_SkillRegistrySheet> createState() =>
+      _SkillRegistrySheetState();
+}
+
+class _SkillRegistrySheetState extends ConsumerState<_SkillRegistrySheet> {
+  late Future<List<RegistrySkill>> _catalogFuture = _load();
+  Future<List<RegistrySkillHit>>? _searchFuture;
+  final _query = TextEditingController();
+  Timer? _debounce;
+  String _activeQuery = '';
+  final _added = <String>{};
+  final _busy = <String>{};
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _query.dispose();
+    super.dispose();
+  }
+
+  /// Remote search, debounced the same way the CLI's interactive search is.
+  /// Queries shorter than two characters fall back to the default catalog.
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    final query = value.trim();
+    if (query.length < 2) {
+      setState(() {
+        _activeQuery = '';
+        _searchFuture = null;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() {
+        _activeQuery = query;
+        _searchFuture = ref
+            .read(skillRegistryClientProvider)
+            .searchSkills(query);
+      });
+    });
+  }
+
+  Future<List<RegistrySkill>> _load() async {
+    final client = ref.read(skillRegistryClientProvider);
+    final names = await client.listSkills();
+    final skills = await Future.wait([
+      for (final name in names) client.fetchSkill(name),
+    ]);
+    return skills;
+  }
+
+  void _retry() {
+    if (_activeQuery.isNotEmpty) {
+      setState(() {
+        _searchFuture = ref
+            .read(skillRegistryClientProvider)
+            .searchSkills(_activeQuery);
+      });
+    } else {
+      setState(() => _catalogFuture = _load());
+    }
+  }
+
+  Future<void> _saveSkill(
+    String name,
+    String description,
+    String content,
+  ) async {
+    final repository = ref.read(skillRepositoryProvider);
+    final existing = await repository.all();
+    final current = existing
+        .where((saved) => saved.name == name)
+        .firstOrNull;
+    await repository.save(
+      AgentSkillDraft(
+        name: name,
+        description: description,
+        content: content,
+      ),
+      id: current?.id,
+    );
+    setState(() => _added.add(name));
+  }
+
+  Future<void> _add(RegistrySkill skill) async {
+    if (_busy.contains(skill.name)) return;
+    setState(() => _busy.add(skill.name));
+    try {
+      await _saveSkill(skill.name, skill.description, skill.content);
+    } catch (error) {
+      showMaidKitErrorAlert(error, title: 'agentCouldNotAddSkill'.tr());
+    } finally {
+      if (mounted) setState(() => _busy.remove(skill.name));
+    }
+  }
+
+  Future<void> _addHit(RegistrySkillHit hit) async {
+    if (_busy.contains(hit.skillId)) return;
+    setState(() => _busy.add(hit.skillId));
+    try {
+      final skill = await ref
+          .read(skillRegistryClientProvider)
+          .fetchSkillHit(hit);
+      await _saveSkill(skill.name, skill.description, skill.content);
+    } catch (error) {
+      showMaidKitErrorAlert(error, title: 'agentCouldNotAddSkill'.tr());
+    } finally {
+      if (mounted) setState(() => _busy.remove(hit.skillId));
+    }
+  }
+
+  static String _formatInstalls(int count) {
+    if (count <= 0) return '';
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')}M';
+    }
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')}K';
+    }
+    return '$count';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SheetScaffold(
+      titleText: 'agentSkillRegistry'.tr(),
+      heightFactor: 0.85,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              'agentSkillRegistryInfo'.tr(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: TextField(
+              controller: _query,
+              onChanged: _onQueryChanged,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                hintText: 'agentSkillRegistrySearch'.tr(),
+                prefixIcon: const Icon(Symbols.search, size: 20),
+                suffixIcon: _query.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'commonClearSearch'.tr(),
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Symbols.close, size: 18),
+                        onPressed: () {
+                          _query.clear();
+                          _onQueryChanged('');
+                        },
+                      ),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _activeQuery.isNotEmpty
+                ? _buildSearchResults(scheme)
+                : _buildCatalog(scheme),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchResults(ColorScheme scheme) {
+    return FutureBuilder<List<RegistrySkillHit>>(
+      future: _searchFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        if (snapshot.hasError) {
+          return _buildError(scheme, '${snapshot.error}');
+        }
+        final hits = snapshot.data ?? const <RegistrySkillHit>[];
+        if (hits.isEmpty) {
+          return _buildEmpty(scheme, 'agentSkillRegistryNoMatch'.tr());
+        }
+        final savedNames = ref.watch(agentSkillsProvider).asData
+                ?.value
+                .map((skill) => skill.name)
+                .toSet() ??
+            <String>{};
+        return ListView.separated(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemCount: hits.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (_, index) {
+            final hit = hits[index];
+            final exists = savedNames.contains(hit.skillId);
+            final added = _added.contains(hit.skillId);
+            final installs = _formatInstalls(hit.installs);
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 2,
+              ),
+              title: Text(hit.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                installs.isEmpty ? hit.source : '${hit.source} · $installs',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+              trailing: added
+                  ? Icon(Symbols.check_circle, size: 20, color: scheme.primary)
+                  : FilledButton.tonal(
+                      onPressed: _busy.contains(hit.skillId)
+                          ? null
+                          : () => _addHit(hit),
+                      child: Text(
+                        exists
+                            ? 'agentSkillRegistryUpdate'.tr()
+                            : 'agentSkillRegistryAdd'.tr(),
+                      ),
+                    ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCatalog(ColorScheme scheme) {
+    return FutureBuilder<List<RegistrySkill>>(
+      future: _catalogFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        if (snapshot.hasError) {
+          return _buildError(scheme, '${snapshot.error}');
+        }
+        final skills = snapshot.data ?? const <RegistrySkill>[];
+        if (skills.isEmpty) {
+          return _buildEmpty(scheme, 'agentSkillRegistryEmpty'.tr());
+        }
+        final savedNames = ref.watch(agentSkillsProvider).asData
+                ?.value
+                .map((skill) => skill.name)
+                .toSet() ??
+            <String>{};
+        return ListView.separated(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemCount: skills.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (_, index) {
+            final skill = skills[index];
+            final exists = savedNames.contains(skill.name);
+            final added = _added.contains(skill.name);
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 2,
+              ),
+              title: Text(skill.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                skill.description.isEmpty
+                    ? 'agentNoSkillDescription'.tr()
+                    : skill.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+              trailing: added
+                  ? Icon(Symbols.check_circle, size: 20, color: scheme.primary)
+                  : FilledButton.tonal(
+                      onPressed: _busy.contains(skill.name)
+                          ? null
+                          : () => _add(skill),
+                      child: Text(
+                        exists
+                            ? 'agentSkillRegistryUpdate'.tr()
+                            : 'agentSkillRegistryAdd'.tr(),
+                      ),
+                    ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildError(ColorScheme scheme, String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.error, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _retry,
+            icon: const Icon(Symbols.refresh),
+            label: Text('agentRetry'.tr()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty(ColorScheme scheme, String message) {
+    return Center(
+      child: Text(
+        message,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+      ),
+    );
+  }
 }
