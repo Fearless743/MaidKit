@@ -285,16 +285,8 @@ class _VaultCreatePageState extends ConsumerState<VaultCreatePage> {
               children: [
                 for (final workspace in workspaces)
                   ListTile(
-                    enabled: workspace.supportsSync,
                     title: Text(workspace.name),
-                    subtitle: Text(
-                      workspace.supportsSync
-                          ? 'settingsCloudSyncWorkspaceEligible'.tr()
-                          : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
-                    ),
-                    onTap: workspace.supportsSync
-                        ? () => Navigator.of(sheetContext).pop(workspace)
-                        : null,
+                    onTap: () => Navigator.of(sheetContext).pop(workspace),
                   ),
               ],
             ),

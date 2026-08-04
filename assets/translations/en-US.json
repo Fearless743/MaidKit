@@ -1320,8 +1320,6 @@
   "settingsCloudSyncDisable": "Disable cloud sync",
   "settingsCloudSyncWorkspaceTitle": "Choose a workspace",
   "settingsCloudSyncNoWorkspaces": "No Solar Network workspaces are available for this account.",
-  "settingsCloudSyncWorkspaceEligible": "Pro or Enterprise workspace",
-  "settingsCloudSyncWorkspaceUpgrade": "Cloud sync requires Pro or Enterprise",
   "settingsCloudSyncUnavailable": "Cloud sync settings are unavailable right now.",
   "updateSection": "Update",
   "checkForUpdates": "Check for updates",

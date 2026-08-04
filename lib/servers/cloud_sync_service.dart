@@ -66,20 +66,16 @@ class CloudWorkspace {
     required this.id,
     required this.slug,
     required this.name,
-    required this.plan,
   });
 
   final String id;
   final String slug;
   final String name;
-  final int plan;
-  bool get supportsSync => plan >= 1;
 
   factory CloudWorkspace.fromJson(Map<String, dynamic> json) => CloudWorkspace(
     id: json['id']?.toString() ?? '',
     slug: json['slug']?.toString() ?? '',
     name: json['name']?.toString() ?? 'Untitled workspace',
-    plan: (json['plan'] as num?)?.toInt() ?? 0,
   );
 }
 

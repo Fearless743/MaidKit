@@ -1313,8 +1313,6 @@
   "settingsCloudSyncDisable": "关闭云端同步",
   "settingsCloudSyncWorkspaceTitle": "选择工作区",
   "settingsCloudSyncNoWorkspaces": "此帐户没有可用的 Solar Network 工作区。",
-  "settingsCloudSyncWorkspaceEligible": "Pro 或 Enterprise 工作区",
-  "settingsCloudSyncWorkspaceUpgrade": "云端同步需要 Pro 或 Enterprise",
   "settingsCloudSyncUnavailable": "暂时无法使用云端同步设置。",
   "updateSection": "更新",
   "checkForUpdates": "检查更新",

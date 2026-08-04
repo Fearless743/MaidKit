@@ -824,9 +824,7 @@ class SettingsPage extends ConsumerWidget {
                               : _SettingsTilePosition.middle,
                           title:
                               vaultLabels[path] ??
-                              ref
-                                  .read(vaultFileStorageProvider)
-                                  .fileName(path),
+                              ref.read(vaultFileStorageProvider).fileName(path),
                           active: activeVaultFile == path,
                           onSelect: () => ref
                               .read(activeVaultFileProvider.notifier)
@@ -1481,16 +1479,8 @@ class SettingsPage extends ConsumerWidget {
               children: [
                 for (final workspace in workspaces)
                   ListTile(
-                    enabled: workspace.supportsSync,
                     title: Text(workspace.name),
-                    subtitle: Text(
-                      workspace.supportsSync
-                          ? 'settingsCloudSyncWorkspaceEligible'.tr()
-                          : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
-                    ),
-                    onTap: workspace.supportsSync
-                        ? () => Navigator.of(sheetContext).pop(workspace)
-                        : null,
+                    onTap: () => Navigator.of(sheetContext).pop(workspace),
                   ),
               ],
             ),
@@ -2072,19 +2062,11 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                   children: [
                     for (final workspace in workspaces)
                       ListTile(
-                        enabled: workspace.supportsSync,
                         title: Text(workspace.name),
-                        subtitle: Text(
-                          workspace.supportsSync
-                              ? 'settingsCloudSyncWorkspaceEligible'.tr()
-                              : 'settingsCloudSyncWorkspaceUpgrade'.tr(),
-                        ),
                         trailing: selected?.workspaceId == workspace.id
                             ? const Icon(Symbols.check)
                             : null,
-                        onTap: workspace.supportsSync
-                            ? () => Navigator.of(sheetContext).pop(workspace)
-                            : null,
+                        onTap: () => Navigator.of(sheetContext).pop(workspace),
                       ),
                   ],
                 ),
