@@ -298,7 +298,7 @@ packages:
     source: hosted
     version: "0.7.1"
   desktop_webview_window:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: desktop_webview_window
       sha256: b6fdae2cbf9571879b1761c12f27facaf82e22d0bdc74d049907c2a09a432957
@@ -1743,11 +1743,10 @@ packages:
   xterm:
     dependency: "direct main"
     description:
-      name: xterm
-      sha256: "168dfedca77cba33fdb6f52e2cd001e9fde216e398e89335c19b524bb22da3a2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.0.0"
+      path: "packages/xterm"
+      relative: true
+    source: path
+    version: "4.0.0+maidkit.1"
   xxh3:
     dependency: transitive
     description:
