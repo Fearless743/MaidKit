@@ -16,6 +16,7 @@ import 'package:system_fonts/system_fonts.dart';
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/local_mcp_server.dart';
+import 'package:maid_kit/agent/mcp_review_mode.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/agent/billing_service.dart';
 import 'package:maid_kit/agent/personality_service.dart';
@@ -2292,6 +2293,50 @@ class _LocalMcpServerSectionState
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  'settingsMcpReviewMode',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ).tr(),
+                const SizedBox(height: 4),
+                Text(
+                  'settingsMcpReviewModeHint',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ).tr(),
+                const SizedBox(height: 12),
+                ref
+                    .watch(mcpReviewModeProvider)
+                    .when(
+                      loading: () => const LinearProgressIndicator(),
+                      error: (error, _) => Text(error.toString()),
+                      data: (mode) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SegmentedButton<McpReviewMode>(
+                            showSelectedIcon: false,
+                            segments: [
+                              for (final reviewMode in McpReviewMode.values)
+                                ButtonSegment(
+                                  value: reviewMode,
+                                  label: Text(reviewMode.labelKey.tr()),
+                                  tooltip: reviewMode.descriptionKey.tr(),
+                                ),
+                            ],
+                            selected: {mode},
+                            onSelectionChanged: (selection) {
+                              ref
+                                  .read(mcpReviewModeProvider.notifier)
+                                  .setMode(selection.first);
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            mode.descriptionKey.tr(),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
                 const SizedBox(height: 16),
                 Text(
                   'settingsLocalMcpServerConfigTitle',

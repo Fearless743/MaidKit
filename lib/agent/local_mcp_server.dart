@@ -9,9 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
-import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/agent/mcp_client.dart' show mcpProtocolVersion;
+import 'package:maid_kit/agent/mcp_review_mode.dart';
 import 'package:maid_kit/agent/ssh_agent_service.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
@@ -569,6 +570,36 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         'required': ['skill_id'],
       },
     },
+    {
+      'name': 'get_review_mode',
+      'description':
+          'Read the current approval review mode for actions requested '
+          'through this MCP server. Returns the mode as a string: '
+          'always_ask, auto_review, or always_approve.',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'set_review_mode',
+      'description':
+          'Change the approval review mode for actions requested through '
+          'this MCP server: always_ask (every action needs approval), '
+          'auto_review (read-only actions run automatically, everything '
+          'else asks), or always_approve (actions run without asking). '
+          'This setting is independent of the in-app agent run policy and '
+          'always requires explicit user approval, whatever the current '
+          'mode is.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'mode': {
+            'type': 'string',
+            'enum': ['always_ask', 'auto_review', 'always_approve'],
+            'description': 'Review mode to switch to.',
+          },
+        },
+        'required': ['mode'],
+      },
+    },
   ];
 
   /// Largest tool result handed to the calling agent. Mirrors the chat
@@ -620,6 +651,10 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         text = jsonEncode(await _listSkills());
       case 'get_skill':
         text = await _getSkill(arguments);
+      case 'get_review_mode':
+        text = jsonEncode({'mode': _currentReviewMode().wireName});
+      case 'set_review_mode':
+        text = await _setReviewMode(arguments);
       default:
         throw ArgumentError('Unknown tool: $name');
     }
@@ -723,6 +758,38 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     return 'Skill "${skill.name}":\n\n${skill.content}';
   }
 
+  /// Current review mode without loading it twice across the async boundary.
+  McpReviewMode _currentReviewMode() =>
+      ref.read(mcpReviewModeProvider).value ?? McpReviewMode.alwaysAsk;
+
+  Future<String> _setReviewMode(Map<String, dynamic> arguments) async {
+    final rawMode = _string(arguments, 'mode');
+    final mode = McpReviewMode.fromWireName(rawMode);
+    final proposal = AgentProposal(
+      kind: AgentActionKind.mcpToolCall,
+      arguments: {'mode': mode.wireName},
+      toolCall: OpenAIResponseToolCall.fromMap({
+        'id': 'local-mcp-${DateTime.now().microsecondsSinceEpoch}',
+        'type': 'function',
+        'function': {
+          'name': 'set_review_mode',
+          'arguments': jsonEncode(arguments),
+        },
+      }),
+      assistantMessage: OpenAIChatCompletionChoiceMessageModel(
+        role: OpenAIChatMessageRole.assistant,
+        content: null,
+      ),
+    );
+    // Changing the review mode can widen what runs without approval, so it is
+    // never auto-approved — not even under always_approve.
+    if (!await _approve(proposal, requireApproval: true)) {
+      throw const McpActionDeclinedException();
+    }
+    await ref.read(mcpReviewModeProvider.notifier).setMode(mode);
+    return 'Review mode set to ${mode.wireName}.';
+  }
+
   /// Runs a proposal that targets a server. The approval check happens before
   /// any connection work so a declined action never touches the network.
   Future<String> _runRemoteAction(
@@ -751,17 +818,25 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     );
   }
 
-  /// Mirrors the chat page's run policy: read-only actions auto-run under
-  /// auto-review, everything else is shown to the user unless the policy
-  /// approves it outright.
-  Future<bool> _approve(AgentProposal proposal) async {
-    final policy = await ref.read(agentRunPolicyProvider.future);
-    final shouldAutoRun = switch (policy) {
-      AgentRunPolicy.alwaysApprove => true,
-      AgentRunPolicy.autoReview => proposal.safeToRun,
-      AgentRunPolicy.alwaysAsk => false,
-    };
+  /// Mirrors the chat page's run policy shape but reads the MCP server's own
+  /// review mode, which is independent of the in-app agent run policy:
+  /// read-only actions auto-run under auto-review, everything else is shown
+  /// to the user unless the mode approves it outright. [requireApproval]
+  /// forces the dialog even when the current mode would auto-approve.
+  Future<bool> _approve(
+    AgentProposal proposal, {
+    bool requireApproval = false,
+  }) async {
+    final mode = await ref.read(mcpReviewModeProvider.future);
+    final shouldAutoRun = requireApproval
+        ? false
+        : switch (mode) {
+            McpReviewMode.alwaysApprove => true,
+            McpReviewMode.autoReview => proposal.safeToRun,
+            McpReviewMode.alwaysAsk => false,
+          };
     if (shouldAutoRun) return true;
+    await _notifyIfWindowBackgrounded(proposal);
     return await showMaidKitOverlayDialog<bool>(
           barrierDismissible: false,
           builder: (context, close) =>
@@ -769,6 +844,34 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         ) ??
         false;
   }
+
+  /// Posts a macOS Notification Center alert when an agent's access request
+  /// arrives while the MaidKit window is in the background, so the pending
+  /// approval dialog is not missed. The in-app dialog is the only surface
+  /// when the window is focused or on non-desktop platforms.
+  Future<void> _notifyIfWindowBackgrounded(AgentProposal proposal) async {
+    final bool focused;
+    try {
+      focused = await windowManager.isFocused();
+    } catch (_) {
+      return; // No window manager (tests, non-desktop): dialog-only.
+    }
+    if (focused || !Platform.isMacOS) return;
+    final detail = proposal.detail.replaceAll('\n', ' ');
+    try {
+      await Process.run('osascript', [
+        '-e',
+        'display notification ${_osascriptQuoted(detail)} '
+            'with title ${_osascriptQuoted('MaidKit — ${proposal.title}')}',
+      ]);
+    } catch (_) {
+      // A failed notification must never block or fail the approval flow.
+    }
+  }
+
+  /// Quotes [value] for embedding in an AppleScript string literal.
+  static String _osascriptQuoted(String value) =>
+      '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"';
 
   Future<SSHClient> _clientForServer(int serverId) async {
     final repository = ref.read(serverRepositoryProvider);
@@ -959,6 +1062,28 @@ final localMcpServerProvider =
     AsyncNotifierProvider<LocalMcpServerNotifier, LocalMcpServerState>(
       LocalMcpServerNotifier.new,
     );
+
+/// The approval review mode for actions requested through the local MCP
+/// server. Kept separate from the in-app agent run policy so remote agents
+/// can be held to a different standard.
+final mcpReviewModeProvider =
+    AsyncNotifierProvider<McpReviewModeNotifier, McpReviewMode>(
+      McpReviewModeNotifier.new,
+    );
+
+class McpReviewModeNotifier extends AsyncNotifier<McpReviewMode> {
+  @override
+  Future<McpReviewMode> build() async {
+    return (await McpReviewModePreferences.load()).mode;
+  }
+
+  Future<void> setMode(McpReviewMode mode) async {
+    await McpReviewModePreferences.load().then((settings) {
+      return settings.saveMode(mode);
+    });
+    state = AsyncData(mode);
+  }
+}
 
 class LocalMcpServerNotifier extends AsyncNotifier<LocalMcpServerState> {
   LocalMcpServer? _server;

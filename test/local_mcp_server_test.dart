@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:maid_kit/agent/local_mcp_server.dart';
 import 'package:maid_kit/agent/mcp_client.dart' show mcpProtocolVersion;
+import 'package:maid_kit/agent/mcp_review_mode.dart';
 
 /// Fake tool set for protocol tests: one echo tool that records calls.
 class _FakeInvoker implements LocalMcpToolInvoker {
@@ -173,7 +174,7 @@ void main() {
   });
 
   group('LocalMcpToolExecutor tool surface', () {
-    test('exposes the eleven MaidKit resource tools', () {
+    test('exposes the thirteen MaidKit resource tools', () {
       final definitions = LocalMcpToolExecutor.definitions;
       final names = [for (final tool in definitions) tool['name']];
       expect(names, [
@@ -188,6 +189,8 @@ void main() {
         'run_snippet',
         'list_skills',
         'get_skill',
+        'get_review_mode',
+        'set_review_mode',
       ]);
       final runCommand = definitions.firstWhere(
         (tool) => tool['name'] == 'run_command',
@@ -197,6 +200,21 @@ void main() {
       final properties = schema['properties'] as Map<String, dynamic>;
       expect(properties['server_id']['type'], 'integer');
       expect(properties['command']['type'], 'string');
+    });
+  });
+
+  group('McpReviewMode', () {
+    test('wire names round-trip for every mode', () {
+      for (final mode in McpReviewMode.values) {
+        expect(McpReviewMode.fromWireName(mode.wireName), mode);
+      }
+    });
+
+    test('unknown wire names throw', () {
+      expect(
+        () => McpReviewMode.fromWireName('sometimes'),
+        throwsArgumentError,
+      );
     });
   });
 
