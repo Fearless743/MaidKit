@@ -1558,6 +1558,7 @@ class SettingsPage extends ConsumerWidget {
       await service.sync(
         archive: archive,
         applyArchive: (archive) => backup.importArchive(archive, syncPassword),
+        contentFingerprint: backup.contentFingerprint,
       );
       ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
       if (context.mounted) {

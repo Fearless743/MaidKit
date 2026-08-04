@@ -7,6 +7,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:uuid/uuid.dart';
 
+import '../shared/presentation/maidkit_alert.dart';
+
 /// Configuration is deliberately opt-in and scoped to one local vault.
 class CloudSyncConfiguration {
   const CloudSyncConfiguration({
@@ -17,6 +19,7 @@ class CloudSyncConfiguration {
     required this.revision,
     this.pendingDownload = false,
     this.lastSyncedAt,
+    this.lastContentFingerprint,
   });
 
   final String workspaceId;
@@ -27,6 +30,10 @@ class CloudSyncConfiguration {
   final bool pendingDownload;
   final DateTime? lastSyncedAt;
 
+  /// SHA-256 of the syncable content at the last successful sync. A matching
+  /// fingerprint means the local database is unchanged and no upload is needed.
+  final String? lastContentFingerprint;
+
   Map<String, Object?> toJson() => {
     'workspaceId': workspaceId,
     'workspaceName': workspaceName,
@@ -35,6 +42,7 @@ class CloudSyncConfiguration {
     'revision': revision,
     'pendingDownload': pendingDownload,
     'lastSyncedAt': lastSyncedAt?.toUtc().toIso8601String(),
+    'lastContentFingerprint': lastContentFingerprint,
   };
 
   factory CloudSyncConfiguration.fromJson(Map<String, dynamic> json) =>
@@ -48,6 +56,7 @@ class CloudSyncConfiguration {
         lastSyncedAt: DateTime.tryParse(
           json['lastSyncedAt'] as String? ?? '',
         )?.toLocal(),
+        lastContentFingerprint: json['lastContentFingerprint'] as String?,
       );
 }
 
@@ -333,6 +342,9 @@ class CloudSyncService {
             (reuseCurrentBlob ? previous!.blobId : const Uuid().v4()),
         revision: reuseCurrentBlob ? previous!.revision : 0,
         pendingDownload: existingBlob != null,
+        lastContentFingerprint: reuseCurrentBlob
+            ? previous!.lastContentFingerprint
+            : null,
       );
       await _storage.write(
         key: _configurationKey,
@@ -355,14 +367,26 @@ class CloudSyncService {
         blobId: configuration.blobId,
         revision: configuration.revision,
         lastSyncedAt: configuration.lastSyncedAt,
+        lastContentFingerprint: configuration.lastContentFingerprint,
       ),
     );
   }
 
   /// Uploads/downloads a client-encrypted archive. Flywheel never decrypts it.
+  ///
+  /// The server revision is always read first. When the cloud is newer and no
+  /// [conflictResolution] is given, the user is asked whether to take the cloud
+  /// copy or keep the local one.
+  ///
+  /// When [contentFingerprint] is provided, the upload is skipped if it matches
+  /// the fingerprint stored at the last successful sync and the local revision
+  /// was not superseded: the local database is unchanged, so no new blob is
+  /// written. The function is invoked again after a remote download so the
+  /// stored fingerprint always reflects the vault's current content.
   Future<CloudSyncConfiguration> sync({
     required String archive,
     required Future<void> Function(String archive) applyArchive,
+    Future<String> Function()? contentFingerprint,
     CloudSyncConflictResolution? conflictResolution,
     int conflictRetryCount = 0,
   }) async {
@@ -396,7 +420,9 @@ class CloudSyncService {
         if (error.response?.statusCode != 404) rethrow;
       }
       if (remoteRevision > revision) {
-        if (conflictResolution == CloudSyncConflictResolution.downloadRemote) {
+        final resolution =
+            conflictResolution ?? await _resolveConflict(remoteRevision);
+        if (resolution == CloudSyncConflictResolution.downloadRemote) {
           final content = await _dio.get<List<int>>(
             '$apiBase${_flywheelAppPath(configuration.workspaceId)}/blobs/'
             '${configuration.blobId}/content',
@@ -410,6 +436,7 @@ class CloudSyncService {
           final updated = _updatedConfiguration(
             configuration,
             revision: remoteRevision,
+            contentFingerprint: await contentFingerprint?.call(),
           );
           await _saveConfiguration(updated);
           return updated;
@@ -417,6 +444,14 @@ class CloudSyncService {
         // Normal sync is local-authoritative. It keeps this vault's stable
         // blob ID and creates the next revision from the latest remote one.
         revision = remoteRevision;
+      }
+      final fingerprint = await contentFingerprint?.call();
+      if (fingerprint != null &&
+          fingerprint == configuration.lastContentFingerprint &&
+          revision == configuration.revision) {
+        // The local database is unchanged since the last sync and no newer
+        // remote revision was adopted, so there is nothing to upload.
+        return configuration;
       }
       final response = await _dio.put<Map<String, dynamic>>(
         '$apiBase${_flywheelAppPath(configuration.workspaceId)}/blobs/'
@@ -437,7 +472,11 @@ class CloudSyncService {
       );
       revision =
           (response.data?['revision'] as num?)?.toInt() ?? (revision + 1);
-      final updated = _updatedConfiguration(configuration, revision: revision);
+      final updated = _updatedConfiguration(
+        configuration,
+        revision: revision,
+        contentFingerprint: fingerprint,
+      );
       await _saveConfiguration(updated);
       return updated;
     } on DioException catch (error) {
@@ -448,6 +487,7 @@ class CloudSyncService {
         return sync(
           archive: archive,
           applyArchive: applyArchive,
+          contentFingerprint: contentFingerprint,
           conflictResolution: CloudSyncConflictResolution.overwriteRemote,
           conflictRetryCount: conflictRetryCount + 1,
         );
@@ -461,9 +501,23 @@ class CloudSyncService {
     }
   }
 
+  /// Asks the user whether to adopt the newer cloud revision or keep the
+  /// local copy. Without an app overlay (headless), the local copy wins.
+  Future<CloudSyncConflictResolution> _resolveConflict(
+    int remoteRevision,
+  ) async {
+    final useCloud = await showMaidKitCloudSyncConflictAlert(
+      remoteRevision: remoteRevision,
+    );
+    return useCloud
+        ? CloudSyncConflictResolution.downloadRemote
+        : CloudSyncConflictResolution.overwriteRemote;
+  }
+
   CloudSyncConfiguration _updatedConfiguration(
     CloudSyncConfiguration configuration, {
     required int revision,
+    String? contentFingerprint,
   }) => CloudSyncConfiguration(
     workspaceId: configuration.workspaceId,
     workspaceName: configuration.workspaceName,
@@ -472,6 +526,8 @@ class CloudSyncService {
     revision: revision,
     pendingDownload: configuration.pendingDownload,
     lastSyncedAt: DateTime.now(),
+    lastContentFingerprint:
+        contentFingerprint ?? configuration.lastContentFingerprint,
   );
 
   Future<void> _saveConfiguration(CloudSyncConfiguration configuration) =>

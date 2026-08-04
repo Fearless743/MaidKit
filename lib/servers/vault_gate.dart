@@ -65,6 +65,7 @@ class _VaultGateState extends ConsumerState<VaultGate>
       await sync.sync(
         archive: await backup.exportArchive(password),
         applyArchive: (archive) => backup.importArchive(archive, password),
+        contentFingerprint: backup.contentFingerprint,
       );
       if (mounted) ref.invalidate(cloudSyncConfigurationProvider);
     } catch (_) {
@@ -109,6 +110,7 @@ class _VaultGateState extends ConsumerState<VaultGate>
               applyArchive: (archive) =>
                   backup.importArchive(archive, _password.text),
               conflictResolution: CloudSyncConflictResolution.downloadRemote,
+              contentFingerprint: backup.contentFingerprint,
             );
             await sync.completePendingDownload();
             ref.invalidate(cloudSyncConfigurationProvider);

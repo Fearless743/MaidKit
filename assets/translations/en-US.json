@@ -342,7 +342,7 @@
   "settingsVaultSyncPasswordHint": "Enter your vault password to sync.",
   "settingsVaultSyncPasswordRequired": "Unlock this vault with its password before syncing.",
   "settingsVaultSyncConflictTitle": "Vault sync conflict",
-  "settingsVaultSyncConflictBody": "A newer version exists in the cloud. Choose which copy to keep.",
+  "settingsVaultSyncConflictBody": "A newer version exists in the cloud (revision {}). Choose which copy to keep.",
   "settingsVaultSyncUseCloud": "Use cloud version",
   "settingsVaultSyncKeepLocal": "Keep local version",
   "settingsVaultSyncComplete": "Vault synchronized.",

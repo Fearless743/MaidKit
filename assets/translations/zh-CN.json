@@ -339,7 +339,7 @@
   "settingsVaultSyncPasswordHint": "请输入金库密码以进行同步。",
   "settingsVaultSyncPasswordRequired": "请先使用金库密码解锁，然后再同步。",
   "settingsVaultSyncConflictTitle": "金库同步冲突",
-  "settingsVaultSyncConflictBody": "云端存在较新的版本。请选择要保留的副本。",
+  "settingsVaultSyncConflictBody": "云端存在较新的版本（修订版本 {}）。请选择要保留的副本。",
   "settingsVaultSyncUseCloud": "使用云端版本",
   "settingsVaultSyncKeepLocal": "保留本地版本",
   "settingsVaultSyncComplete": "保险库已同步。",

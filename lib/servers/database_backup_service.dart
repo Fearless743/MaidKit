@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
@@ -27,6 +28,20 @@ class DatabaseBackupService {
   /// with the vault passphrase. It must never be persisted or sent over the
   /// network without [exportArchive].
   Future<String> exportPayload() async {
+    final archive = await _payload();
+    archive['createdAt'] = DateTime.now().toUtc().toIso8601String();
+    return jsonEncode(archive);
+  }
+
+  /// A stable fingerprint of the syncable content. The export timestamp is
+  /// excluded so identical database states always produce the same value;
+  /// used to skip cloud uploads when nothing changed since the last sync.
+  Future<String> contentFingerprint() async {
+    final archive = await _payload();
+    return sha256.convert(utf8.encode(jsonEncode(archive))).toString();
+  }
+
+  Future<Map<String, Object?>> _payload() async {
     final servers = await _database.select(_database.servers).get();
     final credentials = await _database
         .select(_database.savedCredentials)
@@ -65,7 +80,6 @@ class DatabaseBackupService {
 
     final archive = <String, Object?>{
       'version': _formatVersion,
-      'createdAt': DateTime.now().toUtc().toIso8601String(),
       'servers': serverRecords,
       'savedCredentials': credentialRecords,
       'composeProjectLinks':
@@ -88,7 +102,7 @@ class DatabaseBackupService {
           .map((record) => record.toJson())
           .toList(),
     };
-    return jsonEncode(archive);
+    return archive;
   }
 
   /// Replaces the portable database content while retaining this device's

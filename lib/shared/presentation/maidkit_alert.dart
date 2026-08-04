@@ -263,6 +263,61 @@ Future<bool> showMaidKitConfirmAlert(
   return result ?? false;
 }
 
+/// Prompts the user to pick which copy wins when the cloud has a newer
+/// revision during sync. Returns `true` to download the cloud version and
+/// `false` to keep the local one. The barrier is not dismissible because
+/// either choice permanently discards one of the two copies.
+Future<bool> showMaidKitCloudSyncConflictAlert({
+  required int remoteRevision,
+}) async {
+  final result = await showMaidKitOverlayDialog<bool>(
+    barrierDismissible: false,
+    builder: (context, close) => ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
+      child: AlertDialog(
+        title: null,
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Symbols.cloud_sync_rounded,
+              size: 48,
+              fill: 1,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'settingsVaultSyncConflictTitle'.tr(),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'settingsVaultSyncConflictBody'.tr(
+                args: [remoteRevision.toString()],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => close(false),
+            child: Text('settingsVaultSyncKeepLocal'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => close(true),
+            child: Text('settingsVaultSyncUseCloud'.tr()),
+          ),
+        ],
+      ),
+    ),
+  );
+  return result ?? false;
+}
+
 /// Prompts the user to reconnect before retrying an interrupted server action.
 Future<bool> showMaidKitReconnectAlert(String serverName) async {
   final result = await showMaidKitOverlayDialog<bool>(
