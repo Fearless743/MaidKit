@@ -3,13 +3,19 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:styled_widget/styled_widget.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'package:maid_kit/shared/services/package_info_provider.dart';
 import 'package:maid_kit/shared/services/update_service.dart';
 
-final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
-  return PackageInfo.fromPlatform();
-});
+/// Opens the Solar Network product page in the default browser.
+Future<void> _openSolarNetwork() async {
+  final uri = Uri.parse('https://solsynth.dev/products/solar-network');
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
 
 @RoutePage()
 class AboutPage extends ConsumerWidget {
@@ -138,6 +144,49 @@ class AboutPage extends ConsumerWidget {
                       onTap: () async {
                         await UpdateService().checkForUpdates(context);
                       },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'aboutOtherWorks'.tr(),
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          'assets/icons/solian-icon.webp',
+                          width: 40,
+                          height: 40,
+                          errorBuilder: (_, _, _) => Container(
+                            width: 40,
+                            height: 40,
+                            color: colorScheme.surfaceContainerHighest,
+                            child: Icon(
+                              Symbols.diversity_3,
+                              size: 24,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      title: Text('aboutSolianName'.tr()),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('aboutSolianDescription'.tr()),
+                          const SizedBox(height: 4),
+                          Text('aboutSolianSubDescription'.tr()).fontSize(11),
+                        ],
+                      ),
+                      trailing: TextButton(
+                        onPressed: _openSolarNetwork,
+                        child: Text('aboutSeeMore'.tr()),
+                      ),
+                      onTap: _openSolarNetwork,
                     ),
                   ),
                   const SizedBox(height: 24),
