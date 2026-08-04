@@ -14,6 +14,7 @@ class _FakeInvoker implements LocalMcpToolInvoker {
 
   final bool decline;
   final calls = <String>[];
+  final callers = <String?>[];
 
   @override
   List<Map<String, dynamic>> get toolDefinitions => const [
@@ -33,9 +34,11 @@ class _FakeInvoker implements LocalMcpToolInvoker {
   @override
   Future<Map<String, dynamic>> call(
     String name,
-    Map<String, dynamic> arguments,
-  ) async {
+    Map<String, dynamic> arguments, {
+    String? callerLabel,
+  }) async {
     calls.add(name);
+    callers.add(callerLabel);
     if (decline) throw const McpActionDeclinedException();
     if (name != 'echo') throw ArgumentError('Unknown tool: $name');
     return {
@@ -144,6 +147,33 @@ void main() {
       expect(result['isError'], true);
       final content = result['content'] as List<dynamic>;
       expect(content.first['text'], contains('Unknown tool'));
+    });
+
+    test('tools/call carries the client label from initialize', () async {
+      await handler.handle(
+        _request(1, 'initialize', {
+          'protocolVersion': mcpProtocolVersion,
+          'capabilities': <String, Object?>{},
+          'clientInfo': {'name': 'test-agent', 'version': '2.1'},
+        }),
+      );
+      await handler.handle(
+        _request(2, 'tools/call', {
+          'name': 'echo',
+          'arguments': {'text': 'hi'},
+        }),
+      );
+      expect(invoker.callers, ['test-agent 2.1']);
+    });
+
+    test('tools/call without initialize has no caller label', () async {
+      await handler.handle(
+        _request(1, 'tools/call', {
+          'name': 'echo',
+          'arguments': {'text': 'hi'},
+        }),
+      );
+      expect(invoker.callers, [null]);
     });
 
     test('tools/call declined by the user is an isError result', () async {

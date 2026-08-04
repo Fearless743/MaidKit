@@ -92,11 +92,14 @@ abstract interface class LocalMcpToolInvoker {
   /// Executes [name] with [arguments] and returns an MCP `tools/call` result
   /// map (`content` + `isError`). Throws [ArgumentError] or
   /// [McpActionDeclinedException] for failures the caller should see as a
-  /// tool error rather than a protocol error.
+  /// tool error rather than a protocol error. [callerLabel] identifies the
+  /// MCP client that sent the request (from the handshake), for the user's
+  /// review UI.
   Future<Map<String, dynamic>> call(
     String name,
-    Map<String, dynamic> arguments,
-  );
+    Map<String, dynamic> arguments, {
+    String? callerLabel,
+  });
 }
 
 /// Raised when the user declines a proposed action in the approval dialog.
@@ -114,6 +117,11 @@ class LocalMcpProtocolHandler {
 
   final LocalMcpToolInvoker invoker;
 
+  /// Human-readable label of the client that initialized this session,
+  /// e.g. `Claude Desktop 1.2.3`. Set once from the `initialize` handshake
+  /// and surfaced in approval reviews.
+  String? _callerLabel;
+
   /// Handles one incoming JSON-RPC message. Returns the response to send
   /// back, or null when the message is a notification or otherwise
   /// unanswered.
@@ -129,6 +137,7 @@ class LocalMcpProtocolHandler {
     }
     switch (method) {
       case 'initialize':
+        _callerLabel = _clientLabel(message['params']);
         return _result(id, {
           'protocolVersion': mcpProtocolVersion,
           'capabilities': const {
@@ -161,7 +170,10 @@ class LocalMcpProtocolHandler {
         ? rawArguments
         : <String, dynamic>{};
     try {
-      return _result(id, await invoker.call(name, arguments));
+      return _result(
+        id,
+        await invoker.call(name, arguments, callerLabel: _callerLabel),
+      );
     } on ArgumentError catch (error) {
       return _result(id, _toolError(error.toString()));
     } on McpActionDeclinedException {
@@ -178,6 +190,18 @@ class LocalMcpProtocolHandler {
     ],
     'isError': true,
   };
+
+  /// Builds a display label from the `initialize` clientInfo: `name` plus
+  /// `version` when present, null when the client sent none.
+  String? _clientLabel(Object? rawParams) {
+    final params = rawParams is Map<String, dynamic> ? rawParams : null;
+    final info = params?['clientInfo'];
+    if (info is! Map<String, dynamic>) return null;
+    final name = info['name'];
+    if (name is! String || name.isEmpty) return null;
+    final version = info['version'];
+    return version is String && version.isNotEmpty ? '$name $version' : name;
+  }
 
   Map<String, dynamic> _result(Object? id, Map<String, Object?> result) => {
     'jsonrpc': '2.0',
@@ -202,7 +226,6 @@ class LocalMcpServer {
   final LocalMcpToolInvoker executor;
   final int port;
 
-  late final _handler = LocalMcpProtocolHandler(executor);
   final _sessions = <String, _LocalMcpSession>{};
   String? _latestSessionId;
   HttpServer? _server;
@@ -253,7 +276,9 @@ class LocalMcpServer {
   }
 
   void _handleSse(HttpRequest request) {
-    final session = _LocalMcpSession(_handler);
+    // Each session gets its own protocol handler so the caller identity from
+    // its `initialize` handshake never mixes with another client's.
+    final session = _LocalMcpSession(LocalMcpProtocolHandler(executor));
     _sessions[session.id] = session;
     _latestSessionId = session.id;
     final response = request.response;
@@ -609,8 +634,9 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
   @override
   Future<Map<String, dynamic>> call(
     String name,
-    Map<String, dynamic> arguments,
-  ) async {
+    Map<String, dynamic> arguments, {
+    String? callerLabel,
+  }) async {
     final String text;
     switch (name) {
       case 'list_servers':
@@ -620,33 +646,37 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
           AgentActionKind.command,
           arguments,
           toolName: name,
+          callerLabel: callerLabel,
         );
       case 'read_file':
         text = await _runRemoteAction(
           AgentActionKind.readFile,
           arguments,
           toolName: name,
+          callerLabel: callerLabel,
         );
       case 'write_file':
         text = await _runRemoteAction(
           AgentActionKind.writeFile,
           arguments,
           toolName: name,
+          callerLabel: callerLabel,
         );
       case 'delete_file':
         text = await _runRemoteAction(
           AgentActionKind.deleteFile,
           arguments,
           toolName: name,
+          callerLabel: callerLabel,
         );
       case 'list_snippets':
         text = jsonEncode(await _listSnippets());
       case 'get_snippet':
         text = await _getSnippet(arguments);
       case 'create_snippet':
-        text = await _createSnippet(arguments);
+        text = await _createSnippet(arguments, callerLabel: callerLabel);
       case 'run_snippet':
-        text = await _runSnippet(arguments);
+        text = await _runSnippet(arguments, callerLabel: callerLabel);
       case 'list_skills':
         text = jsonEncode(await _listSkills());
       case 'get_skill':
@@ -654,7 +684,7 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
       case 'get_review_mode':
         text = jsonEncode({'mode': _currentReviewMode().wireName});
       case 'set_review_mode':
-        text = await _setReviewMode(arguments);
+        text = await _setReviewMode(arguments, callerLabel: callerLabel);
       default:
         throw ArgumentError('Unknown tool: $name');
     }
@@ -700,7 +730,10 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     return 'Snippet #${snippet.id}: ${snippet.name}\n\n${snippet.script}';
   }
 
-  Future<String> _createSnippet(Map<String, dynamic> arguments) async {
+  Future<String> _createSnippet(
+    Map<String, dynamic> arguments, {
+    String? callerLabel,
+  }) async {
     final name = _string(arguments, 'name');
     final script = _string(arguments, 'script');
     if (name.trim().isEmpty || script.trim().isEmpty) {
@@ -708,6 +741,7 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     }
     if (!await _approve(
       _proposal(AgentActionKind.createSnippet, arguments, 'create_snippet'),
+      callerLabel: callerLabel,
     )) {
       throw const McpActionDeclinedException();
     }
@@ -717,7 +751,10 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     return 'Created saved snippet #$id: $name';
   }
 
-  Future<String> _runSnippet(Map<String, dynamic> arguments) async {
+  Future<String> _runSnippet(
+    Map<String, dynamic> arguments, {
+    String? callerLabel,
+  }) async {
     final serverId = _int(arguments, 'server_id');
     final snippet = await ref
         .read(snippetRepositoryProvider)
@@ -728,7 +765,9 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
       arguments,
       'run_snippet',
     );
-    if (!await _approve(proposal)) throw const McpActionDeclinedException();
+    if (!await _approve(proposal, callerLabel: callerLabel)) {
+      throw const McpActionDeclinedException();
+    }
     final client = await _clientForServer(serverId);
     return SshAgentService.executeProposal(
       client,
@@ -762,7 +801,10 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
   McpReviewMode _currentReviewMode() =>
       ref.read(mcpReviewModeProvider).value ?? McpReviewMode.alwaysAsk;
 
-  Future<String> _setReviewMode(Map<String, dynamic> arguments) async {
+  Future<String> _setReviewMode(
+    Map<String, dynamic> arguments, {
+    String? callerLabel,
+  }) async {
     final rawMode = _string(arguments, 'mode');
     final mode = McpReviewMode.fromWireName(rawMode);
     final proposal = AgentProposal(
@@ -783,7 +825,11 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     );
     // Changing the review mode can widen what runs without approval, so it is
     // never auto-approved — not even under always_approve.
-    if (!await _approve(proposal, requireApproval: true)) {
+    if (!await _approve(
+      proposal,
+      requireApproval: true,
+      callerLabel: callerLabel,
+    )) {
       throw const McpActionDeclinedException();
     }
     await ref.read(mcpReviewModeProvider.notifier).setMode(mode);
@@ -796,6 +842,7 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     AgentActionKind kind,
     Map<String, dynamic> arguments, {
     required String toolName,
+    String? callerLabel,
   }) async {
     final serverId = _int(arguments, 'server_id');
     switch (kind) {
@@ -811,7 +858,9 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         break;
     }
     final proposal = _proposal(kind, arguments, toolName);
-    if (!await _approve(proposal)) throw const McpActionDeclinedException();
+    if (!await _approve(proposal, callerLabel: callerLabel)) {
+      throw const McpActionDeclinedException();
+    }
     return SshAgentService.executeProposal(
       await _clientForServer(serverId),
       proposal,
@@ -823,9 +872,12 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
   /// read-only actions auto-run under auto-review, everything else is shown
   /// to the user unless the mode approves it outright. [requireApproval]
   /// forces the dialog even when the current mode would auto-approve.
+  /// [callerLabel] and the proposal's target server are surfaced in the
+  /// review card so the user sees who asked and where the action would run.
   Future<bool> _approve(
     AgentProposal proposal, {
     bool requireApproval = false,
+    String? callerLabel,
   }) async {
     final mode = await ref.read(mcpReviewModeProvider.future);
     final shouldAutoRun = requireApproval
@@ -837,12 +889,28 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
           };
     if (shouldAutoRun) return true;
     await _notifyIfWindowBackgrounded(proposal);
+    final targetServerLabel = await _targetServerLabel(proposal);
     return await showMaidKitOverlayDialog<bool>(
           barrierDismissible: false,
-          builder: (context, close) =>
-              _McpApprovalCard(proposal: proposal, onResult: close),
+          builder: (context, close) => _McpApprovalCard(
+            proposal: proposal,
+            callerLabel: callerLabel,
+            targetServerLabel: targetServerLabel,
+            onResult: close,
+          ),
         ) ??
         false;
+  }
+
+  /// Resolves the server a proposal targets into a display label for the
+  /// review card. Null for actions that do not run on a server.
+  Future<String?> _targetServerLabel(AgentProposal proposal) async {
+    final serverId = proposal.serverId;
+    if (serverId == null) return null;
+    final servers = await ref.read(serverRepositoryProvider).all();
+    final server = servers.where((server) => server.id == serverId).firstOrNull;
+    if (server == null) return null;
+    return '${server.name} (${server.username}@${server.host}:${server.port})';
   }
 
   /// Posts a macOS Notification Center alert when an agent's access request
@@ -986,16 +1054,26 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
 }
 
 /// Approval card for actions requested through the local MCP server. Mirrors
-/// the chat agent's proposal presentation but as a modal overlay.
+/// the chat agent's proposal presentation but as a modal overlay, and names
+/// the client that asked ([callerLabel]) plus the server the action targets
+/// ([targetServer]) when one applies.
 class _McpApprovalCard extends StatelessWidget {
-  const _McpApprovalCard({required this.proposal, required this.onResult});
+  const _McpApprovalCard({
+    required this.proposal,
+    required this.onResult,
+    this.callerLabel,
+    this.targetServerLabel,
+  });
 
   final AgentProposal proposal;
   final void Function(bool approved) onResult;
+  final String? callerLabel;
+  final String? targetServerLabel;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final targetLabel = targetServerLabel;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: kMaidKitDialogMaxWidth),
       child: Material(
@@ -1018,6 +1096,20 @@ class _McpApprovalCard extends StatelessWidget {
                 'mcpApprovalHint'.tr(),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
+              const SizedBox(height: 16),
+              _ReviewInfoRow(
+                icon: Symbols.smart_toy,
+                label: 'mcpApprovalCaller'.tr(),
+                value: callerLabel ?? 'mcpApprovalCallerUnknown'.tr(),
+              ),
+              if (targetLabel != null) ...[
+                const SizedBox(height: 8),
+                _ReviewInfoRow(
+                  icon: Symbols.dns,
+                  label: 'mcpApprovalTarget'.tr(),
+                  value: targetLabel,
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 proposal.title,
@@ -1054,6 +1146,45 @@ class _McpApprovalCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One labelled line of context in an approval card: who asked, and where the
+/// action would run.
+class _ReviewInfoRow extends StatelessWidget {
+  const _ReviewInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
