@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
@@ -65,6 +66,11 @@ final class TerminalInputClient with DeltaTextInputClient {
 
   TextInputConfiguration get _configuration {
     return TextInputConfiguration(
+      // The engine rejects TextInput.setClient without a view ID (Windows
+      // raises "Could not set client, view ID is null."), which silently
+      // kills all terminal input. Match EditableText by pinning the implicit
+      // view; this app runs a single window, so it is the terminal's view.
+      viewId: PlatformDispatcher.instance.implicitView?.viewId,
       autocorrect: false,
       inputType: .multiline,
       inputAction: .newline,
