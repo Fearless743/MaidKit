@@ -88,6 +88,13 @@ jobs:
         with:
           name: build-output-linux
           path: build/linux/x64/release/bundle/
+      - name: Build AppImage
+        run: bash buildtools/build-appimage.sh
+      - name: Archive AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-linux-appimage
+          path: "./*.AppImage*"
 
   build-android:
     if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android'
@@ -146,10 +153,10 @@ jobs:
           name: build-output-windows-installer
           path: ./artifacts/windows
       - if: needs.build-linux.result == 'success'
-        name: Download Linux artifact
+        name: Download AppImage artifact
         uses: actions/download-artifact@v4
         with:
-          name: build-output-linux
+          name: build-output-linux-appimage
           path: ./artifacts/linux
       - if: needs.build-android.result == 'success'
         name: Download Android artifact
@@ -163,10 +170,10 @@ jobs:
           cd ./artifacts/windows
           zip -r ../build-output-windows-installer.zip .
       - if: needs.build-linux.result == 'success'
-        name: Zip Linux build
+        name: Zip Linux AppImage
         run: |
           cd ./artifacts/linux
-          zip -r ../build-output-linux.zip .
+          zip -r ../build-output-linux-appimage.zip .
       - if: needs.build-android.result == 'success'
         name: Prepare Android APKs for upload
         run: |
@@ -190,7 +197,7 @@ jobs:
           r2-access-key-id: ${{ secrets.S3_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.S3_SECRET_ACCESS_KEY }}
           r2-bucket: ${{ secrets.S3_BUCKET_NAME }}
-          source-dir: ./artifacts/build-output-linux.zip
+          source-dir: ./artifacts/build-output-linux-appimage.zip
           destination-dir: maidkit
       - if: needs.build-android.result == 'success'
         name: Upload Android split APKs to R2

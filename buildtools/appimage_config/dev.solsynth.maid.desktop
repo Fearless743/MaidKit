@@ -1,0 +1,18 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=MaidKit
+GenericName=SSH Server Manager
+Comment=Manage servers over SSH with a calm, desktop-native interface
+
+Exec=maid_kit %U
+Icon=icon-padded
+Terminal=false
+Categories=Network;System;RemoteAccess;
+StartupNotify=true
+StartupWMClass=dev.solsynth.maid
+
+# Helps with search in application menus
+Keywords=maidkit;ssh;server;remote;maintenance;admin;deploy;shell;terminal;
+
+MimeType=x-scheme-handler/maidkit;
