@@ -824,7 +824,9 @@ class SettingsPage extends ConsumerWidget {
                               : _SettingsTilePosition.middle,
                           title:
                               vaultLabels[path] ??
-                              path.split(Platform.pathSeparator).last,
+                              ref
+                                  .read(vaultFileStorageProvider)
+                                  .fileName(path),
                           active: activeVaultFile == path,
                           onSelect: () => ref
                               .read(activeVaultFileProvider.notifier)
@@ -837,7 +839,9 @@ class SettingsPage extends ConsumerWidget {
                             ref,
                             path,
                             vaultLabels[path] ??
-                                path.split(Platform.pathSeparator).last,
+                                ref
+                                    .read(vaultFileStorageProvider)
+                                    .fileName(path),
                           ),
                           onDelete: activeVaultFile == path
                               ? null

@@ -352,12 +352,11 @@ class _VaultGateState extends ConsumerState<VaultGate>
                                                   value: path,
                                                   child: Text(
                                                     vaultLabels[path] ??
-                                                        path
-                                                            .split(
-                                                              Platform
-                                                                  .pathSeparator,
+                                                        ref
+                                                            .read(
+                                                              vaultFileStorageProvider,
                                                             )
-                                                            .last,
+                                                            .fileName(path),
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),

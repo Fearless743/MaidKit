@@ -14,7 +14,7 @@ class VaultFileStorage {
 
   Future<String> createVaultPath({String? name}) async {
     final directory = await _vaultDirectory();
-    final stem = _safeStem(_fileName(name ?? 'MaidKit vault'));
+    final stem = _safeStem(fileName(name ?? 'MaidKit vault'));
     return '${directory.path}/$stem-${_uuid.v4()}$_extension';
   }
 
@@ -24,9 +24,9 @@ class VaultFileStorage {
       throw FileSystemException('Vault file was not found.', sourcePath);
     }
     final directory = await _vaultDirectory();
-    if (_isInDirectory(source.path, directory.path)) return source.path;
+    if (isInDirectory(source.path, directory.path)) return source.path;
 
-    final name = _safeStem(_fileName(source.path));
+    final name = _safeStem(fileName(source.path));
     final target = File(
       '${directory.path}/$name-${source.path.hashCode.abs()}$_extension',
     );
@@ -36,7 +36,7 @@ class VaultFileStorage {
 
   Future<void> deleteVault(String path) async {
     final directory = await _vaultDirectory();
-    if (!_isInDirectory(path, directory.path)) {
+    if (!isInDirectory(path, directory.path)) {
       throw FileSystemException(
         'Only managed vault files can be deleted.',
         path,
@@ -53,11 +53,23 @@ class VaultFileStorage {
     ).create(recursive: true);
   }
 
-  bool _isInDirectory(String path, String directory) =>
-      path == directory ||
-      path.startsWith('$directory${Platform.pathSeparator}');
+  /// The final path segment, tolerating both '/' and '\' separators.
+  ///
+  /// Managed vault paths are built with '/' while path_provider and
+  /// FilePicker may report native '\' paths on Windows, so splitting on
+  /// [Platform.pathSeparator] alone would return the whole path there.
+  String fileName(String path) => path.split(RegExp(r'[/\\]')).last;
 
-  String _fileName(String path) => path.split(Platform.pathSeparator).last;
+  /// Whether [path] points inside [directory], tolerant of '/' and '\'
+  /// separators and of a trailing separator on [directory].
+  bool isInDirectory(String path, String directory) {
+    final normalizedPath = path.replaceAll('\\', '/');
+    final normalizedDirectory = directory
+        .replaceAll('\\', '/')
+        .replaceAll(RegExp(r'/+$'), '');
+    return normalizedPath == normalizedDirectory ||
+        normalizedPath.startsWith('$normalizedDirectory/');
+  }
 
   String _safeStem(String value) {
     final withoutExtension = value.replaceFirst(RegExp(r'\.[^.]*$'), '');
