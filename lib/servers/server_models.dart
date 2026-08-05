@@ -61,6 +61,7 @@ class ServerDraft {
     this.credentialName,
     this.collectStats = true,
     this.collectSystemInfo = true,
+    this.proxy,
   });
 
   final String name;
@@ -74,6 +75,32 @@ class ServerDraft {
   final String? credentialName;
   final bool collectStats;
   final bool collectSystemInfo;
+
+  /// Optional per-server proxy. During an edit, a null [ServerProxy.password]
+  /// keeps the stored proxy password unchanged.
+  final ServerProxy? proxy;
+}
+
+enum ServerProxyType { none, http, socks5 }
+
+/// A per-server HTTP CONNECT or SOCKS5 proxy used to reach the SSH host.
+///
+/// The proxy establishes the underlying TCP connection, so DNS resolution
+/// happens at the proxy rather than on this device.
+class ServerProxy {
+  const ServerProxy({
+    required this.type,
+    required this.host,
+    required this.port,
+    this.username,
+    this.password,
+  });
+
+  final ServerProxyType type;
+  final String host;
+  final int port;
+  final String? username;
+  final String? password;
 }
 
 enum SessionStatus { connecting, connected, failed, closed }

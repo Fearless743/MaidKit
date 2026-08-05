@@ -266,6 +266,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     String? knownHostKeyFingerprint,
     String? initialDirectory,
     String? paneId,
+    ServerProxy? proxy,
   }) async {
     if (paneId != null) focusPane(paneId);
     final handle = await _openTerminalHandle(
@@ -274,6 +275,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
       approve,
       knownHostKeyFingerprint: knownHostKeyFingerprint,
       initialDirectory: initialDirectory,
+      proxy: proxy,
     );
     final tab = TerminalTab(
       id: handle.id,
@@ -548,6 +550,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     HostKeyApproval approve, {
     String? knownHostKeyFingerprint,
     String? initialDirectory,
+    ServerProxy? proxy,
   }) => ref
       .read(connectionManagerProvider)
       .openTerminal(
@@ -556,6 +559,7 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
         approve,
         knownHostKeyFingerprint: knownHostKeyFingerprint,
         initialDirectory: initialDirectory,
+        proxy: proxy,
       );
 
   void _insertTab(SessionTab tab, {String? targetPaneId}) {

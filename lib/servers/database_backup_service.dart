@@ -50,7 +50,9 @@ class DatabaseBackupService {
     for (final server in servers) {
       final record = server.toJson()
         ..remove('encryptedCredential')
-        ..remove('credentialNonce');
+        ..remove('credentialNonce')
+        ..remove('encryptedProxyPassword')
+        ..remove('proxyPasswordNonce');
       if (server.encryptedCredential != null &&
           server.credentialNonce != null) {
         record['credential'] = await _vault.decrypt(
@@ -59,6 +61,16 @@ class DatabaseBackupService {
             nonce: server.credentialNonce!,
           ),
           context: 'server-credential',
+        );
+      }
+      if (server.encryptedProxyPassword != null &&
+          server.proxyPasswordNonce != null) {
+        record['proxyPassword'] = await _vault.decrypt(
+          EncryptedValue(
+            bytes: server.encryptedProxyPassword!,
+            nonce: server.proxyPasswordNonce!,
+          ),
+          context: 'server-proxy-password',
         );
       }
       serverRecords.add(record);
@@ -101,6 +113,19 @@ class DatabaseBackupService {
       'scriptSnippets': (await _database.select(_database.scriptSnippets).get())
           .map((record) => record.toJson())
           .toList(),
+      // GitHub metadata syncs with the vault; access tokens never do. They
+      // live in the OS keychain and are re-created by signing in again.
+      'githubConnections':
+          (await _database.select(_database.gitHubConnections).get())
+              .map((record) => record.toJson())
+              .toList(),
+      'githubRepoPins': (await _database.select(_database.gitHubRepoPins).get())
+          .map((record) => record.toJson())
+          .toList(),
+      'githubProjectWorkflowLinks':
+          (await _database.select(_database.gitHubProjectWorkflowLinks).get())
+              .map((record) => record.toJson())
+              .toList(),
     };
     return archive;
   }
@@ -127,6 +152,16 @@ class DatabaseBackupService {
     final projects = _records(payload, 'deploymentProjects');
     final resources = _records(payload, 'deploymentResources');
     final snippets = _records(payload, 'scriptSnippets');
+    // Optional keys: archives written before the GitHub integration carry no
+    // GitHub metadata, which imports as an empty connection state. Tokens are
+    // never part of an archive, so a synced connection simply needs a new
+    // device sign-in.
+    final githubConnections = _recordsOrEmpty(payload, 'githubConnections');
+    final githubRepoPins = _recordsOrEmpty(payload, 'githubRepoPins');
+    final githubProjectWorkflowLinks = _recordsOrEmpty(
+      payload,
+      'githubProjectWorkflowLinks',
+    );
 
     await _database.transaction(() async {
       await _database.delete(_database.deploymentResources).go();
@@ -134,6 +169,9 @@ class DatabaseBackupService {
       await _database.delete(_database.containerCacheEntries).go();
       await _database.delete(_database.composeProjectLinks).go();
       await _database.delete(_database.scriptSnippets).go();
+      await _database.delete(_database.gitHubProjectWorkflowLinks).go();
+      await _database.delete(_database.gitHubRepoPins).go();
+      await _database.delete(_database.gitHubConnections).go();
       await _database.delete(_database.servers).go();
       await _database.delete(_database.savedCredentials).go();
 
@@ -175,6 +213,13 @@ class DatabaseBackupService {
         final encrypted = credential is String
             ? await _vault.encrypt(credential, context: 'server-credential')
             : null;
+        final proxyPassword = record['proxyPassword'];
+        final encryptedProxyPassword = proxyPassword is String
+            ? await _vault.encrypt(
+                proxyPassword,
+                context: 'server-proxy-password',
+              )
+            : null;
         await _database
             .into(_database.servers)
             .insert(
@@ -197,6 +242,12 @@ class DatabaseBackupService {
                 hostKeyFingerprint: Value(server.hostKeyFingerprint),
                 collectStats: Value(server.collectStats),
                 collectSystemInfo: Value(server.collectSystemInfo),
+                proxyType: Value(server.proxyType),
+                proxyHost: Value(server.proxyHost),
+                proxyPort: Value(server.proxyPort),
+                proxyUsername: Value(server.proxyUsername),
+                encryptedProxyPassword: Value(encryptedProxyPassword?.bytes),
+                proxyPasswordNonce: Value(encryptedProxyPassword?.nonce),
               ),
             );
       }
@@ -225,7 +276,37 @@ class DatabaseBackupService {
             .into(_database.scriptSnippets)
             .insert(ScriptSnippet.fromJson(record).toCompanion(false));
       }
+      for (final record in githubConnections) {
+        await _database
+            .into(_database.gitHubConnections)
+            .insert(GitHubConnection.fromJson(record).toCompanion(false));
+      }
+      for (final record in githubRepoPins) {
+        await _database
+            .into(_database.gitHubRepoPins)
+            .insert(GitHubRepoPin.fromJson(record).toCompanion(false));
+      }
+      for (final record in githubProjectWorkflowLinks) {
+        await _database
+            .into(_database.gitHubProjectWorkflowLinks)
+            .insert(
+              GitHubProjectWorkflowLink.fromJson(record).toCompanion(false),
+            );
+      }
     });
+  }
+
+  List<Map<String, dynamic>> _recordsOrEmpty(
+    Map<String, dynamic> payload,
+    String key,
+  ) {
+    final records = payload[key];
+    if (records == null) return const [];
+    if (records is! List) throw FormatException('Invalid $key in backup.');
+    return records.map((record) {
+      if (record is! Map) throw FormatException('Invalid $key record.');
+      return Map<String, dynamic>.from(record);
+    }).toList();
   }
 
   List<Map<String, dynamic>> _records(

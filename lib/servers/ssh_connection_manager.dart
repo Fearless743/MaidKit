@@ -14,6 +14,7 @@ import 'package_models.dart';
 import 'port_forwarding_models.dart';
 import 'server_metrics_collector.dart';
 import 'server_models.dart';
+import 'ssh_proxy_connect.dart';
 import 'systemd_models.dart';
 import 'terminal_session_adapter.dart';
 import 'web_server_adapter.dart';
@@ -167,12 +168,14 @@ class SshConnectionManager {
     HostKeyApproval approve, {
     String? knownHostKeyFingerprint,
     String? initialDirectory,
+    ServerProxy? proxy,
   }) async {
     final client = await _createClient(
       server,
       credential,
       approve,
       knownHostKeyFingerprint: knownHostKeyFingerprint,
+      proxy: proxy,
     );
     late SSHSession shell;
     try {
@@ -3225,6 +3228,7 @@ fi
     ServerCredential credential,
     HostKeyApproval approve, {
     String? knownHostKeyFingerprint,
+    ServerProxy? proxy,
   }) async {
     await disconnect(server.id);
     _set(
@@ -3243,6 +3247,7 @@ fi
         approve,
         knownHostKeyFingerprint: knownHostKeyFingerprint,
         onAuthMethods: (methods) => serverAuthMethods = methods,
+        proxy: proxy,
       );
       _sessions[server.id] = client;
       _set(_states[server.id]!.copyWith(status: SessionStatus.connected));
@@ -3375,12 +3380,17 @@ fi
     HostKeyApproval approve, {
     String? knownHostKeyFingerprint,
     void Function(String? methods)? onAuthMethods,
+    ServerProxy? proxy,
   }) async {
     final identities = credential.type == CredentialType.privateKey
         ? SSHKeyPair.fromPem(credential.privateKey!, credential.keyPassphrase)
         : null;
     final client = SSHClient(
-      await _LowLatencySshSocket.connect(server.host, server.port),
+      await _LowLatencySshSocket.connect(
+        server.host,
+        server.port,
+        proxy: proxy,
+      ),
       username: server.username,
       identities: identities,
       onPasswordRequest: credential.type == CredentialType.password
@@ -3412,6 +3422,7 @@ fi
       },
       handshakeTimeout: const Duration(seconds: 15),
       authTimeout: const Duration(seconds: 15),
+      ident: "MaidKit",
     );
     await client.authenticated;
     return client;
@@ -3428,10 +3439,17 @@ class _LowLatencySshSocket implements SSHSocket {
 
   final Socket _socket;
 
-  static Future<_LowLatencySshSocket> connect(String host, int port) async {
-    final socket = await Socket.connect(host, port);
-    socket.setOption(SocketOption.tcpNoDelay, true);
-    return _LowLatencySshSocket._(socket);
+  static Future<SSHSocket> connect(
+    String host,
+    int port, {
+    ServerProxy? proxy,
+  }) async {
+    if (proxy == null || proxy.type == ServerProxyType.none) {
+      final socket = await Socket.connect(host, port);
+      socket.setOption(SocketOption.tcpNoDelay, true);
+      return _LowLatencySshSocket._(socket);
+    }
+    return connectThroughProxy(proxy, host, port);
   }
 
   @override

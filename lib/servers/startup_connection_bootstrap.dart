@@ -37,11 +37,13 @@ class _StartupConnectionBootstrapState
     for (final server in await repository.all()) {
       try {
         final credential = await repository.credentialFor(server);
+        final proxy = await repository.proxyFor(server);
         await manager.connect(
           server,
           credential,
           (_) async => false,
           knownHostKeyFingerprint: server.hostKeyFingerprint,
+          proxy: proxy,
         );
         await repository.markConnected(server.id);
       } catch (_) {

@@ -210,6 +210,72 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _proxyTypeMeta = const VerificationMeta(
+    'proxyType',
+  );
+  @override
+  late final GeneratedColumn<String> proxyType = GeneratedColumn<String>(
+    'proxy_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _proxyHostMeta = const VerificationMeta(
+    'proxyHost',
+  );
+  @override
+  late final GeneratedColumn<String> proxyHost = GeneratedColumn<String>(
+    'proxy_host',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _proxyPortMeta = const VerificationMeta(
+    'proxyPort',
+  );
+  @override
+  late final GeneratedColumn<int> proxyPort = GeneratedColumn<int>(
+    'proxy_port',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _proxyUsernameMeta = const VerificationMeta(
+    'proxyUsername',
+  );
+  @override
+  late final GeneratedColumn<String> proxyUsername = GeneratedColumn<String>(
+    'proxy_username',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _encryptedProxyPasswordMeta =
+      const VerificationMeta('encryptedProxyPassword');
+  @override
+  late final GeneratedColumn<String> encryptedProxyPassword =
+      GeneratedColumn<String>(
+        'encrypted_proxy_password',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _proxyPasswordNonceMeta =
+      const VerificationMeta('proxyPasswordNonce');
+  @override
+  late final GeneratedColumn<String> proxyPasswordNonce =
+      GeneratedColumn<String>(
+        'proxy_password_nonce',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -230,6 +296,12 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     hostKeyFingerprint,
     collectStats,
     collectSystemInfo,
+    proxyType,
+    proxyHost,
+    proxyPort,
+    proxyUsername,
+    encryptedProxyPassword,
+    proxyPasswordNonce,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -381,6 +453,51 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         ),
       );
     }
+    if (data.containsKey('proxy_type')) {
+      context.handle(
+        _proxyTypeMeta,
+        proxyType.isAcceptableOrUnknown(data['proxy_type']!, _proxyTypeMeta),
+      );
+    }
+    if (data.containsKey('proxy_host')) {
+      context.handle(
+        _proxyHostMeta,
+        proxyHost.isAcceptableOrUnknown(data['proxy_host']!, _proxyHostMeta),
+      );
+    }
+    if (data.containsKey('proxy_port')) {
+      context.handle(
+        _proxyPortMeta,
+        proxyPort.isAcceptableOrUnknown(data['proxy_port']!, _proxyPortMeta),
+      );
+    }
+    if (data.containsKey('proxy_username')) {
+      context.handle(
+        _proxyUsernameMeta,
+        proxyUsername.isAcceptableOrUnknown(
+          data['proxy_username']!,
+          _proxyUsernameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('encrypted_proxy_password')) {
+      context.handle(
+        _encryptedProxyPasswordMeta,
+        encryptedProxyPassword.isAcceptableOrUnknown(
+          data['encrypted_proxy_password']!,
+          _encryptedProxyPasswordMeta,
+        ),
+      );
+    }
+    if (data.containsKey('proxy_password_nonce')) {
+      context.handle(
+        _proxyPasswordNonceMeta,
+        proxyPasswordNonce.isAcceptableOrUnknown(
+          data['proxy_password_nonce']!,
+          _proxyPasswordNonceMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -462,6 +579,30 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         DriftSqlType.bool,
         data['${effectivePrefix}collect_system_info'],
       )!,
+      proxyType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_type'],
+      ),
+      proxyHost: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_host'],
+      ),
+      proxyPort: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}proxy_port'],
+      ),
+      proxyUsername: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_username'],
+      ),
+      encryptedProxyPassword: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}encrypted_proxy_password'],
+      ),
+      proxyPasswordNonce: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_password_nonce'],
+      ),
     );
   }
 
@@ -490,6 +631,12 @@ class Server extends DataClass implements Insertable<Server> {
   final String? hostKeyFingerprint;
   final bool collectStats;
   final bool collectSystemInfo;
+  final String? proxyType;
+  final String? proxyHost;
+  final int? proxyPort;
+  final String? proxyUsername;
+  final String? encryptedProxyPassword;
+  final String? proxyPasswordNonce;
   const Server({
     required this.id,
     required this.name,
@@ -509,6 +656,12 @@ class Server extends DataClass implements Insertable<Server> {
     this.hostKeyFingerprint,
     required this.collectStats,
     required this.collectSystemInfo,
+    this.proxyType,
+    this.proxyHost,
+    this.proxyPort,
+    this.proxyUsername,
+    this.encryptedProxyPassword,
+    this.proxyPasswordNonce,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -553,6 +706,26 @@ class Server extends DataClass implements Insertable<Server> {
     }
     map['collect_stats'] = Variable<bool>(collectStats);
     map['collect_system_info'] = Variable<bool>(collectSystemInfo);
+    if (!nullToAbsent || proxyType != null) {
+      map['proxy_type'] = Variable<String>(proxyType);
+    }
+    if (!nullToAbsent || proxyHost != null) {
+      map['proxy_host'] = Variable<String>(proxyHost);
+    }
+    if (!nullToAbsent || proxyPort != null) {
+      map['proxy_port'] = Variable<int>(proxyPort);
+    }
+    if (!nullToAbsent || proxyUsername != null) {
+      map['proxy_username'] = Variable<String>(proxyUsername);
+    }
+    if (!nullToAbsent || encryptedProxyPassword != null) {
+      map['encrypted_proxy_password'] = Variable<String>(
+        encryptedProxyPassword,
+      );
+    }
+    if (!nullToAbsent || proxyPasswordNonce != null) {
+      map['proxy_password_nonce'] = Variable<String>(proxyPasswordNonce);
+    }
     return map;
   }
 
@@ -598,6 +771,24 @@ class Server extends DataClass implements Insertable<Server> {
           : Value(hostKeyFingerprint),
       collectStats: Value(collectStats),
       collectSystemInfo: Value(collectSystemInfo),
+      proxyType: proxyType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxyType),
+      proxyHost: proxyHost == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxyHost),
+      proxyPort: proxyPort == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxyPort),
+      proxyUsername: proxyUsername == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxyUsername),
+      encryptedProxyPassword: encryptedProxyPassword == null && nullToAbsent
+          ? const Value.absent()
+          : Value(encryptedProxyPassword),
+      proxyPasswordNonce: proxyPasswordNonce == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxyPasswordNonce),
     );
   }
 
@@ -629,6 +820,16 @@ class Server extends DataClass implements Insertable<Server> {
       ),
       collectStats: serializer.fromJson<bool>(json['collectStats']),
       collectSystemInfo: serializer.fromJson<bool>(json['collectSystemInfo']),
+      proxyType: serializer.fromJson<String?>(json['proxyType']),
+      proxyHost: serializer.fromJson<String?>(json['proxyHost']),
+      proxyPort: serializer.fromJson<int?>(json['proxyPort']),
+      proxyUsername: serializer.fromJson<String?>(json['proxyUsername']),
+      encryptedProxyPassword: serializer.fromJson<String?>(
+        json['encryptedProxyPassword'],
+      ),
+      proxyPasswordNonce: serializer.fromJson<String?>(
+        json['proxyPasswordNonce'],
+      ),
     );
   }
   @override
@@ -653,6 +854,14 @@ class Server extends DataClass implements Insertable<Server> {
       'hostKeyFingerprint': serializer.toJson<String?>(hostKeyFingerprint),
       'collectStats': serializer.toJson<bool>(collectStats),
       'collectSystemInfo': serializer.toJson<bool>(collectSystemInfo),
+      'proxyType': serializer.toJson<String?>(proxyType),
+      'proxyHost': serializer.toJson<String?>(proxyHost),
+      'proxyPort': serializer.toJson<int?>(proxyPort),
+      'proxyUsername': serializer.toJson<String?>(proxyUsername),
+      'encryptedProxyPassword': serializer.toJson<String?>(
+        encryptedProxyPassword,
+      ),
+      'proxyPasswordNonce': serializer.toJson<String?>(proxyPasswordNonce),
     };
   }
 
@@ -675,6 +884,12 @@ class Server extends DataClass implements Insertable<Server> {
     Value<String?> hostKeyFingerprint = const Value.absent(),
     bool? collectStats,
     bool? collectSystemInfo,
+    Value<String?> proxyType = const Value.absent(),
+    Value<String?> proxyHost = const Value.absent(),
+    Value<int?> proxyPort = const Value.absent(),
+    Value<String?> proxyUsername = const Value.absent(),
+    Value<String?> encryptedProxyPassword = const Value.absent(),
+    Value<String?> proxyPasswordNonce = const Value.absent(),
   }) => Server(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -706,6 +921,18 @@ class Server extends DataClass implements Insertable<Server> {
         : this.hostKeyFingerprint,
     collectStats: collectStats ?? this.collectStats,
     collectSystemInfo: collectSystemInfo ?? this.collectSystemInfo,
+    proxyType: proxyType.present ? proxyType.value : this.proxyType,
+    proxyHost: proxyHost.present ? proxyHost.value : this.proxyHost,
+    proxyPort: proxyPort.present ? proxyPort.value : this.proxyPort,
+    proxyUsername: proxyUsername.present
+        ? proxyUsername.value
+        : this.proxyUsername,
+    encryptedProxyPassword: encryptedProxyPassword.present
+        ? encryptedProxyPassword.value
+        : this.encryptedProxyPassword,
+    proxyPasswordNonce: proxyPasswordNonce.present
+        ? proxyPasswordNonce.value
+        : this.proxyPasswordNonce,
   );
   Server copyWithCompanion(ServersCompanion data) {
     return Server(
@@ -745,6 +972,18 @@ class Server extends DataClass implements Insertable<Server> {
       collectSystemInfo: data.collectSystemInfo.present
           ? data.collectSystemInfo.value
           : this.collectSystemInfo,
+      proxyType: data.proxyType.present ? data.proxyType.value : this.proxyType,
+      proxyHost: data.proxyHost.present ? data.proxyHost.value : this.proxyHost,
+      proxyPort: data.proxyPort.present ? data.proxyPort.value : this.proxyPort,
+      proxyUsername: data.proxyUsername.present
+          ? data.proxyUsername.value
+          : this.proxyUsername,
+      encryptedProxyPassword: data.encryptedProxyPassword.present
+          ? data.encryptedProxyPassword.value
+          : this.encryptedProxyPassword,
+      proxyPasswordNonce: data.proxyPasswordNonce.present
+          ? data.proxyPasswordNonce.value
+          : this.proxyPasswordNonce,
     );
   }
 
@@ -768,13 +1007,19 @@ class Server extends DataClass implements Insertable<Server> {
           ..write('hostKeyAlgorithm: $hostKeyAlgorithm, ')
           ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
           ..write('collectStats: $collectStats, ')
-          ..write('collectSystemInfo: $collectSystemInfo')
+          ..write('collectSystemInfo: $collectSystemInfo, ')
+          ..write('proxyType: $proxyType, ')
+          ..write('proxyHost: $proxyHost, ')
+          ..write('proxyPort: $proxyPort, ')
+          ..write('proxyUsername: $proxyUsername, ')
+          ..write('encryptedProxyPassword: $encryptedProxyPassword, ')
+          ..write('proxyPasswordNonce: $proxyPasswordNonce')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     name,
     host,
@@ -793,7 +1038,13 @@ class Server extends DataClass implements Insertable<Server> {
     hostKeyFingerprint,
     collectStats,
     collectSystemInfo,
-  );
+    proxyType,
+    proxyHost,
+    proxyPort,
+    proxyUsername,
+    encryptedProxyPassword,
+    proxyPasswordNonce,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -815,7 +1066,13 @@ class Server extends DataClass implements Insertable<Server> {
           other.hostKeyAlgorithm == this.hostKeyAlgorithm &&
           other.hostKeyFingerprint == this.hostKeyFingerprint &&
           other.collectStats == this.collectStats &&
-          other.collectSystemInfo == this.collectSystemInfo);
+          other.collectSystemInfo == this.collectSystemInfo &&
+          other.proxyType == this.proxyType &&
+          other.proxyHost == this.proxyHost &&
+          other.proxyPort == this.proxyPort &&
+          other.proxyUsername == this.proxyUsername &&
+          other.encryptedProxyPassword == this.encryptedProxyPassword &&
+          other.proxyPasswordNonce == this.proxyPasswordNonce);
 }
 
 class ServersCompanion extends UpdateCompanion<Server> {
@@ -837,6 +1094,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
   final Value<String?> hostKeyFingerprint;
   final Value<bool> collectStats;
   final Value<bool> collectSystemInfo;
+  final Value<String?> proxyType;
+  final Value<String?> proxyHost;
+  final Value<int?> proxyPort;
+  final Value<String?> proxyUsername;
+  final Value<String?> encryptedProxyPassword;
+  final Value<String?> proxyPasswordNonce;
   const ServersCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -856,6 +1119,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.hostKeyFingerprint = const Value.absent(),
     this.collectStats = const Value.absent(),
     this.collectSystemInfo = const Value.absent(),
+    this.proxyType = const Value.absent(),
+    this.proxyHost = const Value.absent(),
+    this.proxyPort = const Value.absent(),
+    this.proxyUsername = const Value.absent(),
+    this.encryptedProxyPassword = const Value.absent(),
+    this.proxyPasswordNonce = const Value.absent(),
   });
   ServersCompanion.insert({
     this.id = const Value.absent(),
@@ -876,6 +1145,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.hostKeyFingerprint = const Value.absent(),
     this.collectStats = const Value.absent(),
     this.collectSystemInfo = const Value.absent(),
+    this.proxyType = const Value.absent(),
+    this.proxyHost = const Value.absent(),
+    this.proxyPort = const Value.absent(),
+    this.proxyUsername = const Value.absent(),
+    this.encryptedProxyPassword = const Value.absent(),
+    this.proxyPasswordNonce = const Value.absent(),
   }) : name = Value(name),
        host = Value(host),
        username = Value(username);
@@ -898,6 +1173,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Expression<String>? hostKeyFingerprint,
     Expression<bool>? collectStats,
     Expression<bool>? collectSystemInfo,
+    Expression<String>? proxyType,
+    Expression<String>? proxyHost,
+    Expression<int>? proxyPort,
+    Expression<String>? proxyUsername,
+    Expression<String>? encryptedProxyPassword,
+    Expression<String>? proxyPasswordNonce,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -920,6 +1201,14 @@ class ServersCompanion extends UpdateCompanion<Server> {
         'host_key_fingerprint': hostKeyFingerprint,
       if (collectStats != null) 'collect_stats': collectStats,
       if (collectSystemInfo != null) 'collect_system_info': collectSystemInfo,
+      if (proxyType != null) 'proxy_type': proxyType,
+      if (proxyHost != null) 'proxy_host': proxyHost,
+      if (proxyPort != null) 'proxy_port': proxyPort,
+      if (proxyUsername != null) 'proxy_username': proxyUsername,
+      if (encryptedProxyPassword != null)
+        'encrypted_proxy_password': encryptedProxyPassword,
+      if (proxyPasswordNonce != null)
+        'proxy_password_nonce': proxyPasswordNonce,
     });
   }
 
@@ -942,6 +1231,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Value<String?>? hostKeyFingerprint,
     Value<bool>? collectStats,
     Value<bool>? collectSystemInfo,
+    Value<String?>? proxyType,
+    Value<String?>? proxyHost,
+    Value<int?>? proxyPort,
+    Value<String?>? proxyUsername,
+    Value<String?>? encryptedProxyPassword,
+    Value<String?>? proxyPasswordNonce,
   }) {
     return ServersCompanion(
       id: id ?? this.id,
@@ -962,6 +1257,13 @@ class ServersCompanion extends UpdateCompanion<Server> {
       hostKeyFingerprint: hostKeyFingerprint ?? this.hostKeyFingerprint,
       collectStats: collectStats ?? this.collectStats,
       collectSystemInfo: collectSystemInfo ?? this.collectSystemInfo,
+      proxyType: proxyType ?? this.proxyType,
+      proxyHost: proxyHost ?? this.proxyHost,
+      proxyPort: proxyPort ?? this.proxyPort,
+      proxyUsername: proxyUsername ?? this.proxyUsername,
+      encryptedProxyPassword:
+          encryptedProxyPassword ?? this.encryptedProxyPassword,
+      proxyPasswordNonce: proxyPasswordNonce ?? this.proxyPasswordNonce,
     );
   }
 
@@ -1022,6 +1324,26 @@ class ServersCompanion extends UpdateCompanion<Server> {
     if (collectSystemInfo.present) {
       map['collect_system_info'] = Variable<bool>(collectSystemInfo.value);
     }
+    if (proxyType.present) {
+      map['proxy_type'] = Variable<String>(proxyType.value);
+    }
+    if (proxyHost.present) {
+      map['proxy_host'] = Variable<String>(proxyHost.value);
+    }
+    if (proxyPort.present) {
+      map['proxy_port'] = Variable<int>(proxyPort.value);
+    }
+    if (proxyUsername.present) {
+      map['proxy_username'] = Variable<String>(proxyUsername.value);
+    }
+    if (encryptedProxyPassword.present) {
+      map['encrypted_proxy_password'] = Variable<String>(
+        encryptedProxyPassword.value,
+      );
+    }
+    if (proxyPasswordNonce.present) {
+      map['proxy_password_nonce'] = Variable<String>(proxyPasswordNonce.value);
+    }
     return map;
   }
 
@@ -1045,7 +1367,13 @@ class ServersCompanion extends UpdateCompanion<Server> {
           ..write('hostKeyAlgorithm: $hostKeyAlgorithm, ')
           ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
           ..write('collectStats: $collectStats, ')
-          ..write('collectSystemInfo: $collectSystemInfo')
+          ..write('collectSystemInfo: $collectSystemInfo, ')
+          ..write('proxyType: $proxyType, ')
+          ..write('proxyHost: $proxyHost, ')
+          ..write('proxyPort: $proxyPort, ')
+          ..write('proxyUsername: $proxyUsername, ')
+          ..write('encryptedProxyPassword: $encryptedProxyPassword, ')
+          ..write('proxyPasswordNonce: $proxyPasswordNonce')
           ..write(')'))
         .toString();
   }
@@ -6528,6 +6856,1135 @@ class AgentSkillsCompanion extends UpdateCompanion<AgentSkill> {
   }
 }
 
+class $GitHubConnectionsTable extends GitHubConnections
+    with TableInfo<$GitHubConnectionsTable, GitHubConnection> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GitHubConnectionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _accountLoginMeta = const VerificationMeta(
+    'accountLogin',
+  );
+  @override
+  late final GeneratedColumn<String> accountLogin = GeneratedColumn<String>(
+    'account_login',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _accountNameMeta = const VerificationMeta(
+    'accountName',
+  );
+  @override
+  late final GeneratedColumn<String> accountName = GeneratedColumn<String>(
+    'account_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _avatarUrlMeta = const VerificationMeta(
+    'avatarUrl',
+  );
+  @override
+  late final GeneratedColumn<String> avatarUrl = GeneratedColumn<String>(
+    'avatar_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    accountLogin,
+    accountName,
+    avatarUrl,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'git_hub_connections';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GitHubConnection> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('account_login')) {
+      context.handle(
+        _accountLoginMeta,
+        accountLogin.isAcceptableOrUnknown(
+          data['account_login']!,
+          _accountLoginMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_accountLoginMeta);
+    }
+    if (data.containsKey('account_name')) {
+      context.handle(
+        _accountNameMeta,
+        accountName.isAcceptableOrUnknown(
+          data['account_name']!,
+          _accountNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('avatar_url')) {
+      context.handle(
+        _avatarUrlMeta,
+        avatarUrl.isAcceptableOrUnknown(data['avatar_url']!, _avatarUrlMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GitHubConnection map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GitHubConnection(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      accountLogin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_login'],
+      )!,
+      accountName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_name'],
+      )!,
+      avatarUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}avatar_url'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GitHubConnectionsTable createAlias(String alias) {
+    return $GitHubConnectionsTable(attachedDatabase, alias);
+  }
+}
+
+class GitHubConnection extends DataClass
+    implements Insertable<GitHubConnection> {
+  final int id;
+  final String accountLogin;
+  final String accountName;
+  final String avatarUrl;
+  final DateTime createdAt;
+  const GitHubConnection({
+    required this.id,
+    required this.accountLogin,
+    required this.accountName,
+    required this.avatarUrl,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['account_login'] = Variable<String>(accountLogin);
+    map['account_name'] = Variable<String>(accountName);
+    map['avatar_url'] = Variable<String>(avatarUrl);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  GitHubConnectionsCompanion toCompanion(bool nullToAbsent) {
+    return GitHubConnectionsCompanion(
+      id: Value(id),
+      accountLogin: Value(accountLogin),
+      accountName: Value(accountName),
+      avatarUrl: Value(avatarUrl),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory GitHubConnection.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GitHubConnection(
+      id: serializer.fromJson<int>(json['id']),
+      accountLogin: serializer.fromJson<String>(json['accountLogin']),
+      accountName: serializer.fromJson<String>(json['accountName']),
+      avatarUrl: serializer.fromJson<String>(json['avatarUrl']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'accountLogin': serializer.toJson<String>(accountLogin),
+      'accountName': serializer.toJson<String>(accountName),
+      'avatarUrl': serializer.toJson<String>(avatarUrl),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  GitHubConnection copyWith({
+    int? id,
+    String? accountLogin,
+    String? accountName,
+    String? avatarUrl,
+    DateTime? createdAt,
+  }) => GitHubConnection(
+    id: id ?? this.id,
+    accountLogin: accountLogin ?? this.accountLogin,
+    accountName: accountName ?? this.accountName,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  GitHubConnection copyWithCompanion(GitHubConnectionsCompanion data) {
+    return GitHubConnection(
+      id: data.id.present ? data.id.value : this.id,
+      accountLogin: data.accountLogin.present
+          ? data.accountLogin.value
+          : this.accountLogin,
+      accountName: data.accountName.present
+          ? data.accountName.value
+          : this.accountName,
+      avatarUrl: data.avatarUrl.present ? data.avatarUrl.value : this.avatarUrl,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GitHubConnection(')
+          ..write('id: $id, ')
+          ..write('accountLogin: $accountLogin, ')
+          ..write('accountName: $accountName, ')
+          ..write('avatarUrl: $avatarUrl, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, accountLogin, accountName, avatarUrl, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GitHubConnection &&
+          other.id == this.id &&
+          other.accountLogin == this.accountLogin &&
+          other.accountName == this.accountName &&
+          other.avatarUrl == this.avatarUrl &&
+          other.createdAt == this.createdAt);
+}
+
+class GitHubConnectionsCompanion extends UpdateCompanion<GitHubConnection> {
+  final Value<int> id;
+  final Value<String> accountLogin;
+  final Value<String> accountName;
+  final Value<String> avatarUrl;
+  final Value<DateTime> createdAt;
+  const GitHubConnectionsCompanion({
+    this.id = const Value.absent(),
+    this.accountLogin = const Value.absent(),
+    this.accountName = const Value.absent(),
+    this.avatarUrl = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  GitHubConnectionsCompanion.insert({
+    this.id = const Value.absent(),
+    required String accountLogin,
+    this.accountName = const Value.absent(),
+    this.avatarUrl = const Value.absent(),
+    required DateTime createdAt,
+  }) : accountLogin = Value(accountLogin),
+       createdAt = Value(createdAt);
+  static Insertable<GitHubConnection> custom({
+    Expression<int>? id,
+    Expression<String>? accountLogin,
+    Expression<String>? accountName,
+    Expression<String>? avatarUrl,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (accountLogin != null) 'account_login': accountLogin,
+      if (accountName != null) 'account_name': accountName,
+      if (avatarUrl != null) 'avatar_url': avatarUrl,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  GitHubConnectionsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? accountLogin,
+    Value<String>? accountName,
+    Value<String>? avatarUrl,
+    Value<DateTime>? createdAt,
+  }) {
+    return GitHubConnectionsCompanion(
+      id: id ?? this.id,
+      accountLogin: accountLogin ?? this.accountLogin,
+      accountName: accountName ?? this.accountName,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (accountLogin.present) {
+      map['account_login'] = Variable<String>(accountLogin.value);
+    }
+    if (accountName.present) {
+      map['account_name'] = Variable<String>(accountName.value);
+    }
+    if (avatarUrl.present) {
+      map['avatar_url'] = Variable<String>(avatarUrl.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GitHubConnectionsCompanion(')
+          ..write('id: $id, ')
+          ..write('accountLogin: $accountLogin, ')
+          ..write('accountName: $accountName, ')
+          ..write('avatarUrl: $avatarUrl, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GitHubRepoPinsTable extends GitHubRepoPins
+    with TableInfo<$GitHubRepoPinsTable, GitHubRepoPin> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GitHubRepoPinsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _connectionIdMeta = const VerificationMeta(
+    'connectionId',
+  );
+  @override
+  late final GeneratedColumn<int> connectionId = GeneratedColumn<int>(
+    'connection_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES git_hub_connections (id)',
+    ),
+  );
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+    'owner',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pinnedAtMeta = const VerificationMeta(
+    'pinnedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> pinnedAt = GeneratedColumn<DateTime>(
+    'pinned_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    connectionId,
+    owner,
+    name,
+    pinnedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'git_hub_repo_pins';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GitHubRepoPin> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('connection_id')) {
+      context.handle(
+        _connectionIdMeta,
+        connectionId.isAcceptableOrUnknown(
+          data['connection_id']!,
+          _connectionIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_connectionIdMeta);
+    }
+    if (data.containsKey('owner')) {
+      context.handle(
+        _ownerMeta,
+        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('pinned_at')) {
+      context.handle(
+        _pinnedAtMeta,
+        pinnedAt.isAcceptableOrUnknown(data['pinned_at']!, _pinnedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pinnedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GitHubRepoPin map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GitHubRepoPin(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      connectionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}connection_id'],
+      )!,
+      owner: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      pinnedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}pinned_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GitHubRepoPinsTable createAlias(String alias) {
+    return $GitHubRepoPinsTable(attachedDatabase, alias);
+  }
+}
+
+class GitHubRepoPin extends DataClass implements Insertable<GitHubRepoPin> {
+  final int id;
+  final int connectionId;
+  final String owner;
+  final String name;
+  final DateTime pinnedAt;
+  const GitHubRepoPin({
+    required this.id,
+    required this.connectionId,
+    required this.owner,
+    required this.name,
+    required this.pinnedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['connection_id'] = Variable<int>(connectionId);
+    map['owner'] = Variable<String>(owner);
+    map['name'] = Variable<String>(name);
+    map['pinned_at'] = Variable<DateTime>(pinnedAt);
+    return map;
+  }
+
+  GitHubRepoPinsCompanion toCompanion(bool nullToAbsent) {
+    return GitHubRepoPinsCompanion(
+      id: Value(id),
+      connectionId: Value(connectionId),
+      owner: Value(owner),
+      name: Value(name),
+      pinnedAt: Value(pinnedAt),
+    );
+  }
+
+  factory GitHubRepoPin.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GitHubRepoPin(
+      id: serializer.fromJson<int>(json['id']),
+      connectionId: serializer.fromJson<int>(json['connectionId']),
+      owner: serializer.fromJson<String>(json['owner']),
+      name: serializer.fromJson<String>(json['name']),
+      pinnedAt: serializer.fromJson<DateTime>(json['pinnedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'connectionId': serializer.toJson<int>(connectionId),
+      'owner': serializer.toJson<String>(owner),
+      'name': serializer.toJson<String>(name),
+      'pinnedAt': serializer.toJson<DateTime>(pinnedAt),
+    };
+  }
+
+  GitHubRepoPin copyWith({
+    int? id,
+    int? connectionId,
+    String? owner,
+    String? name,
+    DateTime? pinnedAt,
+  }) => GitHubRepoPin(
+    id: id ?? this.id,
+    connectionId: connectionId ?? this.connectionId,
+    owner: owner ?? this.owner,
+    name: name ?? this.name,
+    pinnedAt: pinnedAt ?? this.pinnedAt,
+  );
+  GitHubRepoPin copyWithCompanion(GitHubRepoPinsCompanion data) {
+    return GitHubRepoPin(
+      id: data.id.present ? data.id.value : this.id,
+      connectionId: data.connectionId.present
+          ? data.connectionId.value
+          : this.connectionId,
+      owner: data.owner.present ? data.owner.value : this.owner,
+      name: data.name.present ? data.name.value : this.name,
+      pinnedAt: data.pinnedAt.present ? data.pinnedAt.value : this.pinnedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GitHubRepoPin(')
+          ..write('id: $id, ')
+          ..write('connectionId: $connectionId, ')
+          ..write('owner: $owner, ')
+          ..write('name: $name, ')
+          ..write('pinnedAt: $pinnedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, connectionId, owner, name, pinnedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GitHubRepoPin &&
+          other.id == this.id &&
+          other.connectionId == this.connectionId &&
+          other.owner == this.owner &&
+          other.name == this.name &&
+          other.pinnedAt == this.pinnedAt);
+}
+
+class GitHubRepoPinsCompanion extends UpdateCompanion<GitHubRepoPin> {
+  final Value<int> id;
+  final Value<int> connectionId;
+  final Value<String> owner;
+  final Value<String> name;
+  final Value<DateTime> pinnedAt;
+  const GitHubRepoPinsCompanion({
+    this.id = const Value.absent(),
+    this.connectionId = const Value.absent(),
+    this.owner = const Value.absent(),
+    this.name = const Value.absent(),
+    this.pinnedAt = const Value.absent(),
+  });
+  GitHubRepoPinsCompanion.insert({
+    this.id = const Value.absent(),
+    required int connectionId,
+    required String owner,
+    required String name,
+    required DateTime pinnedAt,
+  }) : connectionId = Value(connectionId),
+       owner = Value(owner),
+       name = Value(name),
+       pinnedAt = Value(pinnedAt);
+  static Insertable<GitHubRepoPin> custom({
+    Expression<int>? id,
+    Expression<int>? connectionId,
+    Expression<String>? owner,
+    Expression<String>? name,
+    Expression<DateTime>? pinnedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (connectionId != null) 'connection_id': connectionId,
+      if (owner != null) 'owner': owner,
+      if (name != null) 'name': name,
+      if (pinnedAt != null) 'pinned_at': pinnedAt,
+    });
+  }
+
+  GitHubRepoPinsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? connectionId,
+    Value<String>? owner,
+    Value<String>? name,
+    Value<DateTime>? pinnedAt,
+  }) {
+    return GitHubRepoPinsCompanion(
+      id: id ?? this.id,
+      connectionId: connectionId ?? this.connectionId,
+      owner: owner ?? this.owner,
+      name: name ?? this.name,
+      pinnedAt: pinnedAt ?? this.pinnedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (connectionId.present) {
+      map['connection_id'] = Variable<int>(connectionId.value);
+    }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (pinnedAt.present) {
+      map['pinned_at'] = Variable<DateTime>(pinnedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GitHubRepoPinsCompanion(')
+          ..write('id: $id, ')
+          ..write('connectionId: $connectionId, ')
+          ..write('owner: $owner, ')
+          ..write('name: $name, ')
+          ..write('pinnedAt: $pinnedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GitHubProjectWorkflowLinksTable extends GitHubProjectWorkflowLinks
+    with
+        TableInfo<$GitHubProjectWorkflowLinksTable, GitHubProjectWorkflowLink> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GitHubProjectWorkflowLinksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<int> projectId = GeneratedColumn<int>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES deployment_projects (id)',
+    ),
+  );
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+    'owner',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workflowNameMeta = const VerificationMeta(
+    'workflowName',
+  );
+  @override
+  late final GeneratedColumn<String> workflowName = GeneratedColumn<String>(
+    'workflow_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _linkedAtMeta = const VerificationMeta(
+    'linkedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> linkedAt = GeneratedColumn<DateTime>(
+    'linked_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    owner,
+    name,
+    workflowName,
+    linkedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'git_hub_project_workflow_links';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GitHubProjectWorkflowLink> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('owner')) {
+      context.handle(
+        _ownerMeta,
+        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('workflow_name')) {
+      context.handle(
+        _workflowNameMeta,
+        workflowName.isAcceptableOrUnknown(
+          data['workflow_name']!,
+          _workflowNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workflowNameMeta);
+    }
+    if (data.containsKey('linked_at')) {
+      context.handle(
+        _linkedAtMeta,
+        linkedAt.isAcceptableOrUnknown(data['linked_at']!, _linkedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_linkedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GitHubProjectWorkflowLink map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GitHubProjectWorkflowLink(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}project_id'],
+      )!,
+      owner: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      workflowName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workflow_name'],
+      )!,
+      linkedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}linked_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GitHubProjectWorkflowLinksTable createAlias(String alias) {
+    return $GitHubProjectWorkflowLinksTable(attachedDatabase, alias);
+  }
+}
+
+class GitHubProjectWorkflowLink extends DataClass
+    implements Insertable<GitHubProjectWorkflowLink> {
+  final int id;
+  final int projectId;
+  final String owner;
+  final String name;
+  final String workflowName;
+  final DateTime linkedAt;
+  const GitHubProjectWorkflowLink({
+    required this.id,
+    required this.projectId,
+    required this.owner,
+    required this.name,
+    required this.workflowName,
+    required this.linkedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['project_id'] = Variable<int>(projectId);
+    map['owner'] = Variable<String>(owner);
+    map['name'] = Variable<String>(name);
+    map['workflow_name'] = Variable<String>(workflowName);
+    map['linked_at'] = Variable<DateTime>(linkedAt);
+    return map;
+  }
+
+  GitHubProjectWorkflowLinksCompanion toCompanion(bool nullToAbsent) {
+    return GitHubProjectWorkflowLinksCompanion(
+      id: Value(id),
+      projectId: Value(projectId),
+      owner: Value(owner),
+      name: Value(name),
+      workflowName: Value(workflowName),
+      linkedAt: Value(linkedAt),
+    );
+  }
+
+  factory GitHubProjectWorkflowLink.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GitHubProjectWorkflowLink(
+      id: serializer.fromJson<int>(json['id']),
+      projectId: serializer.fromJson<int>(json['projectId']),
+      owner: serializer.fromJson<String>(json['owner']),
+      name: serializer.fromJson<String>(json['name']),
+      workflowName: serializer.fromJson<String>(json['workflowName']),
+      linkedAt: serializer.fromJson<DateTime>(json['linkedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'projectId': serializer.toJson<int>(projectId),
+      'owner': serializer.toJson<String>(owner),
+      'name': serializer.toJson<String>(name),
+      'workflowName': serializer.toJson<String>(workflowName),
+      'linkedAt': serializer.toJson<DateTime>(linkedAt),
+    };
+  }
+
+  GitHubProjectWorkflowLink copyWith({
+    int? id,
+    int? projectId,
+    String? owner,
+    String? name,
+    String? workflowName,
+    DateTime? linkedAt,
+  }) => GitHubProjectWorkflowLink(
+    id: id ?? this.id,
+    projectId: projectId ?? this.projectId,
+    owner: owner ?? this.owner,
+    name: name ?? this.name,
+    workflowName: workflowName ?? this.workflowName,
+    linkedAt: linkedAt ?? this.linkedAt,
+  );
+  GitHubProjectWorkflowLink copyWithCompanion(
+    GitHubProjectWorkflowLinksCompanion data,
+  ) {
+    return GitHubProjectWorkflowLink(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      owner: data.owner.present ? data.owner.value : this.owner,
+      name: data.name.present ? data.name.value : this.name,
+      workflowName: data.workflowName.present
+          ? data.workflowName.value
+          : this.workflowName,
+      linkedAt: data.linkedAt.present ? data.linkedAt.value : this.linkedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GitHubProjectWorkflowLink(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('owner: $owner, ')
+          ..write('name: $name, ')
+          ..write('workflowName: $workflowName, ')
+          ..write('linkedAt: $linkedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, projectId, owner, name, workflowName, linkedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GitHubProjectWorkflowLink &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.owner == this.owner &&
+          other.name == this.name &&
+          other.workflowName == this.workflowName &&
+          other.linkedAt == this.linkedAt);
+}
+
+class GitHubProjectWorkflowLinksCompanion
+    extends UpdateCompanion<GitHubProjectWorkflowLink> {
+  final Value<int> id;
+  final Value<int> projectId;
+  final Value<String> owner;
+  final Value<String> name;
+  final Value<String> workflowName;
+  final Value<DateTime> linkedAt;
+  const GitHubProjectWorkflowLinksCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.owner = const Value.absent(),
+    this.name = const Value.absent(),
+    this.workflowName = const Value.absent(),
+    this.linkedAt = const Value.absent(),
+  });
+  GitHubProjectWorkflowLinksCompanion.insert({
+    this.id = const Value.absent(),
+    required int projectId,
+    required String owner,
+    required String name,
+    required String workflowName,
+    required DateTime linkedAt,
+  }) : projectId = Value(projectId),
+       owner = Value(owner),
+       name = Value(name),
+       workflowName = Value(workflowName),
+       linkedAt = Value(linkedAt);
+  static Insertable<GitHubProjectWorkflowLink> custom({
+    Expression<int>? id,
+    Expression<int>? projectId,
+    Expression<String>? owner,
+    Expression<String>? name,
+    Expression<String>? workflowName,
+    Expression<DateTime>? linkedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (owner != null) 'owner': owner,
+      if (name != null) 'name': name,
+      if (workflowName != null) 'workflow_name': workflowName,
+      if (linkedAt != null) 'linked_at': linkedAt,
+    });
+  }
+
+  GitHubProjectWorkflowLinksCompanion copyWith({
+    Value<int>? id,
+    Value<int>? projectId,
+    Value<String>? owner,
+    Value<String>? name,
+    Value<String>? workflowName,
+    Value<DateTime>? linkedAt,
+  }) {
+    return GitHubProjectWorkflowLinksCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      owner: owner ?? this.owner,
+      name: name ?? this.name,
+      workflowName: workflowName ?? this.workflowName,
+      linkedAt: linkedAt ?? this.linkedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<int>(projectId.value);
+    }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (workflowName.present) {
+      map['workflow_name'] = Variable<String>(workflowName.value);
+    }
+    if (linkedAt.present) {
+      map['linked_at'] = Variable<DateTime>(linkedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GitHubProjectWorkflowLinksCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('owner: $owner, ')
+          ..write('name: $name, ')
+          ..write('workflowName: $workflowName, ')
+          ..write('linkedAt: $linkedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6551,6 +8008,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $AgentProviderModelsTable(this);
   late final $McpServersTable mcpServers = $McpServersTable(this);
   late final $AgentSkillsTable agentSkills = $AgentSkillsTable(this);
+  late final $GitHubConnectionsTable gitHubConnections =
+      $GitHubConnectionsTable(this);
+  late final $GitHubRepoPinsTable gitHubRepoPins = $GitHubRepoPinsTable(this);
+  late final $GitHubProjectWorkflowLinksTable gitHubProjectWorkflowLinks =
+      $GitHubProjectWorkflowLinksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6569,6 +8031,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     agentProviderModels,
     mcpServers,
     agentSkills,
+    gitHubConnections,
+    gitHubRepoPins,
+    gitHubProjectWorkflowLinks,
   ];
 }
 
@@ -6592,6 +8057,12 @@ typedef $$ServersTableCreateCompanionBuilder =
       Value<String?> hostKeyFingerprint,
       Value<bool> collectStats,
       Value<bool> collectSystemInfo,
+      Value<String?> proxyType,
+      Value<String?> proxyHost,
+      Value<int?> proxyPort,
+      Value<String?> proxyUsername,
+      Value<String?> encryptedProxyPassword,
+      Value<String?> proxyPasswordNonce,
     });
 typedef $$ServersTableUpdateCompanionBuilder =
     ServersCompanion Function({
@@ -6613,6 +8084,12 @@ typedef $$ServersTableUpdateCompanionBuilder =
       Value<String?> hostKeyFingerprint,
       Value<bool> collectStats,
       Value<bool> collectSystemInfo,
+      Value<String?> proxyType,
+      Value<String?> proxyHost,
+      Value<int?> proxyPort,
+      Value<String?> proxyUsername,
+      Value<String?> encryptedProxyPassword,
+      Value<String?> proxyPasswordNonce,
     });
 
 class $$ServersTableFilterComposer
@@ -6711,6 +8188,36 @@ class $$ServersTableFilterComposer
 
   ColumnFilters<bool> get collectSystemInfo => $composableBuilder(
     column: $table.collectSystemInfo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxyType => $composableBuilder(
+    column: $table.proxyType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxyHost => $composableBuilder(
+    column: $table.proxyHost,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get proxyPort => $composableBuilder(
+    column: $table.proxyPort,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxyUsername => $composableBuilder(
+    column: $table.proxyUsername,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get encryptedProxyPassword => $composableBuilder(
+    column: $table.encryptedProxyPassword,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxyPasswordNonce => $composableBuilder(
+    column: $table.proxyPasswordNonce,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6813,6 +8320,36 @@ class $$ServersTableOrderingComposer
     column: $table.collectSystemInfo,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get proxyType => $composableBuilder(
+    column: $table.proxyType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get proxyHost => $composableBuilder(
+    column: $table.proxyHost,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get proxyPort => $composableBuilder(
+    column: $table.proxyPort,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get proxyUsername => $composableBuilder(
+    column: $table.proxyUsername,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get encryptedProxyPassword => $composableBuilder(
+    column: $table.encryptedProxyPassword,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get proxyPasswordNonce => $composableBuilder(
+    column: $table.proxyPasswordNonce,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ServersTableAnnotationComposer
@@ -6895,6 +8432,30 @@ class $$ServersTableAnnotationComposer
     column: $table.collectSystemInfo,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get proxyType =>
+      $composableBuilder(column: $table.proxyType, builder: (column) => column);
+
+  GeneratedColumn<String> get proxyHost =>
+      $composableBuilder(column: $table.proxyHost, builder: (column) => column);
+
+  GeneratedColumn<int> get proxyPort =>
+      $composableBuilder(column: $table.proxyPort, builder: (column) => column);
+
+  GeneratedColumn<String> get proxyUsername => $composableBuilder(
+    column: $table.proxyUsername,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get encryptedProxyPassword => $composableBuilder(
+    column: $table.encryptedProxyPassword,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get proxyPasswordNonce => $composableBuilder(
+    column: $table.proxyPasswordNonce,
+    builder: (column) => column,
+  );
 }
 
 class $$ServersTableTableManager
@@ -6943,6 +8504,12 @@ class $$ServersTableTableManager
                 Value<String?> hostKeyFingerprint = const Value.absent(),
                 Value<bool> collectStats = const Value.absent(),
                 Value<bool> collectSystemInfo = const Value.absent(),
+                Value<String?> proxyType = const Value.absent(),
+                Value<String?> proxyHost = const Value.absent(),
+                Value<int?> proxyPort = const Value.absent(),
+                Value<String?> proxyUsername = const Value.absent(),
+                Value<String?> encryptedProxyPassword = const Value.absent(),
+                Value<String?> proxyPasswordNonce = const Value.absent(),
               }) => ServersCompanion(
                 id: id,
                 name: name,
@@ -6962,6 +8529,12 @@ class $$ServersTableTableManager
                 hostKeyFingerprint: hostKeyFingerprint,
                 collectStats: collectStats,
                 collectSystemInfo: collectSystemInfo,
+                proxyType: proxyType,
+                proxyHost: proxyHost,
+                proxyPort: proxyPort,
+                proxyUsername: proxyUsername,
+                encryptedProxyPassword: encryptedProxyPassword,
+                proxyPasswordNonce: proxyPasswordNonce,
               ),
           createCompanionCallback:
               ({
@@ -6983,6 +8556,12 @@ class $$ServersTableTableManager
                 Value<String?> hostKeyFingerprint = const Value.absent(),
                 Value<bool> collectStats = const Value.absent(),
                 Value<bool> collectSystemInfo = const Value.absent(),
+                Value<String?> proxyType = const Value.absent(),
+                Value<String?> proxyHost = const Value.absent(),
+                Value<int?> proxyPort = const Value.absent(),
+                Value<String?> proxyUsername = const Value.absent(),
+                Value<String?> encryptedProxyPassword = const Value.absent(),
+                Value<String?> proxyPasswordNonce = const Value.absent(),
               }) => ServersCompanion.insert(
                 id: id,
                 name: name,
@@ -7002,6 +8581,12 @@ class $$ServersTableTableManager
                 hostKeyFingerprint: hostKeyFingerprint,
                 collectStats: collectStats,
                 collectSystemInfo: collectSystemInfo,
+                proxyType: proxyType,
+                proxyHost: proxyHost,
+                proxyPort: proxyPort,
+                proxyUsername: proxyUsername,
+                encryptedProxyPassword: encryptedProxyPassword,
+                proxyPasswordNonce: proxyPasswordNonce,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -8157,6 +9742,47 @@ typedef $$DeploymentProjectsTableUpdateCompanionBuilder =
       Value<DateTime> updatedAt,
     });
 
+final class $$DeploymentProjectsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $DeploymentProjectsTable,
+          DeploymentProject
+        > {
+  $$DeploymentProjectsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<
+    $GitHubProjectWorkflowLinksTable,
+    List<GitHubProjectWorkflowLink>
+  >
+  _gitHubProjectWorkflowLinksRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.gitHubProjectWorkflowLinks,
+    aliasName:
+        'deployment_projects__id__git_hub_project_workflow_links__project_id',
+  );
+
+  $$GitHubProjectWorkflowLinksTableProcessedTableManager
+  get gitHubProjectWorkflowLinksRefs {
+    final manager = $$GitHubProjectWorkflowLinksTableTableManager(
+      $_db,
+      $_db.gitHubProjectWorkflowLinks,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _gitHubProjectWorkflowLinksRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
 class $$DeploymentProjectsTableFilterComposer
     extends Composer<_$AppDatabase, $DeploymentProjectsTable> {
   $$DeploymentProjectsTableFilterComposer({
@@ -8190,6 +9816,33 @@ class $$DeploymentProjectsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> gitHubProjectWorkflowLinksRefs(
+    Expression<bool> Function($$GitHubProjectWorkflowLinksTableFilterComposer f)
+    f,
+  ) {
+    final $$GitHubProjectWorkflowLinksTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.gitHubProjectWorkflowLinks,
+          getReferencedColumn: (t) => t.projectId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GitHubProjectWorkflowLinksTableFilterComposer(
+                $db: $db,
+                $table: $db.gitHubProjectWorkflowLinks,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$DeploymentProjectsTableOrderingComposer
@@ -8252,6 +9905,35 @@ class $$DeploymentProjectsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> gitHubProjectWorkflowLinksRefs<T extends Object>(
+    Expression<T> Function(
+      $$GitHubProjectWorkflowLinksTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$GitHubProjectWorkflowLinksTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.gitHubProjectWorkflowLinks,
+          getReferencedColumn: (t) => t.projectId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GitHubProjectWorkflowLinksTableAnnotationComposer(
+                $db: $db,
+                $table: $db.gitHubProjectWorkflowLinks,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$DeploymentProjectsTableTableManager
@@ -8265,16 +9947,9 @@ class $$DeploymentProjectsTableTableManager
           $$DeploymentProjectsTableAnnotationComposer,
           $$DeploymentProjectsTableCreateCompanionBuilder,
           $$DeploymentProjectsTableUpdateCompanionBuilder,
-          (
-            DeploymentProject,
-            BaseReferences<
-              _$AppDatabase,
-              $DeploymentProjectsTable,
-              DeploymentProject
-            >,
-          ),
+          (DeploymentProject, $$DeploymentProjectsTableReferences),
           DeploymentProject,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool gitHubProjectWorkflowLinksRefs})
         > {
   $$DeploymentProjectsTableTableManager(
     _$AppDatabase db,
@@ -8321,9 +9996,46 @@ class $$DeploymentProjectsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$DeploymentProjectsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({gitHubProjectWorkflowLinksRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (gitHubProjectWorkflowLinksRefs)
+                  db.gitHubProjectWorkflowLinks,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (gitHubProjectWorkflowLinksRefs)
+                    await $_getPrefetchedData<
+                      DeploymentProject,
+                      $DeploymentProjectsTable,
+                      GitHubProjectWorkflowLink
+                    >(
+                      currentTable: table,
+                      referencedTable: $$DeploymentProjectsTableReferences
+                          ._gitHubProjectWorkflowLinksRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$DeploymentProjectsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).gitHubProjectWorkflowLinksRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.projectId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -8338,16 +10050,9 @@ typedef $$DeploymentProjectsTableProcessedTableManager =
       $$DeploymentProjectsTableAnnotationComposer,
       $$DeploymentProjectsTableCreateCompanionBuilder,
       $$DeploymentProjectsTableUpdateCompanionBuilder,
-      (
-        DeploymentProject,
-        BaseReferences<
-          _$AppDatabase,
-          $DeploymentProjectsTable,
-          DeploymentProject
-        >,
-      ),
+      (DeploymentProject, $$DeploymentProjectsTableReferences),
       DeploymentProject,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool gitHubProjectWorkflowLinksRefs})
     >;
 typedef $$DeploymentResourcesTableCreateCompanionBuilder =
     DeploymentResourcesCompanion Function({
@@ -9927,6 +11632,1003 @@ typedef $$AgentSkillsTableProcessedTableManager =
       AgentSkill,
       PrefetchHooks Function()
     >;
+typedef $$GitHubConnectionsTableCreateCompanionBuilder =
+    GitHubConnectionsCompanion Function({
+      Value<int> id,
+      required String accountLogin,
+      Value<String> accountName,
+      Value<String> avatarUrl,
+      required DateTime createdAt,
+    });
+typedef $$GitHubConnectionsTableUpdateCompanionBuilder =
+    GitHubConnectionsCompanion Function({
+      Value<int> id,
+      Value<String> accountLogin,
+      Value<String> accountName,
+      Value<String> avatarUrl,
+      Value<DateTime> createdAt,
+    });
+
+final class $$GitHubConnectionsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $GitHubConnectionsTable,
+          GitHubConnection
+        > {
+  $$GitHubConnectionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$GitHubRepoPinsTable, List<GitHubRepoPin>>
+  _gitHubRepoPinsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.gitHubRepoPins,
+    aliasName: 'git_hub_connections__id__git_hub_repo_pins__connection_id',
+  );
+
+  $$GitHubRepoPinsTableProcessedTableManager get gitHubRepoPinsRefs {
+    final manager = $$GitHubRepoPinsTableTableManager(
+      $_db,
+      $_db.gitHubRepoPins,
+    ).filter((f) => f.connectionId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_gitHubRepoPinsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$GitHubConnectionsTableFilterComposer
+    extends Composer<_$AppDatabase, $GitHubConnectionsTable> {
+  $$GitHubConnectionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountLogin => $composableBuilder(
+    column: $table.accountLogin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountName => $composableBuilder(
+    column: $table.accountName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get avatarUrl => $composableBuilder(
+    column: $table.avatarUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> gitHubRepoPinsRefs(
+    Expression<bool> Function($$GitHubRepoPinsTableFilterComposer f) f,
+  ) {
+    final $$GitHubRepoPinsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.gitHubRepoPins,
+      getReferencedColumn: (t) => t.connectionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GitHubRepoPinsTableFilterComposer(
+            $db: $db,
+            $table: $db.gitHubRepoPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$GitHubConnectionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $GitHubConnectionsTable> {
+  $$GitHubConnectionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accountLogin => $composableBuilder(
+    column: $table.accountLogin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accountName => $composableBuilder(
+    column: $table.accountName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get avatarUrl => $composableBuilder(
+    column: $table.avatarUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GitHubConnectionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GitHubConnectionsTable> {
+  $$GitHubConnectionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get accountLogin => $composableBuilder(
+    column: $table.accountLogin,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get accountName => $composableBuilder(
+    column: $table.accountName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get avatarUrl =>
+      $composableBuilder(column: $table.avatarUrl, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> gitHubRepoPinsRefs<T extends Object>(
+    Expression<T> Function($$GitHubRepoPinsTableAnnotationComposer a) f,
+  ) {
+    final $$GitHubRepoPinsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.gitHubRepoPins,
+      getReferencedColumn: (t) => t.connectionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GitHubRepoPinsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.gitHubRepoPins,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$GitHubConnectionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GitHubConnectionsTable,
+          GitHubConnection,
+          $$GitHubConnectionsTableFilterComposer,
+          $$GitHubConnectionsTableOrderingComposer,
+          $$GitHubConnectionsTableAnnotationComposer,
+          $$GitHubConnectionsTableCreateCompanionBuilder,
+          $$GitHubConnectionsTableUpdateCompanionBuilder,
+          (GitHubConnection, $$GitHubConnectionsTableReferences),
+          GitHubConnection,
+          PrefetchHooks Function({bool gitHubRepoPinsRefs})
+        > {
+  $$GitHubConnectionsTableTableManager(
+    _$AppDatabase db,
+    $GitHubConnectionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GitHubConnectionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GitHubConnectionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GitHubConnectionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> accountLogin = const Value.absent(),
+                Value<String> accountName = const Value.absent(),
+                Value<String> avatarUrl = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => GitHubConnectionsCompanion(
+                id: id,
+                accountLogin: accountLogin,
+                accountName: accountName,
+                avatarUrl: avatarUrl,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String accountLogin,
+                Value<String> accountName = const Value.absent(),
+                Value<String> avatarUrl = const Value.absent(),
+                required DateTime createdAt,
+              }) => GitHubConnectionsCompanion.insert(
+                id: id,
+                accountLogin: accountLogin,
+                accountName: accountName,
+                avatarUrl: avatarUrl,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GitHubConnectionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({gitHubRepoPinsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (gitHubRepoPinsRefs) db.gitHubRepoPins,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (gitHubRepoPinsRefs)
+                    await $_getPrefetchedData<
+                      GitHubConnection,
+                      $GitHubConnectionsTable,
+                      GitHubRepoPin
+                    >(
+                      currentTable: table,
+                      referencedTable: $$GitHubConnectionsTableReferences
+                          ._gitHubRepoPinsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$GitHubConnectionsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).gitHubRepoPinsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.connectionId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GitHubConnectionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GitHubConnectionsTable,
+      GitHubConnection,
+      $$GitHubConnectionsTableFilterComposer,
+      $$GitHubConnectionsTableOrderingComposer,
+      $$GitHubConnectionsTableAnnotationComposer,
+      $$GitHubConnectionsTableCreateCompanionBuilder,
+      $$GitHubConnectionsTableUpdateCompanionBuilder,
+      (GitHubConnection, $$GitHubConnectionsTableReferences),
+      GitHubConnection,
+      PrefetchHooks Function({bool gitHubRepoPinsRefs})
+    >;
+typedef $$GitHubRepoPinsTableCreateCompanionBuilder =
+    GitHubRepoPinsCompanion Function({
+      Value<int> id,
+      required int connectionId,
+      required String owner,
+      required String name,
+      required DateTime pinnedAt,
+    });
+typedef $$GitHubRepoPinsTableUpdateCompanionBuilder =
+    GitHubRepoPinsCompanion Function({
+      Value<int> id,
+      Value<int> connectionId,
+      Value<String> owner,
+      Value<String> name,
+      Value<DateTime> pinnedAt,
+    });
+
+final class $$GitHubRepoPinsTableReferences
+    extends BaseReferences<_$AppDatabase, $GitHubRepoPinsTable, GitHubRepoPin> {
+  $$GitHubRepoPinsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $GitHubConnectionsTable _connectionIdTable(_$AppDatabase db) => db
+      .gitHubConnections
+      .createAlias('git_hub_repo_pins__connection_id__git_hub_connections__id');
+
+  $$GitHubConnectionsTableProcessedTableManager get connectionId {
+    final $_column = $_itemColumn<int>('connection_id')!;
+
+    final manager = $$GitHubConnectionsTableTableManager(
+      $_db,
+      $_db.gitHubConnections,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_connectionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$GitHubRepoPinsTableFilterComposer
+    extends Composer<_$AppDatabase, $GitHubRepoPinsTable> {
+  $$GitHubRepoPinsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get pinnedAt => $composableBuilder(
+    column: $table.pinnedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$GitHubConnectionsTableFilterComposer get connectionId {
+    final $$GitHubConnectionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.connectionId,
+      referencedTable: $db.gitHubConnections,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GitHubConnectionsTableFilterComposer(
+            $db: $db,
+            $table: $db.gitHubConnections,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GitHubRepoPinsTableOrderingComposer
+    extends Composer<_$AppDatabase, $GitHubRepoPinsTable> {
+  $$GitHubRepoPinsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get pinnedAt => $composableBuilder(
+    column: $table.pinnedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$GitHubConnectionsTableOrderingComposer get connectionId {
+    final $$GitHubConnectionsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.connectionId,
+      referencedTable: $db.gitHubConnections,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GitHubConnectionsTableOrderingComposer(
+            $db: $db,
+            $table: $db.gitHubConnections,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GitHubRepoPinsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GitHubRepoPinsTable> {
+  $$GitHubRepoPinsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get pinnedAt =>
+      $composableBuilder(column: $table.pinnedAt, builder: (column) => column);
+
+  $$GitHubConnectionsTableAnnotationComposer get connectionId {
+    final $$GitHubConnectionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.connectionId,
+          referencedTable: $db.gitHubConnections,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GitHubConnectionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.gitHubConnections,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$GitHubRepoPinsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GitHubRepoPinsTable,
+          GitHubRepoPin,
+          $$GitHubRepoPinsTableFilterComposer,
+          $$GitHubRepoPinsTableOrderingComposer,
+          $$GitHubRepoPinsTableAnnotationComposer,
+          $$GitHubRepoPinsTableCreateCompanionBuilder,
+          $$GitHubRepoPinsTableUpdateCompanionBuilder,
+          (GitHubRepoPin, $$GitHubRepoPinsTableReferences),
+          GitHubRepoPin,
+          PrefetchHooks Function({bool connectionId})
+        > {
+  $$GitHubRepoPinsTableTableManager(
+    _$AppDatabase db,
+    $GitHubRepoPinsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GitHubRepoPinsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GitHubRepoPinsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GitHubRepoPinsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> connectionId = const Value.absent(),
+                Value<String> owner = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> pinnedAt = const Value.absent(),
+              }) => GitHubRepoPinsCompanion(
+                id: id,
+                connectionId: connectionId,
+                owner: owner,
+                name: name,
+                pinnedAt: pinnedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int connectionId,
+                required String owner,
+                required String name,
+                required DateTime pinnedAt,
+              }) => GitHubRepoPinsCompanion.insert(
+                id: id,
+                connectionId: connectionId,
+                owner: owner,
+                name: name,
+                pinnedAt: pinnedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GitHubRepoPinsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({connectionId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (connectionId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.connectionId,
+                                referencedTable: $$GitHubRepoPinsTableReferences
+                                    ._connectionIdTable(db),
+                                referencedColumn:
+                                    $$GitHubRepoPinsTableReferences
+                                        ._connectionIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GitHubRepoPinsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GitHubRepoPinsTable,
+      GitHubRepoPin,
+      $$GitHubRepoPinsTableFilterComposer,
+      $$GitHubRepoPinsTableOrderingComposer,
+      $$GitHubRepoPinsTableAnnotationComposer,
+      $$GitHubRepoPinsTableCreateCompanionBuilder,
+      $$GitHubRepoPinsTableUpdateCompanionBuilder,
+      (GitHubRepoPin, $$GitHubRepoPinsTableReferences),
+      GitHubRepoPin,
+      PrefetchHooks Function({bool connectionId})
+    >;
+typedef $$GitHubProjectWorkflowLinksTableCreateCompanionBuilder =
+    GitHubProjectWorkflowLinksCompanion Function({
+      Value<int> id,
+      required int projectId,
+      required String owner,
+      required String name,
+      required String workflowName,
+      required DateTime linkedAt,
+    });
+typedef $$GitHubProjectWorkflowLinksTableUpdateCompanionBuilder =
+    GitHubProjectWorkflowLinksCompanion Function({
+      Value<int> id,
+      Value<int> projectId,
+      Value<String> owner,
+      Value<String> name,
+      Value<String> workflowName,
+      Value<DateTime> linkedAt,
+    });
+
+final class $$GitHubProjectWorkflowLinksTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $GitHubProjectWorkflowLinksTable,
+          GitHubProjectWorkflowLink
+        > {
+  $$GitHubProjectWorkflowLinksTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $DeploymentProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.deploymentProjects.createAlias(
+        'git_hub_project_workflow_links__project_id__deployment_projects__id',
+      );
+
+  $$DeploymentProjectsTableProcessedTableManager get projectId {
+    final $_column = $_itemColumn<int>('project_id')!;
+
+    final manager = $$DeploymentProjectsTableTableManager(
+      $_db,
+      $_db.deploymentProjects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$GitHubProjectWorkflowLinksTableFilterComposer
+    extends Composer<_$AppDatabase, $GitHubProjectWorkflowLinksTable> {
+  $$GitHubProjectWorkflowLinksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workflowName => $composableBuilder(
+    column: $table.workflowName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get linkedAt => $composableBuilder(
+    column: $table.linkedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$DeploymentProjectsTableFilterComposer get projectId {
+    final $$DeploymentProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.deploymentProjects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DeploymentProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.deploymentProjects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GitHubProjectWorkflowLinksTableOrderingComposer
+    extends Composer<_$AppDatabase, $GitHubProjectWorkflowLinksTable> {
+  $$GitHubProjectWorkflowLinksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workflowName => $composableBuilder(
+    column: $table.workflowName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get linkedAt => $composableBuilder(
+    column: $table.linkedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$DeploymentProjectsTableOrderingComposer get projectId {
+    final $$DeploymentProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.deploymentProjects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DeploymentProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.deploymentProjects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GitHubProjectWorkflowLinksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GitHubProjectWorkflowLinksTable> {
+  $$GitHubProjectWorkflowLinksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get workflowName => $composableBuilder(
+    column: $table.workflowName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get linkedAt =>
+      $composableBuilder(column: $table.linkedAt, builder: (column) => column);
+
+  $$DeploymentProjectsTableAnnotationComposer get projectId {
+    final $$DeploymentProjectsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.projectId,
+          referencedTable: $db.deploymentProjects,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DeploymentProjectsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.deploymentProjects,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$GitHubProjectWorkflowLinksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GitHubProjectWorkflowLinksTable,
+          GitHubProjectWorkflowLink,
+          $$GitHubProjectWorkflowLinksTableFilterComposer,
+          $$GitHubProjectWorkflowLinksTableOrderingComposer,
+          $$GitHubProjectWorkflowLinksTableAnnotationComposer,
+          $$GitHubProjectWorkflowLinksTableCreateCompanionBuilder,
+          $$GitHubProjectWorkflowLinksTableUpdateCompanionBuilder,
+          (
+            GitHubProjectWorkflowLink,
+            $$GitHubProjectWorkflowLinksTableReferences,
+          ),
+          GitHubProjectWorkflowLink,
+          PrefetchHooks Function({bool projectId})
+        > {
+  $$GitHubProjectWorkflowLinksTableTableManager(
+    _$AppDatabase db,
+    $GitHubProjectWorkflowLinksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GitHubProjectWorkflowLinksTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$GitHubProjectWorkflowLinksTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GitHubProjectWorkflowLinksTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> projectId = const Value.absent(),
+                Value<String> owner = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> workflowName = const Value.absent(),
+                Value<DateTime> linkedAt = const Value.absent(),
+              }) => GitHubProjectWorkflowLinksCompanion(
+                id: id,
+                projectId: projectId,
+                owner: owner,
+                name: name,
+                workflowName: workflowName,
+                linkedAt: linkedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int projectId,
+                required String owner,
+                required String name,
+                required String workflowName,
+                required DateTime linkedAt,
+              }) => GitHubProjectWorkflowLinksCompanion.insert(
+                id: id,
+                projectId: projectId,
+                owner: owner,
+                name: name,
+                workflowName: workflowName,
+                linkedAt: linkedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GitHubProjectWorkflowLinksTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (projectId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.projectId,
+                                referencedTable:
+                                    $$GitHubProjectWorkflowLinksTableReferences
+                                        ._projectIdTable(db),
+                                referencedColumn:
+                                    $$GitHubProjectWorkflowLinksTableReferences
+                                        ._projectIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GitHubProjectWorkflowLinksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GitHubProjectWorkflowLinksTable,
+      GitHubProjectWorkflowLink,
+      $$GitHubProjectWorkflowLinksTableFilterComposer,
+      $$GitHubProjectWorkflowLinksTableOrderingComposer,
+      $$GitHubProjectWorkflowLinksTableAnnotationComposer,
+      $$GitHubProjectWorkflowLinksTableCreateCompanionBuilder,
+      $$GitHubProjectWorkflowLinksTableUpdateCompanionBuilder,
+      (GitHubProjectWorkflowLink, $$GitHubProjectWorkflowLinksTableReferences),
+      GitHubProjectWorkflowLink,
+      PrefetchHooks Function({bool projectId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9957,4 +12659,14 @@ class $AppDatabaseManager {
       $$McpServersTableTableManager(_db, _db.mcpServers);
   $$AgentSkillsTableTableManager get agentSkills =>
       $$AgentSkillsTableTableManager(_db, _db.agentSkills);
+  $$GitHubConnectionsTableTableManager get gitHubConnections =>
+      $$GitHubConnectionsTableTableManager(_db, _db.gitHubConnections);
+  $$GitHubRepoPinsTableTableManager get gitHubRepoPins =>
+      $$GitHubRepoPinsTableTableManager(_db, _db.gitHubRepoPins);
+  $$GitHubProjectWorkflowLinksTableTableManager
+  get gitHubProjectWorkflowLinks =>
+      $$GitHubProjectWorkflowLinksTableTableManager(
+        _db,
+        _db.gitHubProjectWorkflowLinks,
+      );
 }

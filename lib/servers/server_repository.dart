@@ -23,6 +23,13 @@ class ServerRepository {
   Future<Server> create(ServerDraft draft) async {
     final now = DateTime.now().toUtc();
     final credentialId = await _credentialIdForDraft(draft, now);
+    final proxyPassword =
+        draft.proxy?.password == null || draft.proxy!.password!.isEmpty
+        ? null
+        : await _vault.encrypt(
+            draft.proxy!.password!,
+            context: 'server-proxy-password',
+          );
     final id = await _database
         .into(_database.servers)
         .insert(
@@ -37,6 +44,12 @@ class ServerRepository {
             credentialId: Value(credentialId),
             collectStats: Value(draft.collectStats),
             collectSystemInfo: Value(draft.collectSystemInfo),
+            proxyType: Value(draft.proxy?.type.name),
+            proxyHost: Value(draft.proxy?.host),
+            proxyPort: Value(draft.proxy?.port),
+            proxyUsername: Value(draft.proxy?.username),
+            encryptedProxyPassword: Value(proxyPassword?.bytes),
+            proxyPasswordNonce: Value(proxyPassword?.nonce),
           ),
         );
     return (_database.select(
@@ -49,6 +62,17 @@ class ServerRepository {
       draft,
       DateTime.now().toUtc(),
     );
+    final proxy = draft.proxy;
+    // A new password replaces the stored one. Leaving the field blank keeps
+    // the existing encrypted password, and removing the proxy clears it.
+    final proxyPassword = proxy?.password == null
+        ? null
+        : proxy!.password!.isEmpty
+        ? null
+        : await _vault.encrypt(
+            proxy.password!,
+            context: 'server-proxy-password',
+          );
     await (_database.update(
       _database.servers,
     )..where((table) => table.id.equals(server.id))).write(
@@ -60,6 +84,20 @@ class ServerRepository {
         credentialId: Value(credentialId),
         collectStats: Value(draft.collectStats),
         collectSystemInfo: Value(draft.collectSystemInfo),
+        proxyType: Value(proxy?.type.name),
+        proxyHost: Value(proxy?.host),
+        proxyPort: Value(proxy?.port),
+        proxyUsername: Value(proxy?.username),
+        encryptedProxyPassword: proxy == null
+            ? const Value(null)
+            : proxyPassword == null
+            ? const Value.absent()
+            : Value(proxyPassword.bytes),
+        proxyPasswordNonce: proxy == null
+            ? const Value(null)
+            : proxyPassword == null
+            ? const Value.absent()
+            : Value(proxyPassword.nonce),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
@@ -75,6 +113,37 @@ class ServerRepository {
       context: 'server-credential',
     );
     return ServerCredential.decode(value);
+  }
+
+  /// Returns the server's configured proxy with its password decrypted, or
+  /// null when the server does not use a proxy.
+  Future<ServerProxy?> proxyFor(Server server) async {
+    final type = server.proxyType;
+    final host = server.proxyHost;
+    if (type == null ||
+        type == ServerProxyType.none.name ||
+        host == null ||
+        host.isEmpty) {
+      return null;
+    }
+    String? password;
+    if (server.encryptedProxyPassword != null &&
+        server.proxyPasswordNonce != null) {
+      password = await _vault.decrypt(
+        EncryptedValue(
+          bytes: server.encryptedProxyPassword!,
+          nonce: server.proxyPasswordNonce!,
+        ),
+        context: 'server-proxy-password',
+      );
+    }
+    return ServerProxy(
+      type: ServerProxyType.values.byName(type),
+      host: host,
+      port: server.proxyPort ?? 1080,
+      username: server.proxyUsername,
+      password: password,
+    );
   }
 
   Stream<List<SavedCredential>> watchCredentials() => (_database.select(
@@ -247,6 +316,12 @@ class ServerRepository {
             'credentialNonce': server.credentialNonce,
             'collectStats': server.collectStats,
             'collectSystemInfo': server.collectSystemInfo,
+            'proxyType': server.proxyType,
+            'proxyHost': server.proxyHost,
+            'proxyPort': server.proxyPort,
+            'proxyUsername': server.proxyUsername,
+            'encryptedProxyPassword': server.encryptedProxyPassword,
+            'proxyPasswordNonce': server.proxyPasswordNonce,
           },
         )
         .toList();
@@ -287,6 +362,14 @@ class ServerRepository {
           credentialNonce: Value(value['credentialNonce'] as String?),
           collectStats: Value(value['collectStats'] as bool? ?? true),
           collectSystemInfo: Value(value['collectSystemInfo'] as bool? ?? true),
+          proxyType: Value(value['proxyType'] as String?),
+          proxyHost: Value(value['proxyHost'] as String?),
+          proxyPort: Value(value['proxyPort'] as int?),
+          proxyUsername: Value(value['proxyUsername'] as String?),
+          encryptedProxyPassword: Value(
+            value['encryptedProxyPassword'] as String?,
+          ),
+          proxyPasswordNonce: Value(value['proxyPasswordNonce'] as String?),
           createdAt: Value(DateTime.parse(value['createdAt'] as String)),
           updatedAt: Value(DateTime.parse(value['updatedAt'] as String)),
           deletedAt: Value(

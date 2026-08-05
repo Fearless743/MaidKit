@@ -49,13 +49,20 @@ Future<bool> connectForStatistics(
     final credential = await ref
         .read(serverRepositoryProvider)
         .credentialFor(server);
-    await ref.read(connectionManagerProvider).connect(server, credential, (
-      prompt,
-    ) async {
-      final approved = await _approveHostKey(context, prompt);
-      if (approved) approvedHostKey = prompt;
-      return approved;
-    }, knownHostKeyFingerprint: server.hostKeyFingerprint);
+    final proxy = await ref.read(serverRepositoryProvider).proxyFor(server);
+    await ref
+        .read(connectionManagerProvider)
+        .connect(
+          server,
+          credential,
+          (prompt) async {
+            final approved = await _approveHostKey(context, prompt);
+            if (approved) approvedHostKey = prompt;
+            return approved;
+          },
+          knownHostKeyFingerprint: server.hostKeyFingerprint,
+          proxy: proxy,
+        );
     await ref.read(serverRepositoryProvider).markConnected(server.id);
     if (approvedHostKey != null) {
       await ref
@@ -104,6 +111,7 @@ Future<bool> openTerminalSession(
     final credential = await ref
         .read(serverRepositoryProvider)
         .credentialFor(server);
+    final proxy = await ref.read(serverRepositoryProvider).proxyFor(server);
     await ref
         .read(terminalTabsProvider.notifier)
         .open(
@@ -120,6 +128,7 @@ Future<bool> openTerminalSession(
           knownHostKeyFingerprint: server.hostKeyFingerprint,
           initialDirectory: initialDirectory,
           paneId: paneId,
+          proxy: proxy,
         );
     if (approvedHostKey != null) {
       await ref

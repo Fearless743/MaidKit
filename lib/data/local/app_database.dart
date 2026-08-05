@@ -23,6 +23,14 @@ class Servers extends Table {
   BoolColumn get collectStats => boolean().withDefault(const Constant(true))();
   BoolColumn get collectSystemInfo =>
       boolean().withDefault(const Constant(true))();
+  // Optional per-server HTTP CONNECT / SOCKS5 proxy. The password is
+  // encrypted with the vault key, mirroring the SSH credential columns.
+  TextColumn get proxyType => text().nullable()();
+  TextColumn get proxyHost => text().nullable()();
+  IntColumn get proxyPort => integer().nullable()();
+  TextColumn get proxyUsername => text().nullable()();
+  TextColumn get encryptedProxyPassword => text().nullable()();
+  TextColumn get proxyPasswordNonce => text().nullable()();
 }
 
 /// An encrypted SSH credential that may be linked to by more than one server.
@@ -174,6 +182,37 @@ class AgentSkills extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
+/// A GitHub account the user signed in with. Only non-secret identity is kept
+/// here; the access token lives in the OS keychain under a key derived from
+/// [accountLogin] and never enters the vault database or cloud sync.
+class GitHubConnections extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get accountLogin => text().unique()();
+  TextColumn get accountName => text().withDefault(const Constant(''))();
+  TextColumn get avatarUrl => text().withDefault(const Constant(''))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Repositories pinned to the GitHub tab. Metadata only, safe to sync.
+class GitHubRepoPins extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get connectionId => integer().references(GitHubConnections, #id)();
+  TextColumn get owner => text()();
+  TextColumn get name => text()();
+  DateTimeColumn get pinnedAt => dateTime()();
+}
+
+/// Links a deployment project to a GitHub workflow whose latest run is shown
+/// on the project detail page. One link per project.
+class GitHubProjectWorkflowLinks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get projectId => integer().references(DeploymentProjects, #id)();
+  TextColumn get owner => text()();
+  TextColumn get name => text()();
+  TextColumn get workflowName => text()();
+  DateTimeColumn get linkedAt => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     Servers,
@@ -189,6 +228,9 @@ class AgentSkills extends Table {
     AgentProviderModels,
     McpServers,
     AgentSkills,
+    GitHubConnections,
+    GitHubRepoPins,
+    GitHubProjectWorkflowLinks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -205,7 +247,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -217,6 +259,14 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'CREATE UNIQUE INDEX compose_project_links_location_unique '
         'ON compose_project_links (server_id, directory, scope)',
+      );
+      await customStatement(
+        'CREATE UNIQUE INDEX github_repo_pins_unique '
+        'ON github_repo_pins (connection_id, owner, name)',
+      );
+      await customStatement(
+        'CREATE UNIQUE INDEX github_project_workflow_links_project_unique '
+        'ON github_project_workflow_links (project_id)',
       );
     },
     onUpgrade: (m, from, to) async {
@@ -369,6 +419,27 @@ class AppDatabase extends _$AppDatabase {
         // files under the app's internal storage.
         await customStatement('DROP TABLE IF EXISTS agent_conversations');
       }
+      if (from < 18) {
+        await m.addColumn(servers, servers.proxyType);
+        await m.addColumn(servers, servers.proxyHost);
+        await m.addColumn(servers, servers.proxyPort);
+        await m.addColumn(servers, servers.proxyUsername);
+        await m.addColumn(servers, servers.encryptedProxyPassword);
+        await m.addColumn(servers, servers.proxyPasswordNonce);
+      }
+      if (from < 19) {
+        await m.createTable(gitHubConnections);
+        await m.createTable(gitHubRepoPins);
+        await m.createTable(gitHubProjectWorkflowLinks);
+        await customStatement(
+          'CREATE UNIQUE INDEX github_repo_pins_unique '
+          'ON github_repo_pins (connection_id, owner, name)',
+        );
+        await customStatement(
+          'CREATE UNIQUE INDEX github_project_workflow_links_project_unique '
+          'ON github_project_workflow_links (project_id)',
+        );
+      }
     },
   );
 
@@ -411,4 +482,14 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<AgentSkill>> watchAgentSkills() => (select(
     agentSkills,
   )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
+
+  Stream<List<GitHubConnection>> watchGitHubConnections() => (select(
+    gitHubConnections,
+  )..orderBy([(table) => OrderingTerm.asc(table.accountLogin)])).watch();
+
+  Stream<List<GitHubRepoPin>> watchGitHubRepoPins() =>
+      select(gitHubRepoPins).watch();
+
+  Stream<List<GitHubProjectWorkflowLink>> watchGitHubProjectWorkflowLinks() =>
+      select(gitHubProjectWorkflowLinks).watch();
 }

@@ -17,6 +17,7 @@ import 'package:maid_kit/agent/ssh_agent_service.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
+import 'package:maid_kit/github/github_mcp_tools.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 
 /// Lifecycle of the in-app MCP server exposed to other local agents.
@@ -625,6 +626,7 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         'required': ['mode'],
       },
     },
+    ...GitHubMcpToolHandlers.definitions,
   ];
 
   /// Largest tool result handed to the calling agent. Mirrors the chat
@@ -685,6 +687,14 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         text = jsonEncode({'mode': _currentReviewMode().wireName});
       case 'set_review_mode':
         text = await _setReviewMode(arguments, callerLabel: callerLabel);
+      case 'github_list_runs':
+      case 'github_get_run':
+      case 'github_list_jobs':
+      case 'github_open_prs':
+      case 'github_get_release':
+        text = jsonEncode(
+          await GitHubMcpToolHandlers(ref).call(name, arguments),
+        );
       default:
         throw ArgumentError('Unknown tool: $name');
     }
@@ -950,12 +960,19 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     final existing = manager.clientFor(serverId);
     if (existing != null) return existing;
     final credential = await repository.credentialFor(server);
+    final proxy = await repository.proxyFor(server);
     HostKeyPrompt? approvedHostKey;
-    await manager.connect(server, credential, (prompt) async {
-      final approved = await _approveHostKey(prompt);
-      if (approved) approvedHostKey = prompt;
-      return approved;
-    }, knownHostKeyFingerprint: server.hostKeyFingerprint);
+    await manager.connect(
+      server,
+      credential,
+      (prompt) async {
+        final approved = await _approveHostKey(prompt);
+        if (approved) approvedHostKey = prompt;
+        return approved;
+      },
+      knownHostKeyFingerprint: server.hostKeyFingerprint,
+      proxy: proxy,
+    );
     if (approvedHostKey != null) {
       await repository.rememberHostKey(server.id, approvedHostKey!);
     }

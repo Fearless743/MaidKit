@@ -1079,6 +1079,15 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
   bool _collectStats = true;
   bool _collectSystemInfo = true;
 
+  // Per-server proxy configuration.
+  ServerProxyType _proxyType = ServerProxyType.none;
+  final _proxyHost = TextEditingController();
+  late final _proxyPort = TextEditingController(
+    text: 'serverDefaultProxyPort'.tr(),
+  );
+  final _proxyUsername = TextEditingController();
+  final _proxyPassword = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -1098,6 +1107,15 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
     }
     _collectStats = initial.collectStats;
     _collectSystemInfo = initial.collectSystemInfo;
+    final proxy = initial.proxy;
+    if (proxy != null) {
+      _proxyType = proxy.type;
+      _proxyHost.text = proxy.host;
+      _proxyPort.text = proxy.port.toString();
+      _proxyUsername.text = proxy.username ?? '';
+      // The stored password is not decrypted into the form; leaving the field
+      // blank keeps the existing password when saving.
+    }
   }
 
   @override
@@ -1109,6 +1127,10 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
       _user,
       _secret,
       _passphrase,
+      _proxyHost,
+      _proxyPort,
+      _proxyUsername,
+      _proxyPassword,
     ]) {
       controller.dispose();
     }
@@ -1154,6 +1176,19 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
         credentialName: _name.text,
         collectStats: _collectStats,
         collectSystemInfo: _collectSystemInfo,
+        proxy: _proxyType == ServerProxyType.none
+            ? null
+            : ServerProxy(
+                type: _proxyType,
+                host: _proxyHost.text.trim(),
+                port: int.parse(_proxyPort.text),
+                username: _proxyUsername.text.trim().isEmpty
+                    ? null
+                    : _proxyUsername.text.trim(),
+                password: _proxyPassword.text.isEmpty
+                    ? null
+                    : _proxyPassword.text,
+              ),
       ),
     );
   }
@@ -1283,6 +1318,77 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
                   ),
                 ),
               ],
+            ],
+            const SizedBox(height: 16),
+            Text(
+              'serverProxyLabel'.tr(),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<ServerProxyType>(
+              segments: [
+                ButtonSegment(
+                  value: ServerProxyType.none,
+                  label: Text('serverProxyNone'.tr()),
+                ),
+                ButtonSegment(
+                  value: ServerProxyType.http,
+                  label: Text('serverProxyHttp'.tr()),
+                ),
+                ButtonSegment(
+                  value: ServerProxyType.socks5,
+                  label: Text('serverProxySocks5'.tr()),
+                ),
+              ],
+              selected: {_proxyType},
+              onSelectionChanged: (value) =>
+                  setState(() => _proxyType = value.first),
+            ),
+            if (_proxyType != ServerProxyType.none) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _proxyHost,
+                      decoration: InputDecoration(
+                        labelText: 'serverProxyHostLabel'.tr(),
+                      ),
+                      validator: _required,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 100,
+                    child: TextFormField(
+                      controller: _proxyPort,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'serverProxyPortLabel'.tr(),
+                      ),
+                      validator: _validPort,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _proxyUsername,
+                decoration: InputDecoration(
+                  labelText: 'serverProxyUsernameLabel'.tr(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _proxyPassword,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'serverProxyPasswordLabel'.tr(),
+                  helperText: widget.initial?.proxy != null
+                      ? 'serverProxyPasswordKeepHint'.tr()
+                      : null,
+                ),
+              ),
             ],
             const SizedBox(height: 12),
             SwitchListTile(
