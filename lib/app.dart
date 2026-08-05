@@ -12,6 +12,7 @@ import 'shared/presentation/maidkit_window_scaffold.dart';
 import 'shared/services/update_service.dart';
 import 'servers/server_providers.dart';
 import 'servers/startup_connection_bootstrap.dart';
+import 'servers/tailscale_auto_connect.dart';
 import 'servers/vault_gate.dart';
 import 'theme.dart';
 
@@ -102,7 +103,9 @@ class _MaidKitAppState extends ConsumerState<MaidKitApp> {
                   settings: settings,
                   builder: (context) => VaultGate(
                     child: StartupConnectionBootstrap(
-                      child: child ?? const SizedBox.shrink(),
+                      child: TailscaleAutoConnect(
+                        child: child ?? const SizedBox.shrink(),
+                      ),
                     ),
                   ),
                 ),
