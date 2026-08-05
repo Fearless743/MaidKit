@@ -49,6 +49,7 @@ class SettingsPage extends ConsumerWidget {
     final terminalLightTheme = ref.watch(terminalLightThemeProvider);
     final terminalDarkTheme = ref.watch(terminalDarkThemeProvider);
     final connectOnStartup = ref.watch(connectOnStartupProvider);
+    final hideServerAddresses = ref.watch(hideServerAddressesProvider);
     final refreshInterval = ref.watch(serverMetricsRefreshIntervalProvider);
     final focusedRefreshInterval = ref.watch(
       focusedServerRefreshIntervalProvider,
@@ -372,6 +373,17 @@ class SettingsPage extends ConsumerWidget {
                       value: connectOnStartup,
                       onChanged: (value) => ref
                           .read(connectOnStartupProvider.notifier)
+                          .setEnabled(value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: _sectionTilePadding,
+                      title: const Text('settingsHideServerAddresses').tr(),
+                      subtitle: const Text(
+                        'settingsHideServerAddressesHint',
+                      ).tr(),
+                      value: hideServerAddresses,
+                      onChanged: (value) => ref
+                          .read(hideServerAddressesProvider.notifier)
                           .setEnabled(value),
                     ),
                     Padding(

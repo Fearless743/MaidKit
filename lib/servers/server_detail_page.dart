@@ -19,6 +19,7 @@ import 'crontab_tab.dart';
 import 'firewall_tab.dart';
 import 'package_management_tab.dart';
 import 'port_forwarding_tab.dart';
+import 'privacy_preferences.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -632,17 +633,18 @@ class _InspectorTabsState extends State<_InspectorTabs>
   }
 }
 
-class _ServerIdentity extends StatelessWidget {
+class _ServerIdentity extends ConsumerWidget {
   const _ServerIdentity({required this.server, required this.session});
 
   final Server server;
   final SshSessionInfo? session;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final connected = session?.status == SessionStatus.connected;
+    final hideAddresses = ref.watch(hideServerAddressesProvider);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -658,7 +660,7 @@ class _ServerIdentity extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${server.username}@${server.host}:${server.port}',
+                serverAddressLabel(server, hideAddresses: hideAddresses),
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 8),

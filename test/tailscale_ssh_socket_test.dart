@@ -74,11 +74,12 @@ void main() {
       expect(done, isTrue);
     });
 
-    test('destroy aborts the connection', () async {
+    test('destroy closes the connection gracefully', () async {
       final connection = _FakeConnection();
       final socket = TailscaleSshSocket(connection);
       socket.destroy();
-      expect(connection.aborted, isTrue);
+      expect(connection.closed, isTrue);
+      expect(connection.aborted, isFalse);
     });
   });
 }

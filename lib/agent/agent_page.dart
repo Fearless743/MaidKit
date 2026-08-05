@@ -251,6 +251,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             config,
             personality: personality,
             uiLanguage: context.locale.toLanguageTag(),
+            hideServerAddresses: ref.read(hideServerAddressesProvider),
           ).request(
             servers: targets,
             snippets: _snippetTargets(snippets),
@@ -357,6 +358,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         config,
         personality: personality,
         uiLanguage: context.locale.toLanguageTag(),
+        hideServerAddresses: ref.read(hideServerAddressesProvider),
       );
       final cancelToken = AgentCancelToken();
       _activeToken = cancelToken;

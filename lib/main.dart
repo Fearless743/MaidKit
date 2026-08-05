@@ -13,6 +13,7 @@ import 'servers/app_theme_preferences.dart';
 import 'servers/metrics_refresh_preferences.dart';
 import 'servers/terminal_adapter_preferences.dart';
 import 'servers/startup_connection_preferences.dart';
+import 'servers/privacy_preferences.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +39,7 @@ Future<void> main(List<String> args) async {
     StartupConnectionPreferences.load(),
     MetricsRefreshPreferences.load(),
     AppThemePreferences.load(),
+    PrivacyPreferences.load(),
   ]);
   final terminalAdapterPreferences =
       preferences[0] as TerminalAdapterPreferences;
@@ -45,6 +47,7 @@ Future<void> main(List<String> args) async {
       preferences[1] as StartupConnectionPreferences;
   final metricsRefreshPreferences = preferences[2] as MetricsRefreshPreferences;
   final appThemePreferences = preferences[3] as AppThemePreferences;
+  final privacyPreferences = preferences[4] as PrivacyPreferences;
 
   await migrateLegacyVault(defaultName: 'Primary Vault');
 
@@ -77,6 +80,7 @@ Future<void> main(List<String> args) async {
           metricsRefreshPreferences,
         ),
         appThemeSettingsProvider.overrideWithValue(appThemePreferences),
+        privacySettingsProvider.overrideWithValue(privacyPreferences),
       ],
       child: EasyLocalization(
         supportedLocales: const [Locale('en', 'US'), Locale('zh', 'CN')],

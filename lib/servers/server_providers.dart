@@ -27,6 +27,7 @@ import 'ghostty_terminal_session_adapter.dart';
 import 'cloud_sync_service.dart';
 import 'metrics_refresh_preferences.dart';
 import 'port_forwarding_models.dart';
+import 'privacy_preferences.dart';
 import 'server_repository.dart';
 import 'server_metrics_refresh_scheduler.dart';
 import 'ssh_connection_manager.dart';
@@ -558,6 +559,25 @@ final startupConnectionSettingsProvider = Provider<StartupConnectionSettings>(
 final metricsRefreshSettingsProvider = Provider<MetricsRefreshSettings>(
   (ref) => InMemoryMetricsRefreshSettings(),
 );
+
+final privacySettingsProvider = Provider<PrivacySettings>(
+  (ref) => InMemoryPrivacySettings(),
+);
+
+final hideServerAddressesProvider =
+    NotifierProvider<HideServerAddressesNotifier, bool>(
+      HideServerAddressesNotifier.new,
+    );
+
+class HideServerAddressesNotifier extends Notifier<bool> {
+  @override
+  bool build() => ref.read(privacySettingsProvider).hideServerAddresses;
+
+  Future<void> setEnabled(bool value) async {
+    await ref.read(privacySettingsProvider).saveHideServerAddresses(value);
+    state = value;
+  }
+}
 
 final serverMetricsRefreshIntervalProvider =
     NotifierProvider<ServerMetricsRefreshIntervalNotifier, Duration>(

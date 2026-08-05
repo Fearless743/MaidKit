@@ -6,6 +6,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/github/github_section.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 
@@ -25,6 +26,8 @@ class AssetsPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       children: const [
         ServerAssetsSection(),
+        SizedBox(height: 32),
+        GitHubSection(),
         SizedBox(height: 32),
         CredentialsPage(),
       ],
@@ -169,7 +172,7 @@ class ServerAssetsSection extends ConsumerWidget {
   }
 }
 
-class _ServerAssetRow extends StatelessWidget {
+class _ServerAssetRow extends ConsumerWidget {
   const _ServerAssetRow({
     required this.server,
     required this.onEdit,
@@ -181,44 +184,52 @@ class _ServerAssetRow extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    leading: const Icon(Symbols.dns),
-    title: Text(server.name),
-    subtitle: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 2),
-        Text('${server.host} · ${server.username} · ${server.port}'),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            _AssetTag(label: 'SSH'),
-            if (server.collectStats) _AssetTag(label: 'assetsTagMetrics'.tr()),
-            if (server.collectSystemInfo)
-              _AssetTag(label: 'assetsTagSystemInfo'.tr()),
-          ],
-        ),
-      ],
-    ),
-    trailing: Wrap(
-      spacing: 4,
-      children: [
-        IconButton(
-          tooltip: 'serversEditServer'.tr(),
-          onPressed: onEdit,
-          icon: const Icon(Symbols.edit),
-        ),
-        IconButton(
-          tooltip: 'commonDelete'.tr(),
-          onPressed: onDelete,
-          icon: const Icon(Symbols.delete_outline),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hideAddresses = ref.watch(hideServerAddressesProvider);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: const Icon(Symbols.dns),
+      title: Text(server.name),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 2),
+          Text(
+            hideAddresses
+                ? server.username
+                : '${server.host} · ${server.username} · ${server.port}',
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _AssetTag(label: 'SSH'),
+              if (server.collectStats)
+                _AssetTag(label: 'assetsTagMetrics'.tr()),
+              if (server.collectSystemInfo)
+                _AssetTag(label: 'assetsTagSystemInfo'.tr()),
+            ],
+          ),
+        ],
+      ),
+      trailing: Wrap(
+        spacing: 4,
+        children: [
+          IconButton(
+            tooltip: 'serversEditServer'.tr(),
+            onPressed: onEdit,
+            icon: const Icon(Symbols.edit),
+          ),
+          IconButton(
+            tooltip: 'commonDelete'.tr(),
+            onPressed: onDelete,
+            icon: const Icon(Symbols.delete_outline),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AssetTag extends StatelessWidget {

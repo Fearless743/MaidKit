@@ -51,6 +51,12 @@ class TailscaleSshSocket implements SSHSocket {
   static Future<TailscaleSshSocket> connect(String host, int port) async {
     try {
       await ensureTailscaleInitialized();
+      final status = await Tailscale.instance.status();
+      if (!status.isRunning) {
+        throw const TailscaleConnectException(
+          'Tailscale is not connected. Open Settings → Tailscale to sign in.',
+        );
+      }
       final connection = await Tailscale.instance.tcp.dial(
         host,
         port,
@@ -85,7 +91,10 @@ class TailscaleSshSocket implements SSHSocket {
 
   @override
   void destroy() {
-    unawaited(_connection.abort());
+    // Graceful close rather than an immediate reset: dartssh2 calls destroy()
+    // on handshake failures, and an abrupt abort while the fd reactor is
+    // polling can race the package's native teardown (pre-1.0 runtime).
+    unawaited(_connection.close());
   }
 
   @override

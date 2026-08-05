@@ -197,7 +197,7 @@ class _EmptySnippets extends StatelessWidget {
   );
 }
 
-class _SnippetEditor extends StatefulWidget {
+class _SnippetEditor extends ConsumerStatefulWidget {
   const _SnippetEditor({
     required this.title,
     this.initialName,
@@ -211,10 +211,10 @@ class _SnippetEditor extends StatefulWidget {
   final Future<void> Function(String name, String script) onSave;
 
   @override
-  State<_SnippetEditor> createState() => _SnippetEditorState();
+  ConsumerState<_SnippetEditor> createState() => _SnippetEditorState();
 }
 
-class _SnippetEditorState extends State<_SnippetEditor> {
+class _SnippetEditorState extends ConsumerState<_SnippetEditor> {
   final _formKey = GlobalKey<FormState>();
   late final _nameController = TextEditingController(text: widget.initialName);
   late final _scriptController = TextEditingController(
@@ -284,17 +284,17 @@ class _SnippetEditorState extends State<_SnippetEditor> {
   );
 }
 
-class _ServerPicker extends StatefulWidget {
+class _ServerPicker extends ConsumerStatefulWidget {
   const _ServerPicker({required this.servers, required this.connectedIds});
 
   final List<Server> servers;
   final Set<int> connectedIds;
 
   @override
-  State<_ServerPicker> createState() => _ServerPickerState();
+  ConsumerState<_ServerPicker> createState() => _ServerPickerState();
 }
 
-class _ServerPickerState extends State<_ServerPicker> {
+class _ServerPickerState extends ConsumerState<_ServerPicker> {
   late final Set<int> _selected = widget.connectedIds.toSet();
 
   @override
@@ -330,7 +330,11 @@ class _ServerPickerState extends State<_ServerPicker> {
                       contentPadding: EdgeInsets.zero,
                       value: _selected.contains(server.id),
                       title: Text(server.name),
-                      subtitle: Text(server.host),
+                      subtitle: Text(
+                        ref.watch(hideServerAddressesProvider)
+                            ? server.username
+                            : server.host,
+                      ),
                       onChanged: (checked) => setState(() {
                         if (checked ?? false) {
                           _selected.add(server.id);

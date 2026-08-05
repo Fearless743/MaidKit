@@ -13,10 +13,17 @@ import 'tailscale_service.dart';
 
 /// Combined status snapshot for the settings section.
 class TailscaleSnapshot {
-  const TailscaleSnapshot({required this.status, required this.nodes});
+  const TailscaleSnapshot({
+    required this.status,
+    required this.nodes,
+    this.runtimeError,
+  });
 
   final TailscaleStatus? status;
   final List<TailscaleNode> nodes;
+
+  /// Last native runtime error reported by the embedded engine, if any.
+  final TailscaleRuntimeError? runtimeError;
 }
 
 /// Live snapshot: refreshes after the initial load and whenever the embedded
@@ -25,6 +32,7 @@ final tailscaleSnapshotProvider = StreamProvider<TailscaleSnapshot?>((ref) {
   if (!tailscaleSupported) return Stream.value(null);
   final service = ref.watch(tailscaleServiceProvider);
   final controller = StreamController<TailscaleSnapshot?>();
+  TailscaleRuntimeError? lastRuntimeError;
   Future<void> refresh() async {
     TailscaleStatus? status;
     var nodes = <TailscaleNode>[];
@@ -39,14 +47,28 @@ final tailscaleSnapshotProvider = StreamProvider<TailscaleSnapshot?>((ref) {
       nodes = const [];
     }
     if (!controller.isClosed) {
-      controller.add(TailscaleSnapshot(status: status, nodes: nodes));
+      controller.add(
+        TailscaleSnapshot(
+          status: status,
+          nodes: nodes,
+          runtimeError: lastRuntimeError,
+        ),
+      );
     }
   }
 
   refresh();
-  final subscription = service.onStateChange.listen((_) => refresh());
+  final stateSubscription = service.onStateChange.listen((_) => refresh());
+  final errorSubscription = service.onError.listen((error) {
+    // The embedded runtime reports its own failures (DERP loss, engine
+    // errors, worker death). Keep the last one visible in the settings UI so
+    // connection failures over Tailscale can be diagnosed.
+    lastRuntimeError = error;
+    refresh();
+  });
   ref.onDispose(() async {
-    await subscription.cancel();
+    await stateSubscription.cancel();
+    await errorSubscription.cancel();
     await controller.close();
   });
   return controller.stream;
@@ -77,6 +99,30 @@ class TailscaleSettingsSection extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
+        if (snapshot?.runtimeError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Symbols.warning,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${snapshot!.runtimeError!.code.name}: '
+                    '${snapshot.runtimeError!.message}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (status == null)
           const Padding(
             padding: EdgeInsets.all(16),

@@ -162,6 +162,8 @@
   "settingsConnections": "Connections",
   "settingsConnectOnStartup": "Connect saved servers on startup",
   "settingsConnectOnStartupHint": "Keep SSH connections ready to collect server statistics after the vault unlocks.",
+  "settingsHideServerAddresses": "Hide server addresses",
+  "settingsHideServerAddressesHint": "Show only usernames instead of IPs when streaming or recording your screen.",
   "settingsBackgroundRefreshInterval": "Background metrics refresh interval",
   "settingsBackgroundRefreshIntervalHint": "Connected servers not currently in detail view refresh metrics only.",
   "settingsFocusedRefreshInterval": "Focused server detail refresh interval",
@@ -571,6 +573,7 @@
   "tailscalePickMachine": "Pick from Tailscale",
   "tailscaleNotRunning": "Tailscale is not connected. Sign in under Settings → Tailscale first.",
   "tailscaleNoMachines": "No tailnet machines are online.",
+  "tailscaleViaTailnet": "Connected via Tailscale",
 
   "serverVerifyHostKey": "Verify SSH host key",
   "serverHostKeyChanged": "This host key changed. Confirm it only if you expected the server to be rebuilt or reconfigured.",

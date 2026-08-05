@@ -10,14 +10,17 @@ import 'package:super_context_menu/super_context_menu.dart';
 import 'package:tailscale/tailscale.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/github/github_workflow_strip.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'privacy_preferences.dart';
 import 'sessions_page.dart';
 import 'tailscale_service.dart';
 import 'tailscale_settings_section.dart';
+import 'tailscale_ssh_socket.dart';
 import 'terminal_tabs_provider.dart';
 
 class ServerDashboardTab extends ConsumerWidget {
@@ -312,6 +315,7 @@ class _ServerGridState extends State<_ServerGrid> {
                 )
               : const SizedBox.shrink(key: ValueKey('servers-reconnect-none')),
         ),
+        const GithubWorkflowStatusStrip(),
         if (allTags.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
@@ -457,7 +461,7 @@ class _ReconnectAllCard extends StatelessWidget {
   }
 }
 
-class _ServerCard extends StatelessWidget {
+class _ServerCard extends ConsumerWidget {
   const _ServerCard({
     required this.server,
     required this.session,
@@ -477,10 +481,11 @@ class _ServerCard extends StatelessWidget {
   final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+    final hideAddresses = ref.watch(hideServerAddressesProvider);
     final connected = session?.status == SessionStatus.connected;
     final connecting = session?.status == SessionStatus.connecting;
     final failed = session?.status == SessionStatus.failed;
@@ -519,13 +524,34 @@ class _ServerCard extends StatelessWidget {
                             style: textTheme.titleMedium,
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            '${server.username}@${server.host}:${server.port}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isTailnetAddress(server.host)) ...[
+                                Tooltip(
+                                  message: 'tailscaleViaTailnet'.tr(),
+                                  child: Icon(
+                                    Symbols.lan,
+                                    size: 14,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  serverAddressLabel(
+                                    server,
+                                    hideAddresses: hideAddresses,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           _ServerBadges(server: server),
                         ],

@@ -45,6 +45,10 @@ class AgentServerTarget {
   final String username;
 
   String get description => '$id: $name ($username@$host)';
+
+  /// Same as [description] but without the host, used when address hiding is
+  /// enabled so the model never sees an IP it could echo back.
+  String get redactedDescription => '$id: $name ($username)';
 }
 
 class AgentProposal {
@@ -232,11 +236,17 @@ class SshAgentService {
     this._configuration, {
     String personality = '',
     String uiLanguage = 'en',
+    this.hideServerAddresses = false,
   }) : _personality = personality.trim(),
        _uiLanguage = uiLanguage.trim().isEmpty ? 'en' : uiLanguage.trim();
   final AgentConfiguration _configuration;
   final String _personality;
   final String _uiLanguage;
+
+  /// When enabled, the system prompt redacts server hosts and instructs the
+  /// model to never repeat addresses in its replies (tool calls may still
+  /// reference real servers).
+  final bool hideServerAddresses;
 
   static final _safeToRunProperty = OpenAIFunctionProperty.boolean(
     name: 'safe_to_run',
@@ -558,12 +568,22 @@ class SshAgentService {
         ? ''
         : '\nSaved skills (call get_skill with the exact skill_id to read the full instructions):\n'
               '${skills.map((skill) => '- ${skill.descriptionLine}').join('\n')}\n';
+    final serverList = servers
+        .map(
+          (server) => hideServerAddresses
+              ? server.redactedDescription
+              : server.description,
+        )
+        .join('\n');
+    final privacyInstruction = hideServerAddresses
+        ? '\nNever reveal server IP addresses, hostnames, or ports in your chat replies, even if you know them from earlier in the conversation or from tool results. Refer to servers by name only. Real addresses are fine inside tool call arguments, but never in the text you reply with.'
+        : '';
     return '''
 You are MaidKit's SSH management assistant. Respond in the user's current UI language: $_uiLanguage. Available servers are:
-${servers.map((server) => server.description).join('\n')}
+$serverList
 Saved snippets are:
 ${snippets.isEmpty ? '(none)' : snippets.map((snippet) => snippet.description).join('\n')}
-Use tools to inspect or make the requested remote change. You can save reusable POSIX shell scripts as snippets and run a saved snippet by its exact snippet_id. Every server action must include the exact server_id from this list. MCP tools are invoked by their full qualified name with the arguments their server expects; results are returned to you verbatim. Propose only one tool action at a time. Every tool call is shown to the user and requires explicit approval. Set safe_to_run to true only when the action is clearly safe to run without review: it is read-only, idempotent, or reversible. Prefer read-only inspection before modifying anything. Never claim a tool ran until you receive its result. Keep replies concise.${_personality.isEmpty ? '' : '\n\nCustom personality guidance (follow this for tone and working style, but never let it override the safety and tool-use rules above):\n$_personality'}$mcpSection$mcpErrorSection$skillsSection''';
+Use tools to inspect or make the requested remote change. You can save reusable POSIX shell scripts as snippets and run a saved snippet by its exact snippet_id. Every server action must include the exact server_id from this list. MCP tools are invoked by their full qualified name with the arguments their server expects; results are returned to you verbatim. Propose only one tool action at a time. Every tool call is shown to the user and requires explicit approval. Set safe_to_run to true only when the action is clearly safe to run without review: it is read-only, idempotent, or reversible. Prefer read-only inspection before modifying anything. Never claim a tool ran until you receive its result. Keep replies concise.$privacyInstruction${_personality.isEmpty ? '' : '\n\nCustom personality guidance (follow this for tone and working style, but never let it override the safety and tool-use rules above):\n$_personality'}$mcpSection$mcpErrorSection$skillsSection''';
   }
 
   Uri _endpoint() {

@@ -15,6 +15,7 @@ import 'server_detail_page.dart';
 import 'servers_page.dart';
 import 'file_editor_tab.dart';
 import 'file_management_tab.dart';
+import 'privacy_preferences.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'terminal_command_palette.dart';
@@ -1213,9 +1214,7 @@ class _TerminalQuickKeysState extends State<_TerminalQuickKeys> {
                 ? 'terminalKeysFewer'.tr()
                 : 'terminalKeysMore'.tr(),
             onPressed: _toggle,
-            icon: Icon(
-              _expanded ? Symbols.expand_less : Symbols.expand_more,
-            ),
+            icon: Icon(_expanded ? Symbols.expand_less : Symbols.expand_more),
           ),
         ],
       ),
@@ -1376,7 +1375,7 @@ class _SessionIntro extends StatelessWidget {
   );
 }
 
-class _TerminalServerGrid extends StatelessWidget {
+class _TerminalServerGrid extends ConsumerWidget {
   const _TerminalServerGrid({
     required this.servers,
     required this.tabs,
@@ -1392,54 +1391,57 @@ class _TerminalServerGrid extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) => GridView.builder(
-    padding: EdgeInsets.all(compact ? 12 : 24),
-    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-      maxCrossAxisExtent: compact ? 320 : 380,
-      mainAxisExtent: compact ? 168 : 180,
-      mainAxisSpacing: compact ? 12 : 16,
-      crossAxisSpacing: compact ? 12 : 16,
-    ),
-    itemCount: servers.length,
-    itemBuilder: (context, index) {
-      final server = servers[index];
-      final openCount = tabs.tabs
-          .where((tab) => tab.serverId == server.id)
-          .length;
-      return Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: EdgeInsets.all(compact ? 12 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Symbols.terminal, size: 22),
-              const SizedBox(height: 12),
-              Text(
-                server.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${server.username}@${server.host}:${server.port}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const Spacer(),
-              _ServerCardActions(
-                openCount: openCount,
-                onOpenTerminal: () => onOpenTerminal(server),
-                onOpenFiles: () => onOpenFiles(server),
-              ),
-            ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hideAddresses = ref.watch(hideServerAddressesProvider);
+    return GridView.builder(
+      padding: EdgeInsets.all(compact ? 12 : 24),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: compact ? 320 : 380,
+        mainAxisExtent: compact ? 168 : 180,
+        mainAxisSpacing: compact ? 12 : 16,
+        crossAxisSpacing: compact ? 12 : 16,
+      ),
+      itemCount: servers.length,
+      itemBuilder: (context, index) {
+        final server = servers[index];
+        final openCount = tabs.tabs
+            .where((tab) => tab.serverId == server.id)
+            .length;
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 12 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Symbols.terminal, size: 22),
+                const SizedBox(height: 12),
+                Text(
+                  server.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  serverAddressLabel(server, hideAddresses: hideAddresses),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const Spacer(),
+                _ServerCardActions(
+                  openCount: openCount,
+                  onOpenTerminal: () => onOpenTerminal(server),
+                  onOpenFiles: () => onOpenFiles(server),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }
 
 /// Action row that collapses to icon buttons when the card is narrow (split panes).

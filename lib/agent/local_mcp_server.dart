@@ -936,7 +936,10 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
     final servers = await ref.read(serverRepositoryProvider).all();
     final server = servers.where((server) => server.id == serverId).firstOrNull;
     if (server == null) return null;
-    return '${server.name} (${server.username}@${server.host}:${server.port})';
+    final hideAddresses = ref.read(hideServerAddressesProvider);
+    return hideAddresses
+        ? server.name
+        : '${server.name} (${server.username}@${server.host}:${server.port})';
   }
 
   /// Posts a macOS Notification Center alert when an agent's access request
