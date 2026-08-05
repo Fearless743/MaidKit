@@ -424,6 +424,34 @@ void main() {
     });
   });
 
+  group('latestRunPerWorkflow', () {
+    WorkflowRun run(int id, String workflow) => WorkflowRun(
+      id: id,
+      name: workflow,
+      displayTitle: 'Run $id',
+      headBranch: 'main',
+      headSha: 'x',
+      status: WorkflowRunStatus.completed,
+      conclusion: WorkflowRunConclusion.success,
+      runNumber: id,
+    );
+
+    test('keeps only the newest run of each workflow', () {
+      final runs = [run(1, 'CI'), run(2, 'CI'), run(3, 'Deploy'), run(4, 'CI')];
+      final latest = latestRunPerWorkflow(runs);
+      expect(latest, hasLength(2));
+      final byName = {for (final item in latest) item.name: item};
+      expect(byName['CI']!.id, 4);
+      expect(byName['Deploy']!.id, 3);
+    });
+
+    test('orders workflows newest first and tolerates empty input', () {
+      expect(latestRunPerWorkflow(const []), isEmpty);
+      final runs = [run(1, 'A'), run(2, 'B')];
+      expect(latestRunPerWorkflow(runs).map((item) => item.name), ['B', 'A']);
+    });
+  });
+
   group('GitHubNotifications', () {
     WorkflowRun failingRun(int id) => WorkflowRun(
       id: id,

@@ -63,6 +63,7 @@
   "githubReleases": "Releases",
   "githubNoReleases": "No releases yet.",
   "githubFailureBanner": "{} workflow run(s) failed. Check the runs below.",
+  "githubStatusFailing": "{} failing",
   "githubActor": "by {}",
   "githubDraft": "draft",
   "githubRunOpen": "Open on GitHub",

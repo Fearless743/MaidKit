@@ -25,7 +25,6 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: ProjectsRoute.page, path: 'projects'),
         AutoRoute(page: SnippetsRoute.page, path: 'snippets'),
         AutoRoute(page: AgentRoute.page, path: 'agent'),
-        AutoRoute(page: GitHubRoute.page, path: 'github'),
         AutoRoute(page: SettingsRoute.page, path: 'settings'),
       ],
     ),

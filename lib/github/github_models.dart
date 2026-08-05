@@ -380,7 +380,8 @@ class GitHubRepoRef {
   int get hashCode => Object.hash(owner, name);
 }
 
-/// The runs fetched for one pinned repository.
+/// The runs fetched for one pinned repository. Collapsed by the feed so the
+/// list holds at most the latest run of each workflow.
 class PinnedRepoRuns {
   const PinnedRepoRuns({
     required this.owner,
@@ -391,6 +392,20 @@ class PinnedRepoRuns {
   final String owner;
   final String name;
   final List<WorkflowRun> runs;
+}
+
+/// Reduces a run list to the latest run of each workflow, ordered by recency.
+/// GitHub run ids increase monotonically, so the largest id is the newest run.
+List<WorkflowRun> latestRunPerWorkflow(List<WorkflowRun> runs) {
+  final latest = <String, WorkflowRun>{};
+  for (final run in runs) {
+    final existing = latest[run.name];
+    if (existing == null || run.id > existing.id) {
+      latest[run.name] = run;
+    }
+  }
+  final result = latest.values.toList()..sort((a, b) => b.id.compareTo(a.id));
+  return result;
 }
 
 /// A consistent snapshot of every pinned repository's runs.

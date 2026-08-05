@@ -9,22 +9,21 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
-import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'github_models.dart';
 import 'github_providers.dart';
+import 'github_ui.dart';
 
-/// Top-level GitHub tab: account, pinned repositories, workflow runs, pull
-/// requests, and releases.
-@RoutePage()
-class GitHubPage extends ConsumerStatefulWidget {
-  const GitHubPage({super.key});
+/// GitHub account, pinned repositories, workflow runs, pull requests, and
+/// releases. Lives inside the Assets tab.
+class GitHubSection extends ConsumerStatefulWidget {
+  const GitHubSection({super.key});
 
   @override
-  ConsumerState<GitHubPage> createState() => _GitHubPageState();
+  ConsumerState<GitHubSection> createState() => _GitHubSectionState();
 }
 
-class _GitHubPageState extends ConsumerState<GitHubPage> {
+class _GitHubSectionState extends ConsumerState<GitHubSection> {
   @override
   void initState() {
     super.initState();
@@ -37,10 +36,34 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
   Widget build(BuildContext context) {
     final connection = ref.watch(githubActiveConnectionProvider);
     final signIn = ref.watch(githubSignInProvider);
-    return MaidKitAppScaffold(
-      body: connection == null
-          ? _SignedOutView(signIn: signIn)
-          : _SignedInView(connection: connection),
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Symbols.rocket_launch,
+              size: 20,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text('tabGithub'.tr(), style: theme.textTheme.titleLarge),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'githubSignInDescription'.tr(),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (connection == null)
+          _SignedOutView(signIn: signIn)
+        else
+          _SignedInView(connection: connection),
+      ],
     );
   }
 }
@@ -241,8 +264,8 @@ class _SignedInView extends ConsumerWidget {
     final loadingRuns =
         ref.watch(githubRunsProvider).isLoading && runsSnapshot == null;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _AccountHeader(connection: connection),
         if (hasFailures) ...[const SizedBox(height: 12), _FailureBanner()],
@@ -570,11 +593,12 @@ class _RunTile extends StatelessWidget {
         ),
         subtitle: Text(
           [
+            if (run.name.isNotEmpty) run.name,
             if (run.headBranch.isNotEmpty) run.headBranch,
             if (run.runNumber > 0) '#${run.runNumber}',
             if (run.actorLogin.isNotEmpty)
               'githubActor'.tr(args: [run.actorLogin]),
-            _timeAgo(context, run.updatedAt ?? run.createdAt),
+            githubTimeAgo(context, run.updatedAt ?? run.createdAt),
           ].join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -638,7 +662,7 @@ class _RepoPrSection extends StatelessWidget {
                 [
                   pr.headRef,
                   'githubActor'.tr(args: [pr.authorLogin]),
-                  _timeAgo(context, pr.updatedAt),
+                  githubTimeAgo(context, pr.updatedAt),
                   if (pr.draft) 'githubDraft'.tr(),
                 ].join(' · '),
                 maxLines: 1,
@@ -734,7 +758,7 @@ class _RepoReleasesSection extends StatelessWidget {
             subtitle: Text(
               [
                 if (release.name.isNotEmpty) release.name,
-                _timeAgo(context, release.publishedAt),
+                githubTimeAgo(context, release.publishedAt),
               ].join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -860,35 +884,7 @@ class _RunStatusIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (icon, color) = switch (status) {
-      WorkflowRunStatus.queued => (
-        Symbols.hourglass_top,
-        scheme.onSurfaceVariant,
-      ),
-      WorkflowRunStatus.inProgress => (Symbols.play_arrow, scheme.primary),
-      WorkflowRunStatus.completed => (
-        conclusion == WorkflowRunConclusion.failure ||
-                conclusion == WorkflowRunConclusion.timedOut ||
-                conclusion == WorkflowRunConclusion.actionRequired
-            ? Symbols.error
-            : conclusion == WorkflowRunConclusion.cancelled
-            ? Symbols.cancel
-            : conclusion == WorkflowRunConclusion.success
-            ? Symbols.check_circle
-            : Symbols.remove_circle_outline,
-        conclusion == WorkflowRunConclusion.failure ||
-                conclusion == WorkflowRunConclusion.timedOut ||
-                conclusion == WorkflowRunConclusion.actionRequired
-            ? scheme.error
-            : conclusion == WorkflowRunConclusion.cancelled
-            ? scheme.onSurfaceVariant
-            : conclusion == WorkflowRunConclusion.success
-            ? const Color(0xFF2E7D32)
-            : scheme.onSurfaceVariant,
-      ),
-      WorkflowRunStatus.unknown => (Symbols.help, scheme.onSurfaceVariant),
-    };
+    final (:icon, :color) = githubRunStatusVisual(context, status, conclusion);
     return Icon(icon, size: 22, color: color);
   }
 }
@@ -945,17 +941,4 @@ class _ConclusionChip extends StatelessWidget {
       ),
     );
   }
-}
-
-String _timeAgo(BuildContext context, DateTime? time) {
-  if (time == null) return '';
-  final difference = DateTime.now().difference(time);
-  if (difference.inMinutes < 1) return 'agentJustNow'.tr();
-  if (difference.inHours < 1) {
-    return 'agentMinutesAgo'.tr(args: ['${difference.inMinutes}']);
-  }
-  if (difference.inDays < 1) {
-    return 'agentHoursAgo'.tr(args: ['${difference.inHours}']);
-  }
-  return 'agentDaysAgo'.tr(args: ['${difference.inDays}']);
 }

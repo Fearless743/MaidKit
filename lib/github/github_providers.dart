@@ -273,7 +273,13 @@ Future<GitHubRunsSnapshot> _fetchRuns(
   for (final pin in pins) {
     try {
       final runs = await api.listRuns(pin.owner, pin.name);
-      repos.add(PinnedRepoRuns(owner: pin.owner, name: pin.name, runs: runs));
+      repos.add(
+        PinnedRepoRuns(
+          owner: pin.owner,
+          name: pin.name,
+          runs: latestRunPerWorkflow(runs),
+        ),
+      );
     } on GitHubApiException catch (error) {
       errors.add('${pin.owner}/${pin.name}: ${error.message}');
     }

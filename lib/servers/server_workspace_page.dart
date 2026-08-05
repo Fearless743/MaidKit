@@ -27,7 +27,6 @@ class ServerWorkspacePage extends StatelessWidget {
         ProjectsRoute(),
         SnippetsRoute(),
         AgentRoute(),
-        GitHubRoute(),
         SettingsRoute(),
       ],
       duration: const Duration(milliseconds: 180),
@@ -73,7 +72,7 @@ class _ServerTabsShell extends ConsumerWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex < 6
+                      selectedIndex: tabsRouter.activeIndex < 5
                           ? tabsRouter.activeIndex
                           : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
@@ -88,11 +87,11 @@ class _ServerTabsShell extends ConsumerWidget {
                             const DeploySessionsRailButton(),
                             const SizedBox(height: 8),
                             _CloudAccountRailButton(
-                              onPressed: () => tabsRouter.setActiveIndex(6),
+                              onPressed: () => tabsRouter.setActiveIndex(5),
                             ),
                             IconButton(
                               tooltip: 'tabSettings'.tr(),
-                              onPressed: () => tabsRouter.setActiveIndex(6),
+                              onPressed: () => tabsRouter.setActiveIndex(5),
                               icon: const Icon(Symbols.settings),
                             ),
                           ],
@@ -105,10 +104,13 @@ class _ServerTabsShell extends ConsumerWidget {
                           label: Text('tabServers').tr(),
                         ),
                         NavigationRailDestination(
-                          icon: const Icon(Symbols.inventory_2),
-                          selectedIcon: const Icon(
-                            Symbols.inventory_2,
-                            fill: 1,
+                          icon: Badge(
+                            isLabelVisible: githubHasFailures,
+                            child: const Icon(Symbols.inventory_2),
+                          ),
+                          selectedIcon: Badge(
+                            isLabelVisible: githubHasFailures,
+                            child: const Icon(Symbols.inventory_2, fill: 1),
                           ),
                           label: Text('tabAssets').tr(),
                         ),
@@ -129,17 +131,6 @@ class _ServerTabsShell extends ConsumerWidget {
                           icon: Icon(Symbols.smart_toy),
                           selectedIcon: Icon(Symbols.smart_toy, fill: 1),
                           label: Text('Agent'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Badge(
-                            isLabelVisible: githubHasFailures,
-                            child: const Icon(Symbols.rocket_launch),
-                          ),
-                          selectedIcon: Badge(
-                            isLabelVisible: githubHasFailures,
-                            child: const Icon(Symbols.rocket_launch, fill: 1),
-                          ),
-                          label: Text('tabGithub'.tr()),
                         ),
                       ],
                     ),
@@ -177,8 +168,14 @@ class _ServerTabsShell extends ConsumerWidget {
                         label: 'tabServers'.tr(),
                       ),
                       NavigationDestination(
-                        icon: const Icon(Symbols.inventory_2),
-                        selectedIcon: const Icon(Symbols.inventory_2, fill: 1),
+                        icon: Badge(
+                          isLabelVisible: githubHasFailures,
+                          child: const Icon(Symbols.inventory_2),
+                        ),
+                        selectedIcon: Badge(
+                          isLabelVisible: githubHasFailures,
+                          child: const Icon(Symbols.inventory_2, fill: 1),
+                        ),
                         label: 'tabAssets'.tr(),
                       ),
                       NavigationDestination(
@@ -198,17 +195,6 @@ class _ServerTabsShell extends ConsumerWidget {
                         icon: Icon(Symbols.smart_toy),
                         selectedIcon: Icon(Symbols.smart_toy, fill: 1),
                         label: 'Agent',
-                      ),
-                      NavigationDestination(
-                        icon: Badge(
-                          isLabelVisible: githubHasFailures,
-                          child: const Icon(Symbols.rocket_launch),
-                        ),
-                        selectedIcon: Badge(
-                          isLabelVisible: githubHasFailures,
-                          child: const Icon(Symbols.rocket_launch, fill: 1),
-                        ),
-                        label: 'tabGithub'.tr(),
                       ),
                       NavigationDestination(
                         icon: const Icon(Symbols.settings, fill: 1),

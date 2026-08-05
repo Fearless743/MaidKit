@@ -61,6 +61,7 @@
   "githubReleases": "Releases",
   "githubNoReleases": "暂无 Releases。",
   "githubFailureBanner": "有 {} 个工作流运行失败，请查看下方列表。",
+  "githubStatusFailing": "{} 个失败",
   "githubActor": "by {}",
   "githubDraft": "草稿",
   "githubRunOpen": "在 GitHub 上打开",

@@ -9,9 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/github/github_models.dart';
-import 'package:maid_kit/github/github_page.dart';
 import 'package:maid_kit/github/github_providers.dart';
+import 'package:maid_kit/github/github_section.dart';
 import 'package:maid_kit/github/github_token_store.dart';
+import 'package:maid_kit/github/github_workflow_strip.dart';
 
 class _AwaitingUserNotifier extends GitHubSignInNotifier {
   @override
@@ -22,8 +23,8 @@ class _AwaitingUserNotifier extends GitHubSignInNotifier {
   );
 }
 
-/// Renders [GitHubPage] with every data source overridden, so the widget test
-/// never touches the database (drift's isolate executor deadlocks inside
+/// Renders [GitHubSection] with every data source overridden, so the widget
+/// test never touches the database (drift's isolate executor deadlocks inside
 /// `testWidgets`' FakeAsync zone).
 void main() {
   setUpAll(() async {
@@ -62,6 +63,84 @@ void main() {
     errors: const [],
   );
 
+  testWidgets(
+    'workflow strip renders one pill per workflow and hides when empty',
+    (WidgetTester tester) async {
+      WorkflowRun run(
+        int id,
+        String workflow,
+        WorkflowRunConclusion conclusion,
+      ) => WorkflowRun(
+        id: id,
+        name: workflow,
+        displayTitle: 'Build $id',
+        headBranch: 'main',
+        headSha: 'x',
+        status: WorkflowRunStatus.completed,
+        conclusion: conclusion,
+        runNumber: id,
+        actorLogin: 'octocat',
+      );
+      final snapshot = GitHubRunsSnapshot(
+        repos: [
+          PinnedRepoRuns(
+            owner: 'octocat',
+            name: 'hello',
+            runs: [
+              run(2, 'CI', WorkflowRunConclusion.success),
+              run(3, 'Deploy', WorkflowRunConclusion.failure),
+            ],
+          ),
+        ],
+        fetchedAt: DateTime.now(),
+        errors: const [],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            githubRunsProvider.overrideWith((ref) => Stream.value(snapshot)),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: GithubWorkflowStatusStrip()),
+          ),
+        ),
+      );
+      await tester.pump();
+      // One row per repo: only the newest run (Deploy) is shown.
+      expect(find.text('Deploy'), findsOneWidget);
+      expect(find.text('CI'), findsNothing);
+      expect(find.text('octocat/hello · main'), findsOneWidget);
+      expect(find.text('Build 3'), findsOneWidget);
+      expect(find.text('Build 2'), findsNothing);
+      // The failing count covers every failing run in the snapshot.
+      expect(find.text('githubStatusFailing'.tr(args: ['1'])), findsOneWidget);
+
+      // An empty snapshot hides the strip entirely. A distinct key forces a
+      // new ProviderScope state so the overrides are re-applied.
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [
+            githubRunsProvider.overrideWith(
+              (ref) => Stream.value(
+                GitHubRunsSnapshot(
+                  repos: const [],
+                  fetchedAt: DateTime(2020),
+                  errors: const [],
+                ),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: GithubWorkflowStatusStrip()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('CI'), findsNothing);
+    },
+  );
+
   testWidgets('device code card is selectable and has a copy button', (
     WidgetTester tester,
   ) async {
@@ -80,9 +159,9 @@ void main() {
             ),
             githubSignInProvider.overrideWith(_AwaitingUserNotifier.new),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
             locale: Locale('en', 'US'),
-            home: GitHubPage(),
+            home: Scaffold(body: ListView(children: const [GitHubSection()])),
           ),
         ),
       ),
@@ -140,9 +219,9 @@ void main() {
             githubPullRequestsProvider.overrideWith((ref) async => const []),
             githubReleasesProvider.overrideWith((ref) async => const []),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
             locale: Locale('en', 'US'),
-            home: GitHubPage(),
+            home: Scaffold(body: ListView(children: const [GitHubSection()])),
           ),
         ),
       ),
@@ -169,9 +248,9 @@ void main() {
               (ref) => Stream.value(const []),
             ),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
             locale: Locale('en', 'US'),
-            home: GitHubPage(),
+            home: Scaffold(body: ListView(children: const [GitHubSection()])),
           ),
         ),
       ),
@@ -225,9 +304,9 @@ void main() {
             githubPullRequestsProvider.overrideWith((ref) async => const []),
             githubReleasesProvider.overrideWith((ref) async => const []),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
             locale: Locale('en', 'US'),
-            home: GitHubPage(),
+            home: Scaffold(body: ListView(children: const [GitHubSection()])),
           ),
         ),
       ),

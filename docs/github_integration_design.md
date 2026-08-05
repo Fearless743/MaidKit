@@ -136,7 +136,8 @@ stops after repeated failures (exponential backoff) and pauses on rate-limit
 
 ## Notifications
 
-- Rail destination shows a badge when a pinned repo has a failing run.
+- The Assets rail destination shows a badge when a pinned repo has a failing
+  run.
 - A failure banner appears in-app when a watched run transitions to `failure`
   or `cancelled` while the app is open.
 - OS notifications via `flutter_local_notifications` (new dependency;
@@ -145,18 +146,21 @@ stops after repeated failures (exponential backoff) and pauses on rate-limit
 
 ## UI
 
-Tab: `github_page.dart` as a `@RoutePage` under `ServerWorkspaceRoute`, path
-`github`, destination added to both the `NavigationRail` and `NavigationBar`
-in `server_workspace_page.dart` (icon `Symbols.rocket_launch`). All strings in
+GitHub content lives **inside the Assets tab** (`assets_page.dart`) as a
+`GitHubSection` — no separate top-level tab. The Servers dashboard
+(`servers_page.dart`) shows a **compact workflow-status strip** above the
+server grid: one pill per pinned workflow (its latest run), colored by status,
+tap → run detail. A failure badge sits on the Assets rail destination, and
+failing-run notifications fire from the poller. All strings in
 `assets/translations/en-US.json` + `zh-CN.json`.
 
 Sections (single scrollable page, desktop-friendly):
 
 - Account card: avatar, login, sign out, re-authenticate on 401.
 - Pinned repos: search-picker over `GET /user/repos`, pin/unpin.
-- Runs feed per pinned repo: workflow name, branch, head commit, actor,
-  status chip (queued / in_progress / success / failure / cancelled),
-  duration; tap → run detail with jobs and steps, "Open on GitHub".
+- Runs feed per pinned repo: the latest run of each workflow, with branch,
+  head commit, actor, status chip (queued / in_progress / success / failure /
+  cancelled); tap → run detail with jobs and steps, "Open on GitHub".
 - Pull requests: open PRs with head check-run summary chips.
 - Releases: tag, name, published date, open link.
 
@@ -180,7 +184,8 @@ lib/github/
   github_device_auth.dart
   github_repository.dart
   github_providers.dart
-  github_page.dart
+  github_section.dart        (embedded in the Assets tab)
+  github_workflow_strip.dart  (Servers dashboard)
   github_run_detail_page.dart
   github_project_link_section.dart
   github_notifications.dart

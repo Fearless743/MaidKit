@@ -315,7 +315,6 @@ class _ServerGridState extends State<_ServerGrid> {
                 )
               : const SizedBox.shrink(key: ValueKey('servers-reconnect-none')),
         ),
-        const GithubWorkflowStatusStrip(),
         if (allTags.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
@@ -344,62 +343,82 @@ class _ServerGridState extends State<_ServerGrid> {
           ),
         if (visibleServers.isEmpty)
           Expanded(
-            child: Center(
-              child: Text(
-                'serversNoMatches'.tr(),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+            child: CustomScrollView(
+              slivers: [
+                const SliverToBoxAdapter(child: GithubWorkflowStatusStrip()),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: _NoServersMatch()),
                 ),
-              ),
+              ],
             ),
           )
         else
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(24),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 380,
-                mainAxisExtent: 320,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-              ),
-              itemCount: visibleServers.length,
-              itemBuilder: (context, index) {
-                final server = visibleServers[index];
-                final session = sessionsByServerId[server.id];
-                return ContextMenuWidget(
-                  menuProvider: (_) => Menu(
-                    children: [
-                      MenuAction(
-                        title: 'serversEditServer'.tr(),
-                        callback: () => widget.onEdit(server),
-                      ),
-                      MenuSeparator(),
-                      MenuAction(
-                        title: 'serversDeleteServer'.tr(),
-                        attributes: const MenuActionAttributes(
-                          destructive: true,
+            child: CustomScrollView(
+              slivers: [
+                const SliverToBoxAdapter(child: GithubWorkflowStatusStrip()),
+                SliverPadding(
+                  padding: const EdgeInsets.all(24),
+                  sliver: SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 380,
+                          mainAxisExtent: 320,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
                         ),
-                        callback: () => widget.onDelete(server),
-                      ),
-                    ],
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final server = visibleServers[index];
+                      final session = sessionsByServerId[server.id];
+                      return ContextMenuWidget(
+                        menuProvider: (_) => Menu(
+                          children: [
+                            MenuAction(
+                              title: 'serversEditServer'.tr(),
+                              callback: () => widget.onEdit(server),
+                            ),
+                            MenuSeparator(),
+                            MenuAction(
+                              title: 'serversDeleteServer'.tr(),
+                              attributes: const MenuActionAttributes(
+                                destructive: true,
+                              ),
+                              callback: () => widget.onDelete(server),
+                            ),
+                          ],
+                        ),
+                        child: _ServerCard(
+                          server: server,
+                          session: session,
+                          onConnect: () => widget.onConnect(server),
+                          onOpenDetail: () => widget.onOpenDetail(server),
+                          onOpenTerminal: () => widget.onOpenTerminal(server),
+                          onOpenFiles: () => widget.onOpenFiles(server),
+                          onRefresh: () => widget.onRefresh(server),
+                        ),
+                      );
+                    }, childCount: visibleServers.length),
                   ),
-                  child: _ServerCard(
-                    server: server,
-                    session: session,
-                    onConnect: () => widget.onConnect(server),
-                    onOpenDetail: () => widget.onOpenDetail(server),
-                    onOpenTerminal: () => widget.onOpenTerminal(server),
-                    onOpenFiles: () => widget.onOpenFiles(server),
-                    onRefresh: () => widget.onRefresh(server),
-                  ),
-                );
-              },
+                ),
+              ],
             ),
           ),
       ],
     );
   }
+}
+
+class _NoServersMatch extends StatelessWidget {
+  const _NoServersMatch();
+
+  @override
+  Widget build(BuildContext context) => Text(
+    'serversNoMatches'.tr(),
+    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
+  );
 }
 
 class _ReconnectAllCard extends StatelessWidget {

@@ -9,6 +9,7 @@ import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'github_models.dart';
 import 'github_providers.dart';
+import 'github_ui.dart';
 
 /// Detail view of one workflow run: header, actions, and per-job step
 /// results.
@@ -106,7 +107,7 @@ class GitHubRunDetailPage extends ConsumerWidget {
                     if (run.actorLogin.isNotEmpty)
                       'githubActor'.tr(args: [run.actorLogin]),
                     if (run.event.isNotEmpty) run.event,
-                    _timeAgo(context, run.updatedAt ?? run.createdAt),
+                    githubTimeAgo(context, run.updatedAt ?? run.createdAt),
                   ].join(' · '),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -129,7 +130,7 @@ class GitHubRunDetailPage extends ConsumerWidget {
                     if (run.createdAt != null)
                       _Meta(
                         icon: Symbols.schedule,
-                        text: _timeAgo(context, run.createdAt),
+                        text: githubTimeAgo(context, run.createdAt),
                       ),
                   ],
                 ),
@@ -273,35 +274,7 @@ class _RunStatusIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (icon, color) = switch (status) {
-      WorkflowRunStatus.queued => (
-        Symbols.hourglass_top,
-        scheme.onSurfaceVariant,
-      ),
-      WorkflowRunStatus.inProgress => (Symbols.play_arrow, scheme.primary),
-      WorkflowRunStatus.completed => (
-        conclusion == WorkflowRunConclusion.failure ||
-                conclusion == WorkflowRunConclusion.timedOut ||
-                conclusion == WorkflowRunConclusion.actionRequired
-            ? Symbols.error
-            : conclusion == WorkflowRunConclusion.cancelled
-            ? Symbols.cancel
-            : conclusion == WorkflowRunConclusion.success
-            ? Symbols.check_circle
-            : Symbols.remove_circle_outline,
-        conclusion == WorkflowRunConclusion.failure ||
-                conclusion == WorkflowRunConclusion.timedOut ||
-                conclusion == WorkflowRunConclusion.actionRequired
-            ? scheme.error
-            : conclusion == WorkflowRunConclusion.cancelled
-            ? scheme.onSurfaceVariant
-            : conclusion == WorkflowRunConclusion.success
-            ? const Color(0xFF2E7D32)
-            : scheme.onSurfaceVariant,
-      ),
-      WorkflowRunStatus.unknown => (Symbols.help, scheme.onSurfaceVariant),
-    };
+    final (:icon, :color) = githubRunStatusVisual(context, status, conclusion);
     return Icon(icon, size: 20, color: color);
   }
 }
@@ -358,17 +331,4 @@ class _ConclusionChip extends StatelessWidget {
       ),
     );
   }
-}
-
-String _timeAgo(BuildContext context, DateTime? time) {
-  if (time == null) return '';
-  final difference = DateTime.now().difference(time);
-  if (difference.inMinutes < 1) return 'agentJustNow'.tr();
-  if (difference.inHours < 1) {
-    return 'agentMinutesAgo'.tr(args: ['${difference.inMinutes}']);
-  }
-  if (difference.inDays < 1) {
-    return 'agentHoursAgo'.tr(args: ['${difference.inHours}']);
-  }
-  return 'agentDaysAgo'.tr(args: ['${difference.inDays}']);
 }
