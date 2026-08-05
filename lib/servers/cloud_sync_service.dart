@@ -262,8 +262,19 @@ class CloudSyncService {
 
   Future<List<CloudWorkspace>> signInAndListWorkspaces() async {
     try {
-      final session = await _validSession() ?? await _signIn();
-      return _listWorkspaces(session);
+      final session = await _validSession();
+      if (session == null) {
+        return _listWorkspaces(await _signIn());
+      }
+      try {
+        return await _listWorkspaces(session);
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 401) rethrow;
+        // The stored session was rejected (revoked or rotated server-side).
+        // Drop it and authorize again so the user can sign in interactively.
+        await signOut();
+        return _listWorkspaces(await _signIn());
+      }
     } on DioException catch (error) {
       throw CloudSyncException(_apiErrorMessage(error));
     }

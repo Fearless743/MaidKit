@@ -109,6 +109,15 @@ class _VaultCreatePageState extends ConsumerState<VaultCreatePage> {
             ],
           ),
         ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              _error!,
+              style: TextStyle(color: theme.colorScheme.error),
+              textAlign: TextAlign.center,
+            ),
+          ),
         const SizedBox(height: 8),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
