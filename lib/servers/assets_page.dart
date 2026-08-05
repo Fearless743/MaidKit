@@ -2,6 +2,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
@@ -236,5 +237,5 @@ class _AssetTag extends StatelessWidget {
 }
 
 void _showError(BuildContext context, Object error) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+  showStyledSnackBar(message: '$error', icon: Symbols.error);
 }

@@ -311,5 +311,5 @@ class _CredentialEditorSheetState extends State<_CredentialEditorSheet> {
 }
 
 void _showMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  showSnackBar(message);
 }

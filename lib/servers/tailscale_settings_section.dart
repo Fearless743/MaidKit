@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:tailscale/tailscale.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -146,9 +147,7 @@ class TailscaleSettingsSection extends ConsumerWidget {
                   final ip = node.ipv4;
                   if (ip != null) {
                     Clipboard.setData(ClipboardData(text: ip));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('tailscaleIpCopied'.tr())),
-                    );
+                    showSnackBar('tailscaleIpCopied'.tr());
                   }
                 },
               ),
@@ -195,15 +194,11 @@ class TailscaleSettingsSection extends ConsumerWidget {
       await service.up(authKey: key);
       ref.invalidate(tailscaleSnapshotProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('tailscaleSignedIn'.tr())));
+        showSnackBar('tailscaleSignedIn'.tr());
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('tailscaleAuthFailed'.tr(args: ['$error']))),
-        );
+        showSnackBar('tailscaleAuthFailed'.tr(args: ['$error']));
       }
     }
   }

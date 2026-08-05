@@ -17,6 +17,7 @@ import 'server_models.dart';
 import 'server_providers.dart';
 import 'sessions_page.dart';
 import 'tailscale_service.dart';
+import 'tailscale_settings_section.dart';
 import 'terminal_tabs_provider.dart';
 
 class ServerDashboardTab extends ConsumerWidget {
@@ -1213,7 +1214,7 @@ class _EmptyServers extends StatelessWidget {
   );
 }
 
-class ServerEditorDialog extends StatefulWidget {
+class ServerEditorDialog extends ConsumerStatefulWidget {
   const ServerEditorDialog({
     super.key,
     required this.credentials,
@@ -1231,10 +1232,10 @@ class ServerEditorDialog extends StatefulWidget {
   /// Group names already used by other servers, offered for quick reuse.
   final List<String> existingGroups;
   @override
-  State<ServerEditorDialog> createState() => _AddServerDialogState();
+  ConsumerState<ServerEditorDialog> createState() => _AddServerDialogState();
 }
 
-class _AddServerDialogState extends State<ServerEditorDialog> {
+class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _host = TextEditingController();
@@ -1346,18 +1347,14 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
       nodes = await Tailscale.instance.nodes();
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('tailscaleNotRunning'.tr())));
+        showSnackBar('tailscaleNotRunning'.tr());
       }
       return;
     }
     if (!context.mounted) return;
     final online = nodes.where((node) => node.online).toList();
     if (online.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('tailscaleNoMachines'.tr())));
+      showSnackBar('tailscaleNoMachines'.tr());
       return;
     }
     final address = await showDialog<String>(
@@ -1471,172 +1468,43 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 560,
-    child: SheetScaffold(
-      titleText: 'serversAddSheetTitle'.tr(),
-      heightFactor: 0.78,
-      child: Form(
-        key: _form,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          children: [
-            TextFormField(
-              controller: _name,
-              decoration: InputDecoration(labelText: 'serverNameLabel'.tr()),
-              validator: _required,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _host,
-                    decoration: InputDecoration(
-                      labelText: 'serverHostLabel'.tr(),
-                      suffixIcon: tailscaleSupported
-                          ? IconButton(
-                              tooltip: 'tailscalePickMachine'.tr(),
-                              icon: const Icon(Symbols.lan),
-                              onPressed: () => _pickTailscaleMachine(context),
-                            )
-                          : null,
-                    ),
-                    validator: _required,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 100,
-                  child: TextFormField(
-                    controller: _port,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'serverPortLabel'.tr(),
-                    ),
-                    validator: _validPort,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _user,
-              decoration: InputDecoration(
-                labelText: 'serverUsernameLabel'.tr(),
+  Widget build(BuildContext context) {
+    // The Tailscale picker needs a running embedded node; hide it when the
+    // node is disconnected, starting, or in a login state.
+    final tailscaleRunning =
+        tailscaleSupported &&
+        ref.watch(tailscaleSnapshotProvider).value?.status?.state ==
+            NodeState.running;
+    return SizedBox(
+      width: 560,
+      child: SheetScaffold(
+        titleText: 'serversAddSheetTitle'.tr(),
+        heightFactor: 0.78,
+        child: Form(
+          key: _form,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              TextFormField(
+                controller: _name,
+                decoration: InputDecoration(labelText: 'serverNameLabel'.tr()),
+                validator: _required,
               ),
-              validator: _required,
-            ),
-            const SizedBox(height: 12),
-            if (widget.credentials.isNotEmpty) ...[
-              DropdownButtonFormField<int?>(
-                initialValue: _useNewCredential ? null : _credentialId,
-                decoration: InputDecoration(
-                  labelText: 'serverCredentialLabel'.tr(),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: null,
-                    child: Text('serverCredentialNew'.tr()),
-                  ),
-                  ...widget.credentials.map(
-                    (credential) => DropdownMenuItem(
-                      value: credential.id,
-                      child: Text(credential.name),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() {
-                  _credentialId = value;
-                  _useNewCredential = value == null;
-                }),
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (_useNewCredential) ...[
-              SegmentedButton<CredentialType>(
-                segments: [
-                  ButtonSegment(
-                    value: CredentialType.password,
-                    label: Text('serverAuthPassword'.tr()),
-                  ),
-                  ButtonSegment(
-                    value: CredentialType.privateKey,
-                    label: Text('serverAuthPrivateKey'.tr()),
-                  ),
-                ],
-                selected: {_type},
-                onSelectionChanged: (value) =>
-                    setState(() => _type = value.first),
-              ),
-              const SizedBox(height: 12),
-              if (_type == CredentialType.password)
-                TextFormField(
-                  controller: _secret,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'serverPasswordLabel'.tr(),
-                  ),
-                  validator: _required,
-                )
-              else ...[
-                TextFormField(
-                  controller: _secret,
-                  minLines: 4,
-                  maxLines: 8,
-                  validator: _required,
-                  decoration: InputDecoration(
-                    labelText: 'serverPrivateKeyLabel'.tr(),
-                    suffixIcon: IconButton(
-                      onPressed: _pickKey,
-                      icon: const Icon(Symbols.upload_file),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passphrase,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'serverKeyPassphraseLabel'.tr(),
-                  ),
-                ),
-              ],
-            ],
-            const SizedBox(height: 16),
-            Text(
-              'serverProxyLabel'.tr(),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<ServerProxyType>(
-              segments: [
-                ButtonSegment(
-                  value: ServerProxyType.none,
-                  label: Text('serverProxyNone'.tr()),
-                ),
-                ButtonSegment(
-                  value: ServerProxyType.http,
-                  label: Text('serverProxyHttp'.tr()),
-                ),
-                ButtonSegment(
-                  value: ServerProxyType.socks5,
-                  label: Text('serverProxySocks5'.tr()),
-                ),
-              ],
-              selected: {_proxyType},
-              onSelectionChanged: (value) =>
-                  setState(() => _proxyType = value.first),
-            ),
-            if (_proxyType != ServerProxyType.none) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _proxyHost,
+                      controller: _host,
                       decoration: InputDecoration(
-                        labelText: 'serverProxyHostLabel'.tr(),
+                        labelText: 'serverHostLabel'.tr(),
+                        suffixIcon: tailscaleRunning
+                            ? IconButton(
+                                tooltip: 'tailscalePickMachine'.tr(),
+                                icon: const Icon(Symbols.lan),
+                                onPressed: () => _pickTailscaleMachine(context),
+                              )
+                            : null,
                       ),
                       validator: _required,
                     ),
@@ -1645,10 +1513,10 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
                   SizedBox(
                     width: 100,
                     child: TextFormField(
-                      controller: _proxyPort,
+                      controller: _port,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: 'serverProxyPortLabel'.tr(),
+                        labelText: 'serverPortLabel'.tr(),
                       ),
                       validator: _validPort,
                     ),
@@ -1657,216 +1525,354 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _proxyUsername,
+                controller: _user,
                 decoration: InputDecoration(
-                  labelText: 'serverProxyUsernameLabel'.tr(),
+                  labelText: 'serverUsernameLabel'.tr(),
                 ),
+                validator: _required,
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _proxyPassword,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'serverProxyPasswordLabel'.tr(),
-                  helperText: widget.initial?.proxy != null
-                      ? 'serverProxyPasswordKeepHint'.tr()
-                      : null,
+              if (widget.credentials.isNotEmpty) ...[
+                DropdownButtonFormField<int?>(
+                  initialValue: _useNewCredential ? null : _credentialId,
+                  decoration: InputDecoration(
+                    labelText: 'serverCredentialLabel'.tr(),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: null,
+                      child: Text('serverCredentialNew'.tr()),
+                    ),
+                    ...widget.credentials.map(
+                      (credential) => DropdownMenuItem(
+                        value: credential.id,
+                        child: Text(credential.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _credentialId = value;
+                    _useNewCredential = value == null;
+                  }),
                 ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Text(
-              'serverEnvironmentLabel'.tr(),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'serverEnvironmentHint'.tr(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (final row in _envRows) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: row.name,
-                      decoration: InputDecoration(
-                        labelText: 'serverEnvNameLabel'.tr(),
-                        isDense: true,
+                const SizedBox(height: 12),
+              ],
+              if (_useNewCredential) ...[
+                SegmentedButton<CredentialType>(
+                  segments: [
+                    ButtonSegment(
+                      value: CredentialType.password,
+                      label: Text('serverAuthPassword'.tr()),
+                    ),
+                    ButtonSegment(
+                      value: CredentialType.privateKey,
+                      label: Text('serverAuthPrivateKey'.tr()),
+                    ),
+                  ],
+                  selected: {_type},
+                  onSelectionChanged: (value) =>
+                      setState(() => _type = value.first),
+                ),
+                const SizedBox(height: 12),
+                if (_type == CredentialType.password)
+                  TextFormField(
+                    controller: _secret,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'serverPasswordLabel'.tr(),
+                    ),
+                    validator: _required,
+                  )
+                else ...[
+                  TextFormField(
+                    controller: _secret,
+                    minLines: 4,
+                    maxLines: 8,
+                    validator: _required,
+                    decoration: InputDecoration(
+                      labelText: 'serverPrivateKeyLabel'.tr(),
+                      suffixIcon: IconButton(
+                        onPressed: _pickKey,
+                        icon: const Icon(Symbols.upload_file),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: row.value,
-                      decoration: InputDecoration(
-                        labelText: 'serverEnvValueLabel'.tr(),
-                        isDense: true,
-                      ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passphrase,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'serverKeyPassphraseLabel'.tr(),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'serverRemoveVariable'.tr(),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => _removeEnvRow(row),
-                    icon: const Icon(Symbols.close, size: 18),
                   ),
                 ],
+              ],
+              const SizedBox(height: 16),
+              Text(
+                'serverProxyLabel'.tr(),
+                style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
-            ],
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _addEnvRow,
-                icon: const Icon(Symbols.add, size: 18),
-                label: Text('serverAddEnvVar'.tr()),
+              SegmentedButton<ServerProxyType>(
+                segments: [
+                  ButtonSegment(
+                    value: ServerProxyType.none,
+                    label: Text('serverProxyNone'.tr()),
+                  ),
+                  ButtonSegment(
+                    value: ServerProxyType.http,
+                    label: Text('serverProxyHttp'.tr()),
+                  ),
+                  ButtonSegment(
+                    value: ServerProxyType.socks5,
+                    label: Text('serverProxySocks5'.tr()),
+                  ),
+                ],
+                selected: {_proxyType},
+                onSelectionChanged: (value) =>
+                    setState(() => _proxyType = value.first),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'serverInitialSnippetsLabel'.tr(),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'serverInitialSnippetsHint'.tr(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (widget.snippets.isEmpty)
+              if (_proxyType != ServerProxyType.none) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _proxyHost,
+                        decoration: InputDecoration(
+                          labelText: 'serverProxyHostLabel'.tr(),
+                        ),
+                        validator: _required,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 100,
+                      child: TextFormField(
+                        controller: _proxyPort,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'serverProxyPortLabel'.tr(),
+                        ),
+                        validator: _validPort,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _proxyUsername,
+                  decoration: InputDecoration(
+                    labelText: 'serverProxyUsernameLabel'.tr(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _proxyPassword,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'serverProxyPasswordLabel'.tr(),
+                    helperText: widget.initial?.proxy != null
+                        ? 'serverProxyPasswordKeepHint'.tr()
+                        : null,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
               Text(
-                'serverNoSnippetsHint'.tr(),
+                'serverEnvironmentLabel'.tr(),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'serverEnvironmentHint'.tr(),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final snippet in widget.snippets)
-                    FilterChip(
-                      label: Text(snippet.name),
-                      selected: _snippetIds.contains(snippet.id),
-                      onSelected: (selected) => setState(() {
-                        if (selected) {
-                          _snippetIds.add(snippet.id);
-                        } else {
-                          _snippetIds.remove(snippet.id);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-            const SizedBox(height: 16),
-            Text(
-              'serverTagsLabel'.tr(),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'serverTagsAddHint'.tr(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (_tags.isNotEmpty) ...[
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final tag in _tags)
-                    InputChip(
-                      label: Text(tag),
-                      onDeleted: () => setState(() => _tags.remove(tag)),
-                    ),
-                ],
               ),
               const SizedBox(height: 8),
-            ],
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _tagInput,
-                    decoration: InputDecoration(
-                      labelText: 'serverTagAdd'.tr(),
-                      isDense: true,
+              for (final row in _envRows) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: row.name,
+                        decoration: InputDecoration(
+                          labelText: 'serverEnvNameLabel'.tr(),
+                          isDense: true,
+                        ),
+                      ),
                     ),
-                    onSubmitted: (_) => _addTag(),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: row.value,
+                        decoration: InputDecoration(
+                          labelText: 'serverEnvValueLabel'.tr(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'serverRemoveVariable'.tr(),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _removeEnvRow(row),
+                      icon: const Icon(Symbols.close, size: 18),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  onPressed: _addTag,
+                const SizedBox(height: 8),
+              ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _addEnvRow,
                   icon: const Icon(Symbols.add, size: 18),
+                  label: Text('serverAddEnvVar'.tr()),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'serverInitialSnippetsLabel'.tr(),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'serverInitialSnippetsHint'.tr(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (widget.snippets.isEmpty)
+                Text(
+                  'serverNoSnippetsHint'.tr(),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final snippet in widget.snippets)
+                      FilterChip(
+                        label: Text(snippet.name),
+                        selected: _snippetIds.contains(snippet.id),
+                        onSelected: (selected) => setState(() {
+                          if (selected) {
+                            _snippetIds.add(snippet.id);
+                          } else {
+                            _snippetIds.remove(snippet.id);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              Text(
+                'serverTagsLabel'.tr(),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'serverTagsAddHint'.tr(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_tags.isNotEmpty) ...[
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final tag in _tags)
+                      InputChip(
+                        label: Text(tag),
+                        onDeleted: () => setState(() => _tags.remove(tag)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tagInput,
+                      decoration: InputDecoration(
+                        labelText: 'serverTagAdd'.tr(),
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _addTag(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    onPressed: _addTag,
+                    icon: const Icon(Symbols.add, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _group,
+                decoration: InputDecoration(
+                  labelText: 'serverGroupLabel'.tr(),
+                  helperText: 'serverGroupHint'.tr(),
+                ),
+              ),
+              if (widget.existingGroups.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final group in widget.existingGroups)
+                      ActionChip(
+                        label: Text(group),
+                        onPressed: () => _group.text = group,
+                      ),
+                  ],
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _group,
-              decoration: InputDecoration(
-                labelText: 'serverGroupLabel'.tr(),
-                helperText: 'serverGroupHint'.tr(),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('serverCollectStats'.tr()),
+                subtitle: Text('serverCollectStatsHint'.tr()),
+                value: _collectStats,
+                onChanged: (value) => setState(() => _collectStats = value),
               ),
-            ),
-            if (widget.existingGroups.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('serverDiscoverSystemInfo'.tr()),
+                subtitle: Text('serverDiscoverSystemInfoHint'.tr()),
+                value: _collectSystemInfo,
+                onChanged: (value) =>
+                    setState(() => _collectSystemInfo = value),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  for (final group in widget.existingGroups)
-                    ActionChip(
-                      label: Text(group),
-                      onPressed: () => _group.text = group,
-                    ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('commonCancel'.tr()),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _save,
+                    child: Text('serverSaveAndConnect'.tr()),
+                  ),
                 ],
               ),
             ],
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('serverCollectStats'.tr()),
-              subtitle: Text('serverCollectStatsHint'.tr()),
-              value: _collectStats,
-              onChanged: (value) => setState(() => _collectStats = value),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('serverDiscoverSystemInfo'.tr()),
-              subtitle: Text('serverDiscoverSystemInfoHint'.tr()),
-              value: _collectSystemInfo,
-              onChanged: (value) => setState(() => _collectSystemInfo = value),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('commonCancel'.tr()),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _save,
-                  child: Text('serverSaveAndConnect'.tr()),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
