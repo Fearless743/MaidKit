@@ -37,8 +37,6 @@ class Servers extends Table {
   TextColumn get environment => text().nullable()();
   TextColumn get initialSnippets => text().nullable()();
   TextColumn get tags => text().nullable()();
-  // Optional folder-like grouping shown in the server catalog.
-  TextColumn get groupName => text().nullable()();
 }
 
 /// An encrypted SSH credential that may be linked to by more than one server.
@@ -461,7 +459,6 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(servers, servers.environment);
         await m.addColumn(servers, servers.initialSnippets);
         await m.addColumn(servers, servers.tags);
-        await m.addColumn(servers, servers.groupName);
       }
     },
   );

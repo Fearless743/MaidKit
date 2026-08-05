@@ -31,11 +31,8 @@ class ServerDashboardTab extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => ServerEditorDialog(
-        credentials: credentials,
-        snippets: snippets,
-        existingGroups: serverGroupNames(ref),
-      ),
+      builder: (_) =>
+          ServerEditorDialog(credentials: credentials, snippets: snippets),
     );
     if (draft == null || !context.mounted) return;
     try {
@@ -89,7 +86,6 @@ class ServerDashboardTab extends ConsumerWidget {
         builder: (_) => ServerEditorDialog(
           credentials: credentials,
           snippets: snippets,
-          existingGroups: serverGroupNames(ref),
           initial: ServerDraft(
             name: server.name,
             host: server.host,
@@ -102,7 +98,6 @@ class ServerDashboardTab extends ConsumerWidget {
             environment: decodeEnvironmentMap(server.environment),
             initialSnippets: decodeSnippetIdList(server.initialSnippets),
             tags: decodeStringList(server.tags),
-            groupName: server.groupName,
           ),
         ),
       );
@@ -262,7 +257,6 @@ class _ServerGrid extends StatefulWidget {
 
 class _ServerGridState extends State<_ServerGrid> {
   var _isReconnecting = false;
-  String? _selectedGroup;
   final _selectedTags = <String>{};
 
   Future<void> _reconnectAll(List<Server> servers) async {
@@ -279,31 +273,15 @@ class _ServerGridState extends State<_ServerGrid> {
     final sessionsByServerId = {
       for (final session in widget.sessions) session.serverId: session,
     };
-    final groupNames =
-        widget.servers
-            .map((server) => server.groupName)
-            .whereType<String>()
-            .where((name) => name.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
     final allTags =
         widget.servers
             .expand((server) => decodeStringList(server.tags))
             .toSet()
             .toList()
           ..sort();
-    // A selected group may disappear when its last server is deleted or
-    // edited; fall back to no filter instead of rendering a stale dropdown.
-    final selectedGroup = groupNames.contains(_selectedGroup)
-        ? _selectedGroup
-        : null;
     final visibleServers = widget.servers.where((server) {
-      final groupMatches =
-          selectedGroup == null || server.groupName == selectedGroup;
       final tags = decodeStringList(server.tags).toSet();
-      final tagsMatch = _selectedTags.every(tags.contains);
-      return groupMatches && tagsMatch;
+      return _selectedTags.every(tags.contains);
     }).toList();
     final disconnectedServers = visibleServers.where((server) {
       final status = sessionsByServerId[server.id]?.status;
@@ -334,54 +312,30 @@ class _ServerGridState extends State<_ServerGrid> {
                 )
               : const SizedBox.shrink(key: ValueKey('servers-reconnect-none')),
         ),
-        if (groupNames.isNotEmpty || allTags.isNotEmpty)
+        if (allTags.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (groupNames.isNotEmpty) ...[
-                  DropdownButton<String?>(
-                    value: selectedGroup,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('serversFilterGroupAll'.tr()),
-                      ),
-                      for (final name in groupNames)
-                        DropdownMenuItem<String?>(
-                          value: name,
-                          child: Text(name),
-                        ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _selectedGroup = value),
-                  ),
-                  const SizedBox(width: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final tag in allTags)
+                    FilterChip(
+                      label: Text(tag),
+                      visualDensity: VisualDensity.compact,
+                      selected: _selectedTags.contains(tag),
+                      onSelected: (selected) => setState(() {
+                        if (selected) {
+                          _selectedTags.add(tag);
+                        } else {
+                          _selectedTags.remove(tag);
+                        }
+                      }),
+                    ),
                 ],
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final tag in allTags)
-                        FilterChip(
-                          label: Text(tag),
-                          visualDensity: VisualDensity.compact,
-                          selected: _selectedTags.contains(tag),
-                          onSelected: (selected) => setState(() {
-                            if (selected) {
-                              _selectedTags.add(tag);
-                            } else {
-                              _selectedTags.remove(tag);
-                            }
-                          }),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         if (visibleServers.isEmpty)
@@ -650,7 +604,7 @@ class _ServerCard extends StatelessWidget {
   }
 }
 
-/// Group and tag chips shown under a server card's title.
+/// Tag chips shown under a server card's title.
 class _ServerBadges extends StatelessWidget {
   const _ServerBadges({required this.server});
 
@@ -658,9 +612,8 @@ class _ServerBadges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupName = server.groupName;
     final tags = decodeStringList(server.tags);
-    if ((groupName == null || groupName.isEmpty) && tags.isEmpty) {
+    if (tags.isEmpty) {
       return const SizedBox.shrink();
     }
     final colorScheme = Theme.of(context).colorScheme;
@@ -669,22 +622,13 @@ class _ServerBadges extends StatelessWidget {
       color: colorScheme.onSurfaceVariant,
     );
 
-    Widget chip(String label, {IconData? icon}) => Container(
+    Widget chip(String label) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 12, color: colorScheme.onSurfaceVariant),
-            const SizedBox(width: 3),
-          ],
-          Text(label, style: chipTextStyle),
-        ],
-      ),
+      child: Text(label, style: chipTextStyle),
     );
 
     return Padding(
@@ -693,8 +637,6 @@ class _ServerBadges extends StatelessWidget {
         spacing: 4,
         runSpacing: 4,
         children: [
-          if (groupName != null && groupName.isNotEmpty)
-            chip(groupName, icon: Symbols.folder),
           for (final tag in tags.take(3)) chip(tag),
           if (tags.length > 3) chip('+${tags.length - 3}'),
         ],
@@ -1220,7 +1162,6 @@ class ServerEditorDialog extends ConsumerStatefulWidget {
     required this.credentials,
     this.initial,
     this.snippets = const [],
-    this.existingGroups = const [],
   });
 
   final ServerDraft? initial;
@@ -1228,9 +1169,6 @@ class ServerEditorDialog extends ConsumerStatefulWidget {
 
   /// Saved snippets offered as initial-snippet choices for this server.
   final List<ScriptSnippet> snippets;
-
-  /// Group names already used by other servers, offered for quick reuse.
-  final List<String> existingGroups;
   @override
   ConsumerState<ServerEditorDialog> createState() => _AddServerDialogState();
 }
@@ -1258,13 +1196,12 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
   final _proxyUsername = TextEditingController();
   final _proxyPassword = TextEditingController();
 
-  // Per-server environment variables, initial snippets, tags, and group.
+  // Per-server environment variables, initial snippets, and tags.
   final _envRows =
       <({TextEditingController name, TextEditingController value})>[];
   final _snippetIds = <int>{};
   final _tags = <String>[];
   final _tagInput = TextEditingController();
-  final _group = TextEditingController();
 
   @override
   void initState() {
@@ -1294,7 +1231,6 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
       // The stored password is not decrypted into the form; leaving the field
       // blank keeps the existing password when saving.
     }
-    _group.text = initial.groupName ?? '';
     _tags.addAll(initial.tags);
     _snippetIds.addAll(initial.initialSnippets);
     for (final entry in initial.environment.entries) {
@@ -1319,7 +1255,6 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
       _proxyUsername,
       _proxyPassword,
       _tagInput,
-      _group,
     ]) {
       controller.dispose();
     }
@@ -1462,7 +1397,6 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
         },
         initialSnippets: _snippetIds.toList(),
         tags: List.of(_tags),
-        groupName: _group.text.trim().isEmpty ? null : _group.text.trim(),
       ),
     );
   }
@@ -1817,28 +1751,6 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
                 ],
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _group,
-                decoration: InputDecoration(
-                  labelText: 'serverGroupLabel'.tr(),
-                  helperText: 'serverGroupHint'.tr(),
-                ),
-              ),
-              if (widget.existingGroups.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final group in widget.existingGroups)
-                      ActionChip(
-                        label: Text(group),
-                        onPressed: () => _group.text = group,
-                      ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('serverCollectStats'.tr()),

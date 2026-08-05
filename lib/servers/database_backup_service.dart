@@ -251,7 +251,6 @@ class DatabaseBackupService {
                 environment: Value(server.environment),
                 initialSnippets: Value(server.initialSnippets),
                 tags: Value(server.tags),
-                groupName: Value(server.groupName),
               ),
             );
       }

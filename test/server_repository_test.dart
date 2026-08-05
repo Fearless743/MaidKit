@@ -49,7 +49,7 @@ void main() {
           ),
         );
 
-    test('create persists environment, snippets, tags, and group', () async {
+    test('create persists environment, snippets, and tags', () async {
       final credentialId = await insertCredential();
       final server = await repository.create(
         ServerDraft(
@@ -61,7 +61,6 @@ void main() {
           environment: {'KUBECONFIG': '/etc/kubernetes/admin.conf'},
           initialSnippets: [3, 7],
           tags: ['prod', 'eu-west'],
-          groupName: 'Databases',
         ),
       );
 
@@ -70,7 +69,6 @@ void main() {
       });
       expect(decodeSnippetIdList(server.initialSnippets), [3, 7]);
       expect(decodeStringList(server.tags), ['prod', 'eu-west']);
-      expect(server.groupName, 'Databases');
     });
 
     test('update replaces the stored configuration', () async {
@@ -97,7 +95,6 @@ void main() {
           environment: {'STAGE': 'production', 'PORT': '8080'},
           initialSnippets: [9],
           tags: ['prod'],
-          groupName: 'Web',
         ),
       );
 
@@ -108,7 +105,6 @@ void main() {
       });
       expect(decodeSnippetIdList(updated.initialSnippets), [9]);
       expect(decodeStringList(updated.tags), ['prod']);
-      expect(updated.groupName, 'Web');
     });
 
     test('empty configuration is stored as null', () async {
@@ -126,7 +122,6 @@ void main() {
       expect(server.environment, isNull);
       expect(server.initialSnippets, isNull);
       expect(server.tags, isNull);
-      expect(server.groupName, isNull);
       expect(decodeEnvironmentMap(server.environment), isEmpty);
       expect(decodeSnippetIdList(server.initialSnippets), isEmpty);
       expect(decodeStringList(server.tags), isEmpty);

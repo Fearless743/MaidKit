@@ -65,7 +65,6 @@ class ServerDraft {
     this.environment = const {},
     this.initialSnippets = const [],
     this.tags = const [],
-    this.groupName,
   });
 
   final String name;
@@ -92,9 +91,6 @@ class ServerDraft {
 
   /// Free-form labels shown on the server card and usable as filters.
   final List<String> tags;
-
-  /// Folder-like group the server belongs to in the catalog.
-  final String? groupName;
 }
 
 /// JSON-encodes [environment] for storage, or null when it is empty.

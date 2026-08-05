@@ -94,11 +94,8 @@ class ServerAssetsSection extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => ServerEditorDialog(
-        credentials: credentials,
-        snippets: snippets,
-        existingGroups: serverGroupNames(ref),
-      ),
+      builder: (_) =>
+          ServerEditorDialog(credentials: credentials, snippets: snippets),
     );
     if (draft == null) return;
     try {
@@ -124,7 +121,6 @@ class ServerAssetsSection extends ConsumerWidget {
         builder: (_) => ServerEditorDialog(
           credentials: credentials,
           snippets: snippets,
-          existingGroups: serverGroupNames(ref),
           initial: ServerDraft(
             name: server.name,
             host: server.host,
@@ -137,7 +133,6 @@ class ServerAssetsSection extends ConsumerWidget {
             environment: decodeEnvironmentMap(server.environment),
             initialSnippets: decodeSnippetIdList(server.initialSnippets),
             tags: decodeStringList(server.tags),
-            groupName: server.groupName,
           ),
         ),
       );

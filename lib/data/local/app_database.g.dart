@@ -307,17 +307,6 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _groupNameMeta = const VerificationMeta(
-    'groupName',
-  );
-  @override
-  late final GeneratedColumn<String> groupName = GeneratedColumn<String>(
-    'group_name',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -347,7 +336,6 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     environment,
     initialSnippets,
     tags,
-    groupName,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -568,12 +556,6 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
       );
     }
-    if (data.containsKey('group_name')) {
-      context.handle(
-        _groupNameMeta,
-        groupName.isAcceptableOrUnknown(data['group_name']!, _groupNameMeta),
-      );
-    }
     return context;
   }
 
@@ -691,10 +673,6 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         DriftSqlType.string,
         data['${effectivePrefix}tags'],
       ),
-      groupName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}group_name'],
-      ),
     );
   }
 
@@ -732,7 +710,6 @@ class Server extends DataClass implements Insertable<Server> {
   final String? environment;
   final String? initialSnippets;
   final String? tags;
-  final String? groupName;
   const Server({
     required this.id,
     required this.name,
@@ -761,7 +738,6 @@ class Server extends DataClass implements Insertable<Server> {
     this.environment,
     this.initialSnippets,
     this.tags,
-    this.groupName,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -835,9 +811,6 @@ class Server extends DataClass implements Insertable<Server> {
     if (!nullToAbsent || tags != null) {
       map['tags'] = Variable<String>(tags);
     }
-    if (!nullToAbsent || groupName != null) {
-      map['group_name'] = Variable<String>(groupName);
-    }
     return map;
   }
 
@@ -908,9 +881,6 @@ class Server extends DataClass implements Insertable<Server> {
           ? const Value.absent()
           : Value(initialSnippets),
       tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
-      groupName: groupName == null && nullToAbsent
-          ? const Value.absent()
-          : Value(groupName),
     );
   }
 
@@ -955,7 +925,6 @@ class Server extends DataClass implements Insertable<Server> {
       environment: serializer.fromJson<String?>(json['environment']),
       initialSnippets: serializer.fromJson<String?>(json['initialSnippets']),
       tags: serializer.fromJson<String?>(json['tags']),
-      groupName: serializer.fromJson<String?>(json['groupName']),
     );
   }
   @override
@@ -991,7 +960,6 @@ class Server extends DataClass implements Insertable<Server> {
       'environment': serializer.toJson<String?>(environment),
       'initialSnippets': serializer.toJson<String?>(initialSnippets),
       'tags': serializer.toJson<String?>(tags),
-      'groupName': serializer.toJson<String?>(groupName),
     };
   }
 
@@ -1023,7 +991,6 @@ class Server extends DataClass implements Insertable<Server> {
     Value<String?> environment = const Value.absent(),
     Value<String?> initialSnippets = const Value.absent(),
     Value<String?> tags = const Value.absent(),
-    Value<String?> groupName = const Value.absent(),
   }) => Server(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -1072,7 +1039,6 @@ class Server extends DataClass implements Insertable<Server> {
         ? initialSnippets.value
         : this.initialSnippets,
     tags: tags.present ? tags.value : this.tags,
-    groupName: groupName.present ? groupName.value : this.groupName,
   );
   Server copyWithCompanion(ServersCompanion data) {
     return Server(
@@ -1131,7 +1097,6 @@ class Server extends DataClass implements Insertable<Server> {
           ? data.initialSnippets.value
           : this.initialSnippets,
       tags: data.tags.present ? data.tags.value : this.tags,
-      groupName: data.groupName.present ? data.groupName.value : this.groupName,
     );
   }
 
@@ -1164,8 +1129,7 @@ class Server extends DataClass implements Insertable<Server> {
           ..write('proxyPasswordNonce: $proxyPasswordNonce, ')
           ..write('environment: $environment, ')
           ..write('initialSnippets: $initialSnippets, ')
-          ..write('tags: $tags, ')
-          ..write('groupName: $groupName')
+          ..write('tags: $tags')
           ..write(')'))
         .toString();
   }
@@ -1199,7 +1163,6 @@ class Server extends DataClass implements Insertable<Server> {
     environment,
     initialSnippets,
     tags,
-    groupName,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1231,8 +1194,7 @@ class Server extends DataClass implements Insertable<Server> {
           other.proxyPasswordNonce == this.proxyPasswordNonce &&
           other.environment == this.environment &&
           other.initialSnippets == this.initialSnippets &&
-          other.tags == this.tags &&
-          other.groupName == this.groupName);
+          other.tags == this.tags);
 }
 
 class ServersCompanion extends UpdateCompanion<Server> {
@@ -1263,7 +1225,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
   final Value<String?> environment;
   final Value<String?> initialSnippets;
   final Value<String?> tags;
-  final Value<String?> groupName;
   const ServersCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -1292,7 +1253,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.environment = const Value.absent(),
     this.initialSnippets = const Value.absent(),
     this.tags = const Value.absent(),
-    this.groupName = const Value.absent(),
   });
   ServersCompanion.insert({
     this.id = const Value.absent(),
@@ -1322,7 +1282,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.environment = const Value.absent(),
     this.initialSnippets = const Value.absent(),
     this.tags = const Value.absent(),
-    this.groupName = const Value.absent(),
   }) : name = Value(name),
        host = Value(host),
        username = Value(username);
@@ -1354,7 +1313,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Expression<String>? environment,
     Expression<String>? initialSnippets,
     Expression<String>? tags,
-    Expression<String>? groupName,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1388,7 +1346,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
       if (environment != null) 'environment': environment,
       if (initialSnippets != null) 'initial_snippets': initialSnippets,
       if (tags != null) 'tags': tags,
-      if (groupName != null) 'group_name': groupName,
     });
   }
 
@@ -1420,7 +1377,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Value<String?>? environment,
     Value<String?>? initialSnippets,
     Value<String?>? tags,
-    Value<String?>? groupName,
   }) {
     return ServersCompanion(
       id: id ?? this.id,
@@ -1451,7 +1407,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
       environment: environment ?? this.environment,
       initialSnippets: initialSnippets ?? this.initialSnippets,
       tags: tags ?? this.tags,
-      groupName: groupName ?? this.groupName,
     );
   }
 
@@ -1541,9 +1496,6 @@ class ServersCompanion extends UpdateCompanion<Server> {
     if (tags.present) {
       map['tags'] = Variable<String>(tags.value);
     }
-    if (groupName.present) {
-      map['group_name'] = Variable<String>(groupName.value);
-    }
     return map;
   }
 
@@ -1576,8 +1528,7 @@ class ServersCompanion extends UpdateCompanion<Server> {
           ..write('proxyPasswordNonce: $proxyPasswordNonce, ')
           ..write('environment: $environment, ')
           ..write('initialSnippets: $initialSnippets, ')
-          ..write('tags: $tags, ')
-          ..write('groupName: $groupName')
+          ..write('tags: $tags')
           ..write(')'))
         .toString();
   }
@@ -8270,7 +8221,6 @@ typedef $$ServersTableCreateCompanionBuilder =
       Value<String?> environment,
       Value<String?> initialSnippets,
       Value<String?> tags,
-      Value<String?> groupName,
     });
 typedef $$ServersTableUpdateCompanionBuilder =
     ServersCompanion Function({
@@ -8301,7 +8251,6 @@ typedef $$ServersTableUpdateCompanionBuilder =
       Value<String?> environment,
       Value<String?> initialSnippets,
       Value<String?> tags,
-      Value<String?> groupName,
     });
 
 class $$ServersTableFilterComposer
@@ -8445,11 +8394,6 @@ class $$ServersTableFilterComposer
 
   ColumnFilters<String> get tags => $composableBuilder(
     column: $table.tags,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get groupName => $composableBuilder(
-    column: $table.groupName,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8597,11 +8541,6 @@ class $$ServersTableOrderingComposer
     column: $table.tags,
     builder: (column) => ColumnOrderings(column),
   );
-
-  ColumnOrderings<String> get groupName => $composableBuilder(
-    column: $table.groupName,
-    builder: (column) => ColumnOrderings(column),
-  );
 }
 
 class $$ServersTableAnnotationComposer
@@ -8721,9 +8660,6 @@ class $$ServersTableAnnotationComposer
 
   GeneratedColumn<String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
-
-  GeneratedColumn<String> get groupName =>
-      $composableBuilder(column: $table.groupName, builder: (column) => column);
 }
 
 class $$ServersTableTableManager
@@ -8781,7 +8717,6 @@ class $$ServersTableTableManager
                 Value<String?> environment = const Value.absent(),
                 Value<String?> initialSnippets = const Value.absent(),
                 Value<String?> tags = const Value.absent(),
-                Value<String?> groupName = const Value.absent(),
               }) => ServersCompanion(
                 id: id,
                 name: name,
@@ -8810,7 +8745,6 @@ class $$ServersTableTableManager
                 environment: environment,
                 initialSnippets: initialSnippets,
                 tags: tags,
-                groupName: groupName,
               ),
           createCompanionCallback:
               ({
@@ -8841,7 +8775,6 @@ class $$ServersTableTableManager
                 Value<String?> environment = const Value.absent(),
                 Value<String?> initialSnippets = const Value.absent(),
                 Value<String?> tags = const Value.absent(),
-                Value<String?> groupName = const Value.absent(),
               }) => ServersCompanion.insert(
                 id: id,
                 name: name,
@@ -8870,7 +8803,6 @@ class $$ServersTableTableManager
                 environment: environment,
                 initialSnippets: initialSnippets,
                 tags: tags,
-                groupName: groupName,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
