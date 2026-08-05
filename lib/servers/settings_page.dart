@@ -26,6 +26,7 @@ import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'database_backup_service.dart';
 import 'cloud_sync_service.dart';
 import 'server_providers.dart';
+import 'tailscale_settings_section.dart';
 import 'terminal_adapter_preferences.dart';
 import 'terminal_color_scheme.dart';
 import 'vault_service.dart';
@@ -414,6 +415,12 @@ class SettingsPage extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 24),
+              _SettingsSection(
+                titleKey: 'settingsTailscale',
+                padding: EdgeInsets.zero,
+                child: const TailscaleSettingsSection(),
               ),
               const SizedBox(height: 24),
               _SettingsSection(

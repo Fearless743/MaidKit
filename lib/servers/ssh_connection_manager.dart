@@ -16,6 +16,7 @@ import 'server_metrics_collector.dart';
 import 'server_models.dart';
 import 'ssh_proxy_connect.dart';
 import 'systemd_models.dart';
+import 'tailscale_ssh_socket.dart';
 import 'terminal_session_adapter.dart';
 import 'web_server_adapter.dart';
 import 'web_server_adapters.dart';
@@ -3385,12 +3386,15 @@ fi
     final identities = credential.type == CredentialType.privateKey
         ? SSHKeyPair.fromPem(credential.privateKey!, credential.keyPassphrase)
         : null;
+    final socket = isTailnetAddress(server.host)
+        ? await TailscaleSshSocket.connect(server.host, server.port)
+        : await _LowLatencySshSocket.connect(
+            server.host,
+            server.port,
+            proxy: proxy,
+          );
     final client = SSHClient(
-      await _LowLatencySshSocket.connect(
-        server.host,
-        server.port,
-        proxy: proxy,
-      ),
+      socket,
       username: server.username,
       identities: identities,
       onPasswordRequest: credential.type == CredentialType.password

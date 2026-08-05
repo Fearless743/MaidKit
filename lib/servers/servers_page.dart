@@ -7,6 +7,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:styled_widget/styled_widget.dart';
 import 'package:super_context_menu/super_context_menu.dart';
+import 'package:tailscale/tailscale.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
@@ -14,6 +15,7 @@ import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'sessions_page.dart';
+import 'tailscale_service.dart';
 import 'terminal_tabs_provider.dart';
 
 class ServerDashboardTab extends ConsumerWidget {
@@ -1145,6 +1147,51 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
     }
   }
 
+  /// Fills the host with a tailnet machine's IP. Requires the embedded
+  /// Tailscale node to be up (sign in under Settings → Tailscale first).
+  Future<void> _pickTailscaleMachine(BuildContext context) async {
+    List<TailscaleNode> nodes;
+    try {
+      await ensureTailscaleInitialized();
+      nodes = await Tailscale.instance.nodes();
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('tailscaleNotRunning'.tr())));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final online = nodes.where((node) => node.online).toList();
+    if (online.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('tailscaleNoMachines'.tr())));
+      return;
+    }
+    final address = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('tailscalePickMachine'.tr()),
+        children: [
+          for (final node in online)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, node.ipv4),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(node.hostName),
+                subtitle: Text(
+                  node.tailscaleIPs.where((ip) => !ip.contains(':')).join(', '),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (address != null) setState(() => _host.text = address);
+  }
+
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'serverPortRequired'.tr() : null;
   String? _validPort(String? value) {
@@ -1217,6 +1264,13 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
                     controller: _host,
                     decoration: InputDecoration(
                       labelText: 'serverHostLabel'.tr(),
+                      suffixIcon: tailscaleSupported
+                          ? IconButton(
+                              tooltip: 'tailscalePickMachine'.tr(),
+                              icon: const Icon(Symbols.lan),
+                              onPressed: () => _pickTailscaleMachine(context),
+                            )
+                          : null,
                     ),
                     validator: _required,
                   ),
