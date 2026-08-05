@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/agent/agent_input_focus.dart';
+import 'package:maid_kit/github/github_providers.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
@@ -26,6 +27,7 @@ class ServerWorkspacePage extends StatelessWidget {
         ProjectsRoute(),
         SnippetsRoute(),
         AgentRoute(),
+        GitHubRoute(),
         SettingsRoute(),
       ],
       duration: const Duration(milliseconds: 180),
@@ -54,6 +56,7 @@ class _ServerTabsShell extends ConsumerWidget {
           ),
         );
     final isAgentInputFocused = ref.watch(agentInputFocusedProvider);
+    final githubHasFailures = ref.watch(githubHasFailuresProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -70,7 +73,7 @@ class _ServerTabsShell extends ConsumerWidget {
                   children: [
                     NavigationRail(
                       backgroundColor: Colors.transparent,
-                      selectedIndex: tabsRouter.activeIndex < 5
+                      selectedIndex: tabsRouter.activeIndex < 6
                           ? tabsRouter.activeIndex
                           : null,
                       onDestinationSelected: tabsRouter.setActiveIndex,
@@ -85,11 +88,11 @@ class _ServerTabsShell extends ConsumerWidget {
                             const DeploySessionsRailButton(),
                             const SizedBox(height: 8),
                             _CloudAccountRailButton(
-                              onPressed: () => tabsRouter.setActiveIndex(5),
+                              onPressed: () => tabsRouter.setActiveIndex(6),
                             ),
                             IconButton(
                               tooltip: 'tabSettings'.tr(),
-                              onPressed: () => tabsRouter.setActiveIndex(5),
+                              onPressed: () => tabsRouter.setActiveIndex(6),
                               icon: const Icon(Symbols.settings),
                             ),
                           ],
@@ -126,6 +129,17 @@ class _ServerTabsShell extends ConsumerWidget {
                           icon: Icon(Symbols.smart_toy),
                           selectedIcon: Icon(Symbols.smart_toy, fill: 1),
                           label: Text('Agent'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Badge(
+                            isLabelVisible: githubHasFailures,
+                            child: const Icon(Symbols.rocket_launch),
+                          ),
+                          selectedIcon: Badge(
+                            isLabelVisible: githubHasFailures,
+                            child: const Icon(Symbols.rocket_launch, fill: 1),
+                          ),
+                          label: Text('tabGithub'.tr()),
                         ),
                       ],
                     ),
@@ -184,6 +198,17 @@ class _ServerTabsShell extends ConsumerWidget {
                         icon: Icon(Symbols.smart_toy),
                         selectedIcon: Icon(Symbols.smart_toy, fill: 1),
                         label: 'Agent',
+                      ),
+                      NavigationDestination(
+                        icon: Badge(
+                          isLabelVisible: githubHasFailures,
+                          child: const Icon(Symbols.rocket_launch),
+                        ),
+                        selectedIcon: Badge(
+                          isLabelVisible: githubHasFailures,
+                          child: const Icon(Symbols.rocket_launch, fill: 1),
+                        ),
+                        label: 'tabGithub'.tr(),
                       ),
                       NavigationDestination(
                         icon: const Icon(Symbols.settings, fill: 1),

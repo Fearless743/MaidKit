@@ -18,6 +18,7 @@ import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
 import 'package:maid_kit/github/github_mcp_tools.dart';
+import 'package:maid_kit/github/github_providers.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 
 /// Lifecycle of the in-app MCP server exposed to other local agents.
@@ -86,9 +87,11 @@ class LocalMcpServerPreferences {
 }
 
 /// The tool surface the protocol serves. Split from the HTTP/JSON-RPC layer
-/// so tests can drive the protocol with a fake tool set.
+/// so tests can drive the protocol with a fake tool set. Resolves
+/// asynchronously because the surface can depend on runtime state (e.g. the
+/// GitHub tools are hidden until a GitHub account is signed in).
 abstract interface class LocalMcpToolInvoker {
-  List<Map<String, dynamic>> get toolDefinitions;
+  Future<List<Map<String, dynamic>>> get toolDefinitions;
 
   /// Executes [name] with [arguments] and returns an MCP `tools/call` result
   /// map (`content` + `isError`). Throws [ArgumentError] or
@@ -149,7 +152,7 @@ class LocalMcpProtocolHandler {
       case 'ping':
         return _result(id, const <String, Object?>{});
       case 'tools/list':
-        return _result(id, {'tools': invoker.toolDefinitions});
+        return _result(id, {'tools': await invoker.toolDefinitions});
       case 'tools/call':
         return _handleCall(id, message['params']);
       default:
@@ -351,7 +354,9 @@ class LocalMcpServer {
       jsonEncode({
         'name': 'MaidKit',
         'status': 'running',
-        'tools': [for (final tool in executor.toolDefinitions) tool['name']],
+        'tools': [
+          for (final tool in await executor.toolDefinitions) tool['name'],
+        ],
       }),
     );
     await response.close();
@@ -419,7 +424,18 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
   final Ref ref;
 
   @override
-  List<Map<String, dynamic>> get toolDefinitions => definitions;
+  Future<List<Map<String, dynamic>>> get toolDefinitions async {
+    // GitHub tools are hidden from other agents until this device has a
+    // signed-in GitHub account with a device token; otherwise they would
+    // advertise tools that always fail.
+    final cwt = await ref.read(githubTokenForConnectionProvider.future);
+    if (cwt != null) return _toolDefinitions;
+    return [
+      for (final tool in _toolDefinitions)
+        if (!GitHubMcpToolHandlers.isGitHubTool(tool['name'] as String? ?? ''))
+          tool,
+    ];
+  }
 
   /// The tool surface this executor serves, kept static so tests can inspect
   /// it without constructing a Riverpod-backed instance.

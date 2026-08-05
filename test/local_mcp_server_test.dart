@@ -17,7 +17,7 @@ class _FakeInvoker implements LocalMcpToolInvoker {
   final callers = <String?>[];
 
   @override
-  List<Map<String, dynamic>> get toolDefinitions => const [
+  Future<List<Map<String, dynamic>>> get toolDefinitions async => const [
     {
       'name': 'echo',
       'description': 'Echoes the input text.',
@@ -113,7 +113,7 @@ void main() {
     test('tools/list returns the invoker tool definitions', () async {
       final response = await handler.handle(_request(3, 'tools/list'));
       final result = response!['result'] as Map<String, dynamic>;
-      expect(result['tools'], invoker.toolDefinitions);
+      expect(result['tools'], await invoker.toolDefinitions);
     });
 
     test('tools/call invokes the tool and returns its result', () async {
@@ -204,7 +204,7 @@ void main() {
   });
 
   group('LocalMcpToolExecutor tool surface', () {
-    test('exposes the thirteen MaidKit resource tools', () {
+    test('exposes the eighteen MaidKit resource tools', () {
       final definitions = LocalMcpToolExecutor.definitions;
       final names = [for (final tool in definitions) tool['name']];
       expect(names, [
@@ -221,6 +221,11 @@ void main() {
         'get_skill',
         'get_review_mode',
         'set_review_mode',
+        'github_list_runs',
+        'github_get_run',
+        'github_list_jobs',
+        'github_open_prs',
+        'github_get_release',
       ]);
       final runCommand = definitions.firstWhere(
         (tool) => tool['name'] == 'run_command',
@@ -230,6 +235,12 @@ void main() {
       final properties = schema['properties'] as Map<String, dynamic>;
       expect(properties['server_id']['type'], 'integer');
       expect(properties['command']['type'], 'string');
+
+      final listRuns = definitions.firstWhere(
+        (tool) => tool['name'] == 'github_list_runs',
+      );
+      final listRunsSchema = listRuns['inputSchema'] as Map<String, dynamic>;
+      expect(listRunsSchema['required'], ['owner', 'name']);
     });
   });
 

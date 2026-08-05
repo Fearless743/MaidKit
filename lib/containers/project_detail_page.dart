@@ -9,6 +9,7 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/github/github_project_link_section.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/servers/server_connection_actions.dart';
 import 'package:maid_kit/servers/server_models.dart';
@@ -318,6 +319,8 @@ class _ProjectDetailState extends ConsumerState<_ProjectDetail> {
                         ),
                     ],
                   ),
+                  const SizedBox(height: 20),
+                  GitHubProjectLinkSection(projectId: widget.project.id),
                   if (widget.resources.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     LayoutBuilder(
