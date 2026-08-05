@@ -1,6 +1,5 @@
 {
   "title": "MaidKit",
-
   "commonCancel": "取消",
   "commonSave": "保存",
   "commonContinue": "继续",
@@ -29,14 +28,12 @@
   "commonYes": "是",
   "commonNo": "否",
   "commonOk": "确定",
-
   "tabDashboard": "仪表盘",
   "tabServers": "服务器",
   "tabAssets": "资产",
   "tabProjects": "项目",
   "tabSnippets": "脚本片段",
   "tabGithub": "GitHub",
-
   "githubSignInTitle": "使用 GitHub 登录",
   "githubSignInDescription": "查看 GitHub Actions 运行状态、Pull Request 和 Releases。",
   "githubTokenLocalHint": "您的 GitHub 令牌只保存在本机，不会随保险库同步。",
@@ -56,11 +53,6 @@
   "githubRuns": "工作流运行",
   "githubRefresh": "刷新",
   "githubNoRuns": "暂无工作流运行。",
-  "githubPullRequests": "Pull Request",
-  "githubNoPullRequests": "暂无打开的 Pull Request。",
-  "githubReleases": "Releases",
-  "githubNoReleases": "暂无 Releases。",
-  "githubFailureBanner": "有 {} 个工作流运行失败，请查看下方列表。",
   "githubStatusFailing": "{} 个失败",
   "githubActor": "by {}",
   "githubDraft": "草稿",
@@ -86,7 +78,6 @@
   "githubConclusionUnknown": "未知",
   "tabSessions": "会话",
   "tabSettings": "设置",
-
   "snippetsEmpty": "还没有脚本片段",
   "snippetsEmptyHint": "保存一次 Shell 脚本，即可在一个或多个已连接服务器上运行。",
   "snippetsNew": "新建脚本片段",
@@ -99,7 +90,6 @@
   "snippetsSelectServers": "选择运行服务器",
   "snippetsSelectServersHint": "选择要执行此脚本的已连接服务器。",
   "snippetsNoConnectedServers": "请先连接至少一台服务器，再运行脚本片段。",
-
   "settingsDisplayLanguage": "显示语言",
   "languageFollowSystem": "跟随系统",
   "settingsTitle": "设置",
@@ -182,7 +172,6 @@
   "agentRunPolicyAutoReviewHint": "只读或助手标记为安全的操作直接运行，其余需要审查。",
   "agentRunPolicyAlwaysAsk": "始终询问",
   "agentRunPolicyAlwaysAskHint": "每次运行前都展示提议的操作供审查。",
-
   "agentInterrupted": "已中断。",
   "agentError": "错误：{}",
   "agentProviderGone": "AI 提供方已不可用。",
@@ -333,7 +322,6 @@
   "mcpReviewModeAutoReviewHint": "只读操作自动执行，其余操作仍需询问。",
   "mcpReviewModeAlwaysApprove": "总是批准",
   "mcpReviewModeAlwaysApproveHint": "操作无需询问直接执行。",
-
   "settingsSecurity": "安全",
   "settingsAccount": "Solarpass",
   "settingsSolarNetworkAi": "Solar Network AI",
@@ -438,7 +426,6 @@
   "settingsIntervalMinutes": "{} 分钟",
   "settingsAbout": "关于",
   "settingsAboutHint": "版本、开源许可与致谢。",
-
   "aboutTitle": "关于 MaidKit",
   "aboutDescription": "小羊在给服务器当女仆的时候（维护服务器）用到的工具合集。\n旨在提供一个非侵入式（100% 基于 SSH，不在服务器上安装任何软件，增加安全风险）更加方便的维护服务器。",
   "aboutLogo": "图标灵感来自 Alma、由 ChatGPT Image 创作、角色为小羊的 OC 阳绛",
@@ -453,7 +440,6 @@
   "aboutCopyright": "© {} Solsynth",
   "aboutMadeWith": "由 LittleSheep + ❤️ 打造",
   "aboutLoadError": "无法加载应用信息：{}",
-
   "vaultUnlockTitle": "解锁 MaidKit",
   "vaultCreateTitle": "创建您的金库",
   "vaultDownloadedTitle": "解锁已下载的金库",
@@ -470,7 +456,6 @@
   "vaultPasswordsDontMatch": "两次输入的密码不一致。",
   "vaultDownloadedPasswordInvalid": "此密码无法解密已下载的金库。",
   "vaultOpenError": "无法打开金库：{}",
-
   "serversEmpty": "暂无服务器",
   "serversEmptyHint": "添加一个 SSH 主机以开始通过 MaidKit 管理它。",
   "serversAddServer": "添加服务器",
@@ -572,7 +557,6 @@
   "tailscaleNotRunning": "Tailscale 未连接。请先在「设置 → Tailscale」中登录。",
   "tailscaleNoMachines": "没有在线的 tailnet 机器。",
   "tailscaleViaTailnet": "通过 Tailscale 连接",
-
   "serverVerifyHostKey": "验证 SSH 主机密钥",
   "serverHostKeyChanged": "此主机密钥已更改。仅在预期服务器已重建或重新配置时确认。",
   "serverHostKeyNew": "在发送凭据之前确认此指纹。MaidKit 将在将来记住它。",
@@ -582,7 +566,6 @@
   "serverCannotConnect": "无法连接",
   "serverOpeningTerminal": "正在 {} 上打开终端…",
   "serverCannotOpenTerminal": "无法打开终端",
-
   "detailOverview": "概览",
   "detailPerformance": "性能",
   "detailSpecifications": "规格",
@@ -620,7 +603,6 @@
   "detailKillProcessMessage": "立即向 {}（pid {}）发送 SIGKILL。进程无法清理资源。",
   "detailKillProcessSuccess": "已向 {} 发送 SIGKILL",
   "detailKillProcessError": "无法结束进程：{}",
-
   "sessionsDropTabHere": "拖放标签页到此处",
   "sessionsNewPane": "新建面板",
   "sessionsSplitRight": "向右拆分",
@@ -636,7 +618,6 @@
   "sessionsCloseAllTabs": "关闭 {} 上的所有标签页",
   "sessionsSearchActions": "搜索会话操作",
   "sessionsOpenCount": "{} 个打开",
-
   "terminalFindInTerminal": "在终端中查找",
   "terminalNoResults": "无结果",
   "terminalCaseSensitive": "Aa",
@@ -644,7 +625,6 @@
   "terminalNextMatch": "下一个匹配",
   "terminalKeysMore": "展开更多按键",
   "terminalKeysFewer": "收起按键",
-
   "activityLiveActivity": "实时活动",
   "activityRefreshNow": "立即刷新",
   "activityNetworkDown": "网络 ↓",
@@ -653,7 +633,6 @@
   "activityCollectingNetworkRates": "正在收集网络速率…",
   "activityConnectToStream": "连接以流式传输实时活动。",
   "activityError": "无法收集活动：{}",
-
   "systemdTryAgain": "重试",
   "systemdServices": "服务",
   "systemdServiceActionFailed": "服务操作失败",
@@ -686,7 +665,6 @@
   "systemdFilterInactive": "非活动 ({})",
   "systemdClearFilter": "清除",
   "systemdLogsTitle": "日志 · {}",
-
   "crontabTitle": "定时任务",
   "crontabUpdateFailed": "定时任务更新失败",
   "crontabJobAdded": "作业已添加。",
@@ -718,7 +696,6 @@
   "crontabCommandHint": "/usr/bin/example --flag",
   "crontabCommandRequired": "命令不能为空",
   "crontabExamples": "示例：0 2 * * * 每晚 · */15 * * * * 每 15 分钟",
-
   "portForwarding": "端口转发",
   "portForwardingStarted": "端口转发已启动。",
   "portForwardingStartError": "无法启动转发：{}",
@@ -741,7 +718,6 @@
   "portForwardingStop": "停止转发",
   "portForwardingHostRequired": "请输入主机",
   "portForwardingPortRequired": "请输入 1 到 65535 之间的端口",
-
   "fileManagerCopied": "已复制",
   "fileManagerCut": "已剪切",
   "fileManagerUploaded": "已上传",
@@ -835,7 +811,6 @@
   "fileEditorLintUnsupported": "JSON、YAML 和 TOML 文件支持检查",
   "fileEditorIssueSummary": "第 {} 行：{}",
   "fileEditorIssueSummaryMany": "第 {} 行：{}（还有 {} 个）",
-
   "packageConnectToManage": "连接以管理软件包。",
   "packageNoManagerFound": "在此主机上找不到支持的包管理器。",
   "packageInspectError": "无法检查包工具：{}",
@@ -856,7 +831,6 @@
   "packageNoUpdates": "没有报告的待处理包更新。",
   "packageUpdateAvailable": "有可用更新",
   "packagePackages": "包",
-
   "firewallFirewall": "防火墙",
   "firewallActionFailed": "防火墙操作失败",
   "firewallEnableDisableUnavailable": "启用/禁用仅支持此主机上的 UFW 和 firewalld。",
@@ -896,7 +870,6 @@
   "firewallSourceLabel": "源（可选）",
   "firewallSourceHint": "192.168.1.0/24",
   "firewallAddRuleSubmit": "添加",
-
   "webServerWebServers": "Web 服务器",
   "webServerConnectToManage": "连接以管理 Web 服务器。",
   "webServerLoadError": "无法加载 Web 服务器状态：{}",
@@ -945,7 +918,6 @@
   "webServerSaveFailed": "无法保存 {}",
   "webServerDiscardTitle": "放弃更改？",
   "webServerDiscardBody": "对 {} 的更改尚未保存。",
-
   "containerStart": "启动",
   "containerStop": "停止",
   "containerDestroy": "销毁",
@@ -1002,7 +974,6 @@
   "containerCopyCommand": "复制命令",
   "containerInspectJsonCopied": "检查 JSON 已复制",
   "containerRefresh": "刷新",
-
   "containersConnectToManage": "连接以管理容器。",
   "containersLoadError": "无法检索容器：{}",
   "containersNotInstalled": "此服务器用户未安装 Docker 和 Podman。",
@@ -1014,7 +985,6 @@
   "containersNoContainersEnv": "此环境中没有容器。",
   "containersActionTooltip": "容器操作",
   "containersOpenProject": "打开项目",
-
   "imagesConnectToManage": "连接以管理镜像。",
   "imagesLoadError": "无法检索镜像：{}",
   "imagesRemoveTitle": "移除 {}？",
@@ -1039,14 +1009,12 @@
   "imagesPruneRun": "运行清理",
   "imagesRefreshTooltip": "刷新镜像",
   "imagesRemoveTooltip": "移除",
-
   "runtimeInstallTitle": "安装容器运行时",
   "runtimeInstallInfo": "MaidKit 将使用主机包管理器安装选定的运行时。命令运行时输出。",
   "runtimeInstallLabel": "运行时",
   "runtimeDocker": "Docker",
   "runtimePodman": "Podman",
   "runtimeInstallSubmit": "安装",
-
   "projectsProjects": "项目",
   "projectsConnectToDiscover": "连接服务器以发现编排项目",
   "projectsRefreshTooltip": "刷新",
@@ -1079,7 +1047,6 @@
   "projectsCouldNotStart": "无法启动容器",
   "projectsProjectUpdated": "项目已更新",
   "projectsCouldNotEdit": "无法编辑项目",
-
   "editorGuided": "向导",
   "editorAdvanced": "高级",
   "editorAddService": "添加服务",
@@ -1103,7 +1070,6 @@
   "editorFoldersHelper": "每行一个 主机路径:容器路径 映射",
   "editorServicesLoaded": "服务已从现有编排文件加载。将每个端口、变量或文件夹放在单独的行上。",
   "editorServicesHint": "添加一个或多个服务。将每个端口、变量或文件夹放在单独的行上。",
-
   "deployRunning": "运行中",
   "deploySucceeded": "成功",
   "deployFailed": "失败",
@@ -1137,7 +1103,6 @@
   "taskProgressStatusCanceled": "已取消",
   "deployLogLabel": "日志",
   "deploySuccessMessage": "\n成功完成。\n",
-
   "filePickerChooseFiles": "选择远程文件",
   "filePickerChooseFile": "选择远程文件",
   "filePickerChooseFolders": "选择远程文件夹",
@@ -1160,9 +1125,7 @@
   "filePickerFolder": "文件夹",
   "filePickerOpenFolder": "打开文件夹",
   "filePickerUnknownSize": "大小未知",
-
   "commonDeploy": "部署",
-
   "containerCopyJson": "复制 JSON",
   "containerEnvCount": "环境变量",
   "containerEnvVarsCount": "环境变量",
@@ -1185,7 +1148,6 @@
   "containerStatsWaiting": "等待统计采样…",
   "containerVolumes": "卷",
   "ServerName": "服务器",
-
   "projectsChooseComposeFolder": "选择编排文件夹",
   "projectsChooseComposeFolderFor": "为 {} 选择编排文件夹",
   "projectsComposeFileLoaded": "已从远程文件夹加载编排文件。它将被链接而不启动或更改容器。",
@@ -1204,7 +1166,6 @@
   "projectsResourceCost": "资源开销",
   "projectsServerGone": "链接的服务器已不存在。",
   "projectsWaitingForFirstSample": "等待第一个统计采样…",
-
   "activityNetwork": "网络",
   "activityUptime": "运行 {}",
   "commonUnavailable": "不可用",
@@ -1242,7 +1203,6 @@
   "runtimeInstallSuccess": "{} 已安装",
   "systemdActionConfirm": "{}？",
   "systemdCouldNotLoad": "无法加载：{}",
-
   "deploymentKindServer": "服务器",
   "deploymentKindFolder": "文件夹",
   "deploymentKindCompose": "编排",
@@ -1251,8 +1211,9 @@
   "deploymentKindFirewall": "防火墙",
   "deploymentKindSystemd": "Systemd",
   "deploymentKindDatabase": "数据库",
+  "deploymentKindGithubWorkflow": "GitHub 工作流",
+  "deploymentGithubOpenRun": "查看运行",
   "deploymentKindOther": "其他",
-
   "deploymentProjectsTitle": "部署项目",
   "deploymentProjectsSubtitleEmpty": "服务器、堆栈和服务的集合",
   "deploymentProjectsCount": "{} 个项目 · {} 个资源",
@@ -1308,7 +1269,6 @@
   "deploymentEditorDescriptionLabel": "描述（可选）",
   "deploymentEditorCreate": "创建",
   "deploymentEditorSave": "保存",
-
   "deploymentDetailLoadError": "无法加载项目：{}",
   "deploymentDetailUnavailable": "此管理项目不再可用。",
   "deploymentEditProject": "编辑项目",

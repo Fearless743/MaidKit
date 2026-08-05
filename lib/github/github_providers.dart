@@ -9,7 +9,6 @@ import 'package:maid_kit/servers/server_providers.dart';
 import 'github_api.dart';
 import 'github_device_auth.dart';
 import 'github_models.dart';
-import 'github_notifications.dart';
 import 'github_repository.dart';
 import 'github_token_store.dart';
 
@@ -228,13 +227,8 @@ class GitHubRunsPoller {
     if (_disposed) return;
     try {
       final next = await _fetch();
-      final previous = _last;
       _last = next;
       if (!_controller.isClosed) _controller.add(next);
-      if (previous != null) {
-        final alerts = GitHubNotifications.diff(previous, next);
-        if (alerts.isNotEmpty) unawaited(GitHubNotifications.notify(alerts));
-      }
     } catch (_) {
       // Fetch failures surface per-repo in the snapshot; keep the last state.
     } finally {
@@ -309,74 +303,6 @@ final githubHasFailuresProvider = Provider<bool>((ref) {
   return snapshot?.hasFailures ?? false;
 });
 
-final githubPullRequestsProvider = FutureProvider<List<PinnedRepoPullRequests>>(
-  (ref) async {
-    final cwt = ref.watch(githubTokenForConnectionProvider).asData?.value;
-    final pins =
-        ref.watch(githubPinnedReposProvider).asData?.value ??
-        const <GitHubRepoPin>[];
-    ref.watch(githubRefreshTickProvider);
-    if (cwt == null || pins.isEmpty) return const [];
-    final api = GithubApi(token: cwt.token);
-    final result = <PinnedRepoPullRequests>[];
-    for (final pin in pins) {
-      try {
-        final prs = await api.listPullRequests(pin.owner, pin.name);
-        final checks = <int, List<CheckRun>>{};
-        for (final pr in prs.take(5)) {
-          try {
-            checks[pr.number] = await api.checkRuns(
-              pin.owner,
-              pin.name,
-              pr.headSha,
-            );
-          } on GitHubApiException {
-            // A missing commit or failed check fetch should not hide PRs.
-          }
-        }
-        result.add(
-          PinnedRepoPullRequests(
-            owner: pin.owner,
-            name: pin.name,
-            pullRequests: prs,
-            checks: checks,
-          ),
-        );
-      } on GitHubApiException {
-        // Skip repos that fail; the runs feed already surfaces errors.
-      }
-    }
-    return result;
-  },
-);
-
-final githubReleasesProvider = FutureProvider<List<PinnedRepoReleases>>((
-  ref,
-) async {
-  final cwt = ref.watch(githubTokenForConnectionProvider).asData?.value;
-  final pins =
-      ref.watch(githubPinnedReposProvider).asData?.value ??
-      const <GitHubRepoPin>[];
-  ref.watch(githubRefreshTickProvider);
-  if (cwt == null || pins.isEmpty) return const [];
-  final api = GithubApi(token: cwt.token);
-  final result = <PinnedRepoReleases>[];
-  for (final pin in pins) {
-    try {
-      result.add(
-        PinnedRepoReleases(
-          owner: pin.owner,
-          name: pin.name,
-          releases: await api.listReleases(pin.owner, pin.name),
-        ),
-      );
-    } on GitHubApiException {
-      // Skip repos that fail; the runs feed already surfaces errors.
-    }
-  }
-  return result;
-});
-
 /// Repositories available for pinning, newest-updated first.
 final githubAvailableReposProvider = FutureProvider<List<GitHubRepo>>((ref) {
   final cwt = ref.watch(githubTokenForConnectionProvider).asData?.value;
@@ -400,31 +326,20 @@ final githubWorkflowsProvider =
       }
     });
 
-final githubProjectLinksProvider =
-    StreamProvider.family<List<GitHubProjectWorkflowLink>, int>((
-      ref,
-      projectId,
-    ) {
-      final stream = ref
-          .watch(githubRepositoryProvider)
-          .watchProjectWorkflowLinks();
-      return stream.map(
-        (links) => links.where((link) => link.projectId == projectId).toList(),
-      );
-    });
-
+/// The latest run of a linked deployment workflow (a `githubWorkflow`
+/// deployment resource's configuration).
 final githubLinkedRunProvider =
-    FutureProvider.family<WorkflowRun?, GitHubProjectWorkflowLink>((
-      ref,
-      link,
-    ) async {
+    FutureProvider.family<
+      WorkflowRun?,
+      ({String owner, String name, String workflowName})
+    >((ref, key) async {
       ref.watch(githubRefreshTickProvider);
       final cwt = ref.watch(githubTokenForConnectionProvider).asData?.value;
       if (cwt == null) return null;
       try {
         return await GithubApi(
           token: cwt.token,
-        ).latestRunForWorkflow(link.owner, link.name, link.workflowName);
+        ).latestRunForWorkflow(key.owner, key.name, key.workflowName);
       } on GitHubApiException {
         return null;
       }

@@ -113,39 +113,6 @@ class GithubApi {
     ];
   }
 
-  Future<List<PullRequest>> listPullRequests(String owner, String name) async {
-    final data = await _get(
-      '/repos/$owner/$name/pulls',
-      query: {'state': 'open', 'per_page': 20},
-    );
-    return [
-      for (final item in _asList(data, 'pull requests'))
-        PullRequest.fromJson(item),
-    ];
-  }
-
-  Future<List<CheckRun>> checkRuns(
-    String owner,
-    String name,
-    String sha,
-  ) async {
-    final data = await _get('/repos/$owner/$name/commits/$sha/check-runs');
-    return [
-      for (final item in _asList(data['check_runs'], 'check_runs'))
-        CheckRun.fromJson(item),
-    ];
-  }
-
-  Future<List<Release>> listReleases(String owner, String name) async {
-    final data = await _get(
-      '/repos/$owner/$name/releases',
-      query: {'per_page': 10},
-    );
-    return [
-      for (final item in _asList(data, 'releases')) Release.fromJson(item),
-    ];
-  }
-
   Future<dynamic> _get(String path, {Map<String, dynamic>? query}) async {
     try {
       final response = await _dio.get<dynamic>(path, queryParameters: query);

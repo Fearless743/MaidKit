@@ -256,11 +256,6 @@ class _SignedInView extends ConsumerWidget {
         ref.watch(githubPinnedReposProvider).asData?.value ??
         const <GitHubRepoPin>[];
     final runsSnapshot = ref.watch(githubRunsProvider).asData?.value;
-    final hasFailures = ref.watch(githubHasFailuresProvider);
-    final pullRequests =
-        ref.watch(githubPullRequestsProvider).asData?.value ?? const [];
-    final releases =
-        ref.watch(githubReleasesProvider).asData?.value ?? const [];
     final loadingRuns =
         ref.watch(githubRunsProvider).isLoading && runsSnapshot == null;
 
@@ -268,7 +263,6 @@ class _SignedInView extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _AccountHeader(connection: connection),
-        if (hasFailures) ...[const SizedBox(height: 12), _FailureBanner()],
         const SizedBox(height: 20),
         _SectionHeader(icon: Symbols.push_pin, title: 'githubPinnedRepos'.tr()),
         const SizedBox(height: 8),
@@ -360,39 +354,6 @@ class _SignedInView extends ConsumerWidget {
               ),
           ],
         ],
-        const SizedBox(height: 20),
-        _SectionHeader(
-          icon: Symbols.call_merge,
-          title: 'githubPullRequests'.tr(),
-        ),
-        const SizedBox(height: 8),
-        if (pullRequests.isEmpty)
-          Text(
-            'githubNoPullRequests'.tr(),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          )
-        else
-          for (final repo in pullRequests) ...[
-            _RepoPrSection(repo: repo),
-            const SizedBox(height: 8),
-          ],
-        const SizedBox(height: 20),
-        _SectionHeader(icon: Symbols.tag, title: 'githubReleases'.tr()),
-        const SizedBox(height: 8),
-        if (releases.isEmpty)
-          Text(
-            'githubNoReleases'.tr(),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          )
-        else
-          for (final repo in releases) ...[
-            _RepoReleasesSection(repo: repo),
-            const SizedBox(height: 8),
-          ],
       ],
     );
   }
@@ -472,37 +433,6 @@ class _AccountHeader extends ConsumerWidget {
           label: Text('githubSignOut'.tr()),
         ),
       ],
-    );
-  }
-}
-
-class _FailureBanner extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final snapshot = ref.watch(githubRunsProvider).asData?.value;
-    final failing = snapshot?.failingRuns ?? const [];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Icon(Symbols.error, size: 20, color: scheme.onErrorContainer),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'githubFailureBanner'.tr(args: ['${failing.length}']),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: scheme.onErrorContainer,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -621,157 +551,6 @@ class _RunTile extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _RepoPrSection extends StatelessWidget {
-  const _RepoPrSection({required this.repo});
-
-  final PinnedRepoPullRequests repo;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (repo.pullRequests.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${repo.owner}/${repo.name}',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 4),
-        for (final pr in repo.pullRequests) ...[
-          Material(
-            type: MaterialType.transparency,
-            child: ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(color: theme.colorScheme.outlineVariant),
-              ),
-              leading: const Icon(Symbols.call_merge, size: 20),
-              title: Text(
-                '#${pr.number} ${pr.title}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                [
-                  pr.headRef,
-                  'githubActor'.tr(args: [pr.authorLogin]),
-                  githubTimeAgo(context, pr.updatedAt),
-                  if (pr.draft) 'githubDraft'.tr(),
-                ].join(' · '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: _PrChecksSummary(
-                checks: repo.checks[pr.number] ?? const [],
-              ),
-              onTap: () => launchUrl(Uri.parse(pr.htmlUrl)),
-            ),
-          ),
-          const SizedBox(height: 6),
-        ],
-      ],
-    );
-  }
-}
-
-class _PrChecksSummary extends StatelessWidget {
-  const _PrChecksSummary({required this.checks});
-
-  final List<CheckRun> checks;
-
-  @override
-  Widget build(BuildContext context) {
-    if (checks.isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final failing = checks.where((check) => check.failed).length;
-    final inProgress = checks
-        .where(
-          (check) =>
-              check.status == WorkflowRunStatus.queued ||
-              check.status == WorkflowRunStatus.inProgress,
-        )
-        .length;
-    final color = failing > 0
-        ? theme.colorScheme.error
-        : inProgress > 0
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurfaceVariant;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          failing > 0 ? Symbols.error : Symbols.verified_user,
-          size: 16,
-          color: color,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '${checks.length}',
-          style: theme.textTheme.labelMedium?.copyWith(color: color),
-        ),
-      ],
-    );
-  }
-}
-
-class _RepoReleasesSection extends StatelessWidget {
-  const _RepoReleasesSection({required this.repo});
-
-  final PinnedRepoReleases repo;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (repo.releases.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${repo.owner}/${repo.name}',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 4),
-        for (final release in repo.releases.take(5)) ...[
-          ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            leading: Icon(
-              release.prerelease ? Symbols.science : Symbols.tag,
-              size: 20,
-              color: theme.colorScheme.primary,
-            ),
-            title: Text(
-              release.tagName,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontFamily: 'IBM Plex Mono',
-              ),
-            ),
-            subtitle: Text(
-              [
-                if (release.name.isNotEmpty) release.name,
-                githubTimeAgo(context, release.publishedAt),
-              ].join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: IconButton(
-              tooltip: 'githubRunOpen'.tr(),
-              onPressed: () => launchUrl(Uri.parse(release.htmlUrl)),
-              icon: const Icon(Symbols.open_in_new, size: 18),
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
-      ],
     );
   }
 }

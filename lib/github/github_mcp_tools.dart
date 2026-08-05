@@ -74,43 +74,6 @@ class GitHubMcpToolHandlers {
         'required': ['owner', 'name', 'run_id'],
       },
     },
-    {
-      'name': 'github_open_prs',
-      'description':
-          'List the open pull requests of a repository with a summary of '
-          'their head check runs.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'owner': {
-            'type': 'string',
-            'description': 'Repository owner (user or organization).',
-          },
-          'name': {'type': 'string', 'description': 'Repository name.'},
-          'limit': {
-            'type': 'integer',
-            'description': 'Maximum number of PRs to return (default 10).',
-          },
-        },
-        'required': ['owner', 'name'],
-      },
-    },
-    {
-      'name': 'github_get_release',
-      'description': 'Get a published release of a repository by tag.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'owner': {
-            'type': 'string',
-            'description': 'Repository owner (user or organization).',
-          },
-          'name': {'type': 'string', 'description': 'Repository name.'},
-          'tag': {'type': 'string', 'description': 'Release tag, e.g. v1.2.0.'},
-        },
-        'required': ['owner', 'name', 'tag'],
-      },
-    },
   ];
 
   Future<Map<String, dynamic>> call(
@@ -136,18 +99,6 @@ class GitHubMcpToolHandlers {
         _string(arguments, 'owner'),
         _string(arguments, 'name'),
         _int(arguments, 'run_id'),
-      ),
-      'github_open_prs' => _prs(
-        api,
-        _string(arguments, 'owner'),
-        _string(arguments, 'name'),
-        _int(arguments, 'limit', fallback: 10),
-      ),
-      'github_get_release' => _release(
-        api,
-        _string(arguments, 'owner'),
-        _string(arguments, 'name'),
-        _string(arguments, 'tag'),
       ),
       _ => throw ArgumentError('Unknown tool: $name'),
     };
@@ -258,72 +209,6 @@ class GitHubMcpToolHandlers {
           },
       ],
     };
-  }
-
-  Future<Map<String, dynamic>> _prs(
-    GithubApi api,
-    String owner,
-    String name,
-    int limit,
-  ) async {
-    final prs = await api.listPullRequests(owner, name);
-    return {
-      'repository': '$owner/$name',
-      'open_pull_requests': [
-        for (final pr in prs.take(limit))
-          {
-            'number': pr.number,
-            'title': pr.title,
-            'head': pr.headRef,
-            'draft': pr.draft,
-            'author': pr.authorLogin,
-            'html_url': pr.htmlUrl,
-            'checks': await _checkSummary(api, owner, name, pr),
-          },
-      ],
-    };
-  }
-
-  Future<Map<String, dynamic>> _release(
-    GithubApi api,
-    String owner,
-    String name,
-    String tag,
-  ) async {
-    final releases = await api.listReleases(owner, name);
-    final release = releases.where((item) => item.tagName == tag).firstOrNull;
-    if (release == null) {
-      throw ArgumentError('Release $tag not found in $owner/$name.');
-    }
-    return {
-      'tag': release.tagName,
-      'name': release.name,
-      'published_at': release.publishedAt?.toIso8601String(),
-      'prerelease': release.prerelease,
-      'draft': release.draft,
-      'html_url': release.htmlUrl,
-    };
-  }
-
-  Future<List<Map<String, dynamic>>> _checkSummary(
-    GithubApi api,
-    String owner,
-    String name,
-    PullRequest pr,
-  ) async {
-    try {
-      final checks = await api.checkRuns(owner, name, pr.headSha);
-      return [
-        for (final check in checks)
-          {
-            'name': check.name,
-            'status': check.status.name,
-            'conclusion': check.conclusion?.name,
-          },
-      ];
-    } on GitHubApiException {
-      return const [];
-    }
   }
 
   static String _string(Map<String, dynamic> arguments, String key) {

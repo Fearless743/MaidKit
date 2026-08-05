@@ -122,10 +122,6 @@ class DatabaseBackupService {
       'githubRepoPins': (await _database.select(_database.gitHubRepoPins).get())
           .map((record) => record.toJson())
           .toList(),
-      'githubProjectWorkflowLinks':
-          (await _database.select(_database.gitHubProjectWorkflowLinks).get())
-              .map((record) => record.toJson())
-              .toList(),
     };
     return archive;
   }
@@ -158,10 +154,6 @@ class DatabaseBackupService {
     // device sign-in.
     final githubConnections = _recordsOrEmpty(payload, 'githubConnections');
     final githubRepoPins = _recordsOrEmpty(payload, 'githubRepoPins');
-    final githubProjectWorkflowLinks = _recordsOrEmpty(
-      payload,
-      'githubProjectWorkflowLinks',
-    );
 
     await _database.transaction(() async {
       await _database.delete(_database.deploymentResources).go();
@@ -169,7 +161,6 @@ class DatabaseBackupService {
       await _database.delete(_database.containerCacheEntries).go();
       await _database.delete(_database.composeProjectLinks).go();
       await _database.delete(_database.scriptSnippets).go();
-      await _database.delete(_database.gitHubProjectWorkflowLinks).go();
       await _database.delete(_database.gitHubRepoPins).go();
       await _database.delete(_database.gitHubConnections).go();
       await _database.delete(_database.servers).go();
@@ -288,13 +279,6 @@ class DatabaseBackupService {
         await _database
             .into(_database.gitHubRepoPins)
             .insert(GitHubRepoPin.fromJson(record).toCompanion(false));
-      }
-      for (final record in githubProjectWorkflowLinks) {
-        await _database
-            .into(_database.gitHubProjectWorkflowLinks)
-            .insert(
-              GitHubProjectWorkflowLink.fromJson(record).toCompanion(false),
-            );
       }
     });
   }

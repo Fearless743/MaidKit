@@ -84,7 +84,7 @@ void main() {
         final after = await executor.toolDefinitions;
         final afterNames = [for (final tool in after) tool['name']];
         expect(afterNames, contains('github_list_runs'));
-        expect(afterNames, contains('github_get_release'));
+        expect(afterNames, contains('github_list_jobs'));
         expect(afterNames, hasLength(greaterThan(beforeNames.length)));
       },
     );

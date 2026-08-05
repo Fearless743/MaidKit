@@ -706,8 +706,6 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
       case 'github_list_runs':
       case 'github_get_run':
       case 'github_list_jobs':
-      case 'github_open_prs':
-      case 'github_get_release':
         text = jsonEncode(
           await GitHubMcpToolHandlers(ref).call(name, arguments),
         );

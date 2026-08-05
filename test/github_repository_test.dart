@@ -122,32 +122,6 @@ void main() {
       expect(await repository.watchRepoPins().first, isEmpty);
       expect(await repository.watchConnections().first, isEmpty);
     });
-
-    test('linkProjectWorkflow replaces the previous link', () async {
-      final database = _database();
-      addTearDown(database.close);
-      final repository = GitHubRepository(
-        database,
-        InMemoryGitHubTokenStorage(),
-      );
-      await repository.linkProjectWorkflow(
-        projectId: 7,
-        owner: 'o',
-        name: 'r',
-        workflowName: 'CI',
-      );
-      await repository.linkProjectWorkflow(
-        projectId: 7,
-        owner: 'o',
-        name: 'r',
-        workflowName: 'Deploy',
-      );
-      final links = await repository.linksForProject(7);
-      expect(links, hasLength(1));
-      expect(links.single.workflowName, 'Deploy');
-      await repository.unlinkProjectWorkflow(links.single);
-      expect(await repository.linksForProject(7), isEmpty);
-    });
   });
 
   group('DatabaseBackupService GitHub sync', () {
@@ -175,7 +149,7 @@ void main() {
       expect(connection.containsKey('token'), isFalse);
     });
 
-    test('importPayload restores connections, pins, and links', () async {
+    test('importPayload restores connections and pins', () async {
       final database = _database();
       addTearDown(database.close);
       final service = DatabaseBackupService(database, VaultService(database));
@@ -199,16 +173,6 @@ void main() {
             'pinnedAt': '2026-01-01T00:00:00.000Z',
           },
         ],
-        'githubProjectWorkflowLinks': [
-          {
-            'id': 1,
-            'projectId': 1,
-            'owner': 'octocat',
-            'name': 'hello',
-            'workflowName': 'CI',
-            'linkedAt': '2026-01-01T00:00:00.000Z',
-          },
-        ],
       };
       await service.importPayload(jsonEncode(payload));
 
@@ -220,8 +184,6 @@ void main() {
       expect(connections.single.accountLogin, 'octocat');
       final pins = await repository.watchRepoPins().first;
       expect(pins.single.owner, 'octocat');
-      final links = await repository.linksForProject(1);
-      expect(links.single.workflowName, 'CI');
     });
 
     test('importPayload tolerates archives without GitHub keys', () async {

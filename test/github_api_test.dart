@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maid_kit/github/github_api.dart';
 import 'package:maid_kit/github/github_device_auth.dart';
 import 'package:maid_kit/github/github_models.dart';
-import 'package:maid_kit/github/github_notifications.dart';
 
 class _FakeAdapter implements HttpClientAdapter {
   _FakeAdapter(this.handler);
@@ -271,59 +270,6 @@ void main() {
         ),
       );
     });
-
-    test('listPullRequests and listReleases parse', () async {
-      final api = GithubApi(
-        token: 't',
-        dio: _dio((options) async {
-          if (options.path == '/repos/o/r/pulls') {
-            return _json([
-              {
-                'number': 12,
-                'title': 'Fix things',
-                'head': {'ref': 'fix', 'sha': 'abcd'},
-                'draft': false,
-                'user': {'login': 'octocat'},
-                'html_url': 'https://github.com/o/r/pull/12',
-              },
-            ]);
-          }
-          return _json([
-            {
-              'tag_name': 'v1.0.0',
-              'name': 'First release',
-              'published_at': '2026-01-01T00:00:00Z',
-              'html_url': 'https://github.com/o/r/releases/tag/v1.0.0',
-              'draft': false,
-              'prerelease': false,
-            },
-          ]);
-        }),
-      );
-      final prs = await api.listPullRequests('o', 'r');
-      expect(prs.single.title, 'Fix things');
-      expect(prs.single.headRef, 'fix');
-      final releases = await api.listReleases('o', 'r');
-      expect(releases.single.tagName, 'v1.0.0');
-    });
-
-    test('checkRuns parses conclusions', () async {
-      final api = GithubApi(
-        token: 't',
-        dio: _dio((options) async {
-          expect(options.path, '/repos/o/r/commits/abc/check-runs');
-          return _json({
-            'check_runs': [
-              {'name': 'lint', 'status': 'completed', 'conclusion': 'failure'},
-              {'name': 'test', 'status': 'in_progress'},
-            ],
-          });
-        }),
-      );
-      final checks = await api.checkRuns('o', 'r', 'abc');
-      expect(checks.first.failed, isTrue);
-      expect(checks.last.status, WorkflowRunStatus.inProgress);
-    });
   });
 
   group('GithubDeviceAuth', () {
@@ -449,50 +395,6 @@ void main() {
       expect(latestRunPerWorkflow(const []), isEmpty);
       final runs = [run(1, 'A'), run(2, 'B')];
       expect(latestRunPerWorkflow(runs).map((item) => item.name), ['B', 'A']);
-    });
-  });
-
-  group('GitHubNotifications', () {
-    WorkflowRun failingRun(int id) => WorkflowRun(
-      id: id,
-      name: 'CI',
-      displayTitle: 'Build',
-      headBranch: 'main',
-      headSha: 'x',
-      status: WorkflowRunStatus.completed,
-      conclusion: WorkflowRunConclusion.failure,
-      runNumber: id,
-    );
-
-    GitHubRunsSnapshot snapshotWith(List<int> failingIds) => GitHubRunsSnapshot(
-      repos: [
-        PinnedRepoRuns(
-          owner: 'o',
-          name: 'r',
-          runs: [for (final id in failingIds) failingRun(id)],
-        ),
-      ],
-      fetchedAt: DateTime.now(),
-      errors: const [],
-    );
-
-    test('diff reports only newly failed runs', () {
-      final previous = snapshotWith([1, 2]);
-      final next = snapshotWith([2, 3]);
-      final alerts = GitHubNotifications.diff(previous, next);
-      expect(alerts, hasLength(1));
-      expect(alerts.single.run.id, 3);
-    });
-
-    test('diff is empty for the same failing set', () {
-      expect(
-        GitHubNotifications.diff(snapshotWith([1]), snapshotWith([1])),
-        isEmpty,
-      );
-      expect(
-        GitHubNotifications.diff(snapshotWith([]), snapshotWith([])),
-        isEmpty,
-      );
     });
   });
 }

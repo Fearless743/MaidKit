@@ -216,8 +216,6 @@ void main() {
                 ),
               ),
             ),
-            githubPullRequestsProvider.overrideWith((ref) async => const []),
-            githubReleasesProvider.overrideWith((ref) async => const []),
           ],
           child: MaterialApp(
             locale: Locale('en', 'US'),
@@ -301,8 +299,6 @@ void main() {
             githubRunsProvider.overrideWith(
               (ref) => Stream.value(snapshotWithFailures()),
             ),
-            githubPullRequestsProvider.overrideWith((ref) async => const []),
-            githubReleasesProvider.overrideWith((ref) async => const []),
           ],
           child: MaterialApp(
             locale: Locale('en', 'US'),
@@ -314,7 +310,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('octocat'), findsOneWidget);
     expect(find.text('githubRuns'.tr()), findsOneWidget);
-    expect(find.text('githubFailureBanner'.tr(args: ['1'])), findsOneWidget);
     expect(find.text('Build'), findsOneWidget);
     expect(find.text('githubConclusionFailure'.tr()), findsOneWidget);
     expect(find.text('githubAddRepo'.tr()), findsOneWidget);

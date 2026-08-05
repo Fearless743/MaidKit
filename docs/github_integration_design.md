@@ -3,9 +3,8 @@
 ## Purpose
 
 Add a top-level GitHub tab where users authenticate once and monitor CI/CD and
-repository activity: Actions run status, pull requests with their checks,
-releases, and deploy linkage from MaidKit deployment projects to the workflows
-that ship them. v1 (Actions monitoring) and v2 (the surrounding surfaces) are
+repository activity: Actions run status and deploy linkage from MaidKit
+deployment projects to the workflows that ship them. v1 (Actions monitoring) and v2 (the surrounding surfaces) are
 delivered together in one build.
 
 ## Scope
@@ -15,13 +14,10 @@ In scope:
 - OAuth device-flow sign-in, one GitHub account at a time.
 - Pinned repository list, persisted per device.
 - Actions: workflow runs with live status, per-run jobs, open on GitHub.
-- Pull requests: open PRs with head check-run summary.
-- Releases: recent releases for pinned repos.
-- Deploy linkage: `DeploymentProjects` → repository + workflow → latest run.
-- Failure notifications: rail badge + in-app banner; OS notifications via
-  `flutter_local_notifications` (new dependency).
-- Agent integration: read-only GitHub tools on the local MCP server
-  (`LocalMcpToolExecutor`).
+- Deploy linkage: `githubWorkflow` deployment resources that show the latest
+  run on the project detail page.
+- A compact workflow-status card on the Servers dashboard (one tile per pinned
+  repo) and a failure badge on the Assets rail destination.
 
 Out of scope (future):
 
@@ -56,8 +52,8 @@ require it, and a secret shipped in a desktop binary is extractable. The
 registered client ID is public by design and is the build default; it can be
 overridden with `--dart-define=GITHUB_CLIENT_ID=…`.
 
-Scopes: `repo` (reads Actions runs, jobs, check-runs, releases, PRs) and
-`read:user` (account profile).
+Scopes: `repo` (reads Actions runs and jobs) and `read:user` (account
+profile).
 
 ## Storage
 
@@ -122,27 +118,20 @@ Endpoints used:
 | Runs by workflow | `GET /repos/{o}/{r}/actions/runs?workflow_id={name}` |
 | Jobs | `GET /repos/{o}/{r}/actions/runs/{id}/jobs` |
 | Logs | `GET /repos/{o}/{r}/actions/runs/{id}/logs` (open in browser) |
-| PRs | `GET /repos/{o}/{r}/pulls?state=open&per_page=20` |
-| Check runs | `GET /repos/{o}/{r}/commits/{sha}/check-runs` |
-| Releases | `GET /repos/{o}/{r}/releases?per_page=10` |
 
 ## Polling budget
 
 Only live things are polled: runs with `status ∈ {queued, in_progress}` every
-15 s per pinned repo, and check-runs of open PRs every 30 s. Completed runs,
-jobs, and releases are fetched on demand (tab focus, pull-to-refresh). Polling
-stops after repeated failures (exponential backoff) and pauses on rate-limit
-403. Worst case ≈ 4 pinned repos × 4 req/min ≈ 960 req/hr, leaving headroom.
+15 s per pinned repo. Completed runs and jobs are fetched on demand (tab
+focus, pull-to-refresh). Polling stops after repeated failures (exponential
+backoff) and pauses on rate-limit 403. Worst case ≈ 4 pinned repos × 4
+req/min ≈ 960 req/hr, leaving headroom.
 
 ## Notifications
 
-- The Assets rail destination shows a badge when a pinned repo has a failing
-  run.
-- A failure banner appears in-app when a watched run transitions to `failure`
-  or `cancelled` while the app is open.
-- OS notifications via `flutter_local_notifications` (new dependency;
-  supports macOS, Windows, Linux) for run failures, with a cooldown per run so
-  retries don't spam.
+None: failing runs are surfaced passively — a failure badge on the Assets
+rail destination and the failing count in the dashboard workflow card. No OS
+or in-app alerts.
 
 ## UI
 
@@ -151,7 +140,7 @@ GitHub content lives **inside the Assets tab** (`assets_page.dart`) as a
 (`servers_page.dart`) shows a **compact workflow-status strip** above the
 server grid: one pill per pinned workflow (its latest run), colored by status,
 tap → run detail. A failure badge sits on the Assets rail destination, and
-failing-run notifications fire from the poller. All strings in
+a failure badge sits on the Assets rail destination. All strings in
 `assets/translations/en-US.json` + `zh-CN.json`.
 
 Sections (single scrollable page, desktop-friendly):
@@ -161,12 +150,12 @@ Sections (single scrollable page, desktop-friendly):
 - Runs feed per pinned repo: the latest run of each workflow, with branch,
   head commit, actor, status chip (queued / in_progress / success / failure /
   cancelled); tap → run detail with jobs and steps, "Open on GitHub".
-- Pull requests: open PRs with head check-run summary chips.
-- Releases: tag, name, published date, open link.
 
-Project detail page (`project_detail_page.dart`) gains a "Deployment" section:
-pick a repo + workflow; show the latest run for that workflow with a status
-chip and an open-on-GitHub link.
+GitHub workflow links are a **deployment resource kind** (`githubWorkflow`) in
+the regular add/edit-resource sheet on the project detail page. The resource's
+configuration stores `{owner, name, workflow}`; its tile shows the latest run
+with status, trigger message, and timestamp, plus quick actions to open the
+run detail or the GitHub page.
 
 Agent tools on the local MCP server, read-only, named `github_*`:
 `github_list_runs`, `github_get_run`, `github_list_jobs`, `github_open_prs`,
@@ -187,10 +176,12 @@ lib/github/
   github_section.dart        (embedded in the Assets tab)
   github_workflow_strip.dart  (Servers dashboard)
   github_run_detail_page.dart
-  github_project_link_section.dart
   github_notifications.dart
   github_mcp_tools.dart
 ```
+
+(Workflow links live as `githubWorkflow` deployment resources; the standalone
+`github_project_workflow_links` table was removed in schema 21.)
 
 ## Build order (single delivery)
 

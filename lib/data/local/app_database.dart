@@ -215,19 +215,7 @@ class GitHubRepoPins extends Table {
 }
 
 /// Links a deployment project to a GitHub workflow whose latest run is shown
-/// on the project detail page. One link per project.
-class GitHubProjectWorkflowLinks extends Table {
-  @override
-  String get tableName => 'github_project_workflow_links';
-
-  IntColumn get id => integer().autoIncrement()();
-  IntColumn get projectId => integer().references(DeploymentProjects, #id)();
-  TextColumn get owner => text()();
-  TextColumn get name => text()();
-  TextColumn get workflowName => text()();
-  DateTimeColumn get linkedAt => dateTime()();
-}
-
+/// on the project detail page.
 @DriftDatabase(
   tables: [
     Servers,
@@ -245,7 +233,6 @@ class GitHubProjectWorkflowLinks extends Table {
     AgentSkills,
     GitHubConnections,
     GitHubRepoPins,
-    GitHubProjectWorkflowLinks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -262,7 +249,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -278,10 +265,6 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'CREATE UNIQUE INDEX github_repo_pins_unique '
         'ON github_repo_pins (connection_id, owner, name)',
-      );
-      await customStatement(
-        'CREATE UNIQUE INDEX github_project_workflow_links_project_unique '
-        'ON github_project_workflow_links (project_id)',
       );
     },
     onUpgrade: (m, from, to) async {
@@ -445,20 +428,22 @@ class AppDatabase extends _$AppDatabase {
       if (from < 19) {
         await m.createTable(gitHubConnections);
         await m.createTable(gitHubRepoPins);
-        await m.createTable(gitHubProjectWorkflowLinks);
         await customStatement(
           'CREATE UNIQUE INDEX github_repo_pins_unique '
           'ON github_repo_pins (connection_id, owner, name)',
-        );
-        await customStatement(
-          'CREATE UNIQUE INDEX github_project_workflow_links_project_unique '
-          'ON github_project_workflow_links (project_id)',
         );
       }
       if (from < 20) {
         await m.addColumn(servers, servers.environment);
         await m.addColumn(servers, servers.initialSnippets);
         await m.addColumn(servers, servers.tags);
+      }
+      if (from < 21) {
+        // Workflow links became a regular deployment resource (kind
+        // `githubWorkflow`, configuration JSON) in schema 21.
+        await customStatement(
+          'DROP TABLE IF EXISTS github_project_workflow_links',
+        );
       }
     },
   );
@@ -509,7 +494,4 @@ class AppDatabase extends _$AppDatabase {
 
   Stream<List<GitHubRepoPin>> watchGitHubRepoPins() =>
       select(gitHubRepoPins).watch();
-
-  Stream<List<GitHubProjectWorkflowLink>> watchGitHubProjectWorkflowLinks() =>
-      select(gitHubProjectWorkflowLinks).watch();
 }

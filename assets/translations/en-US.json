@@ -1,6 +1,5 @@
 {
   "title": "MaidKit",
-
   "commonCancel": "Cancel",
   "commonSave": "Save",
   "commonContinue": "Continue",
@@ -31,14 +30,12 @@
   "commonNo": "No",
   "commonOk": "OK",
   "commonUnavailable": "Unavailable",
-
   "tabDashboard": "Dashboard",
   "tabServers": "Servers",
   "tabAssets": "Assets",
   "tabProjects": "Projects",
   "tabSnippets": "Snippets",
   "tabGithub": "GitHub",
-
   "githubSignInTitle": "Sign in with GitHub",
   "githubSignInDescription": "Monitor GitHub Actions runs, pull requests, and releases.",
   "githubTokenLocalHint": "Your GitHub token stays on this device and never syncs with the vault.",
@@ -58,11 +55,6 @@
   "githubRuns": "Workflow runs",
   "githubRefresh": "Refresh",
   "githubNoRuns": "No workflow runs yet.",
-  "githubPullRequests": "Pull requests",
-  "githubNoPullRequests": "No open pull requests.",
-  "githubReleases": "Releases",
-  "githubNoReleases": "No releases yet.",
-  "githubFailureBanner": "{} workflow run(s) failed. Check the runs below.",
   "githubStatusFailing": "{} failing",
   "githubActor": "by {}",
   "githubDraft": "draft",
@@ -88,7 +80,6 @@
   "githubConclusionUnknown": "Unknown",
   "tabSessions": "Sessions",
   "tabSettings": "Settings",
-
   "snippetsEmpty": "No snippets yet",
   "snippetsEmptyHint": "Save a shell script once, then run it on one or more connected servers.",
   "snippetsNew": "New snippet",
@@ -101,7 +92,6 @@
   "snippetsSelectServers": "Run on servers",
   "snippetsSelectServersHint": "Choose the connected servers that should receive this script.",
   "snippetsNoConnectedServers": "Connect to at least one server before running a snippet.",
-
   "settingsDisplayLanguage": "Display Language",
   "languageFollowSystem": "Follow System",
   "settingsTitle": "Settings",
@@ -185,7 +175,6 @@
   "agentRunPolicyAutoReviewHint": "Run read-only or agent-flagged safe actions without asking; review the rest.",
   "agentRunPolicyAlwaysAsk": "Always ask",
   "agentRunPolicyAlwaysAskHint": "Show every proposed action for review before it runs.",
-
   "agentInterrupted": "Interrupted.",
   "agentError": "Error: {}",
   "agentProviderGone": "The AI provider is no longer available.",
@@ -336,7 +325,6 @@
   "mcpReviewModeAutoReviewHint": "Read-only actions run automatically; everything else asks.",
   "mcpReviewModeAlwaysApprove": "Always approve",
   "mcpReviewModeAlwaysApproveHint": "Actions run without asking.",
-
   "settingsSecurity": "Security",
   "settingsAccount": "Solarpass",
   "settingsSolarNetworkAi": "Solar Network AI",
@@ -441,7 +429,6 @@
   "settingsIntervalMinutes": "{} minutes",
   "settingsAbout": "About",
   "settingsAboutHint": "Version, licenses, and credits.",
-
   "aboutTitle": "About MaidKit",
   "aboutDescription": "A collection of tools used by LittleSheep when acting as a \"maid\" for servers (i.e., performing server maintenance). The goal is to provide a more convenient way to maintain servers that is non-intrusive—being 100% SSH-based, without installing any software on the server or increasing security risks.",
   "aboutLogo": "Logo inspired by Alma, drawn by ChatGPT Image, and the character is original character by LittleSheep named 阳绛",
@@ -456,7 +443,6 @@
   "aboutCopyright": "© {} Solsynth",
   "aboutMadeWith": "Made by LittleSheep with ❤️",
   "aboutLoadError": "Could not load app info: {}",
-
   "vaultUnlockTitle": "Unlock MaidKit",
   "vaultCreateTitle": "Create your vault",
   "vaultDownloadedTitle": "Unlock downloaded vault",
@@ -473,7 +459,6 @@
   "vaultPasswordsDontMatch": "The passwords do not match.",
   "vaultDownloadedPasswordInvalid": "This password cannot decrypt the downloaded vault.",
   "vaultOpenError": "Could not open vault: {}",
-
   "serversEmpty": "No servers yet",
   "serversEmptyHint": "Add an SSH host to start managing it from MaidKit.",
   "serversAddServer": "Add server",
@@ -575,7 +560,6 @@
   "tailscaleNotRunning": "Tailscale is not connected. Sign in under Settings → Tailscale first.",
   "tailscaleNoMachines": "No tailnet machines are online.",
   "tailscaleViaTailnet": "Connected via Tailscale",
-
   "serverVerifyHostKey": "Verify SSH host key",
   "serverHostKeyChanged": "This host key changed. Confirm it only if you expected the server to be rebuilt or reconfigured.",
   "serverHostKeyNew": "Confirm this fingerprint before sending credentials. MaidKit will remember it for future connections.",
@@ -585,7 +569,6 @@
   "serverCannotConnect": "Could not connect",
   "serverOpeningTerminal": "Opening terminal on {}…",
   "serverCannotOpenTerminal": "Could not open terminal",
-
   "detailOverview": "Overview",
   "detailPerformance": "Performance",
   "detailSpecifications": "Specifications",
@@ -627,7 +610,6 @@
   "detailKillProcessMessage": "Sends SIGKILL immediately to {} (pid {}). The process cannot clean up.",
   "detailKillProcessSuccess": "Sent SIGKILL to {}",
   "detailKillProcessError": "Could not kill process: {}",
-
   "sessionsDropTabHere": "Drop tab here",
   "sessionsNewPane": "New pane",
   "sessionsSplitRight": "Split right",
@@ -643,7 +625,6 @@
   "sessionsCloseAllTabs": "Close all tabs on {}",
   "sessionsSearchActions": "Search session actions",
   "sessionsOpenCount": "{} open",
-
   "terminalFindInTerminal": "Find in terminal",
   "terminalNoResults": "No results",
   "terminalCaseSensitive": "Aa",
@@ -651,7 +632,6 @@
   "terminalNextMatch": "Next match",
   "terminalKeysMore": "More keys",
   "terminalKeysFewer": "Fewer keys",
-
   "activityLiveActivity": "Live activity",
   "activityRefreshNow": "Refresh now",
   "activityNetworkDown": "Net ↓",
@@ -662,7 +642,6 @@
   "activityNetwork": "Network",
   "activityUptime": "up {}",
   "activityError": "Could not collect activity: {}",
-
   "systemdServices": "Services",
   "systemdServiceActionFailed": "Service action failed",
   "systemdCouldNotLoad": "Could not load: {}",
@@ -705,7 +684,6 @@
   "systemdClearFilter": "Clear",
   "systemdTryAgain": "Try again",
   "systemdLogsTitle": "Logs · {}",
-
   "crontabTitle": "Crontab",
   "crontabUpdateFailed": "Crontab update failed",
   "crontabJobAdded": "Job added.",
@@ -737,7 +715,6 @@
   "crontabCommandHint": "/usr/bin/example --flag",
   "crontabCommandRequired": "Command is required",
   "crontabExamples": "Examples: 0 2 * * * nightly · */15 * * * * every 15 minutes",
-
   "portForwarding": "Port forwarding",
   "portForwardingStarted": "Port forwarding started.",
   "portForwardingStartError": "Could not start forwarding: {}",
@@ -760,7 +737,6 @@
   "portForwardingStop": "Stop forwarding",
   "portForwardingHostRequired": "Enter a host",
   "portForwardingPortRequired": "Enter a port from 1 to 65535",
-
   "fileManagerCopied": "Copied",
   "fileManagerCut": "Cut",
   "fileManagerUploaded": "Uploaded",
@@ -854,7 +830,6 @@
   "fileEditorLintUnsupported": "Lint is available for JSON, YAML, and TOML files",
   "fileEditorIssueSummary": "Line {}: {}",
   "fileEditorIssueSummaryMany": "Line {}: {} (+{} more)",
-
   "packageConnectToManage": "Connect to manage packages.",
   "packageNoManagerFound": "No supported package manager was found on this host.",
   "packageInspectError": "Could not inspect package tools: {}",
@@ -875,7 +850,6 @@
   "packageNoUpdates": "No pending package updates were reported.",
   "packageUpdateAvailable": "Update available",
   "packagePackages": "Packages",
-
   "firewallFirewall": "Firewall",
   "firewallActionFailed": "Firewall action failed",
   "firewallEnableDisableUnavailable": "Enable/disable is only available for UFW and firewalld on this host.",
@@ -918,7 +892,6 @@
   "firewallSourceLabel": "Source (optional)",
   "firewallSourceHint": "192.168.1.0/24",
   "firewallAddRuleSubmit": "Add",
-
   "webServerWebServers": "Web servers",
   "webServerConnectToManage": "Connect to manage web servers.",
   "webServerLoadError": "Could not load web server status: {}",
@@ -967,7 +940,6 @@
   "webServerSaveFailed": "Could not save {}",
   "webServerDiscardTitle": "Discard changes?",
   "webServerDiscardBody": "Changes to {} have not been saved.",
-
   "containerStart": "Start",
   "containerStop": "Stop",
   "containerDestroy": "Destroy",
@@ -1036,7 +1008,6 @@
   "containerCopyJson": "Copy JSON",
   "containerInspectJsonCopied": "Inspect JSON copied",
   "containerRefresh": "Refresh",
-
   "containerNoContainers": "No containers",
   "containerRunningCount": "{} running",
   "containerRunningFraction": "{}/{} running",
@@ -1058,7 +1029,6 @@
   "containersNoContainersEnv": "No containers in this environment.",
   "containersActionTooltip": "Container actions",
   "containersOpenProject": "Open project",
-
   "imagesConnectToManage": "Connect to manage images.",
   "imagesLoadError": "Could not retrieve images: {}",
   "imagesRemoveTitle": "Remove {}?",
@@ -1095,7 +1065,6 @@
   "imagesEmptyMeta": "Empty",
   "imagesUnavailable": "Unavailable",
   "imagesActionsTooltip": "Image actions",
-
   "runtimeInstallTitle": "Install container runtime",
   "runtimeInstallInfo": "MaidKit will use the host package manager to install the selected runtime. Output is shown while the command runs.",
   "runtimeInstallLabel": "Runtime",
@@ -1105,7 +1074,6 @@
   "runtimeInstallSuccess": "{} installed",
   "runtimeInstallRefreshing": "Refreshing available container environments.",
   "runtimeInstallError": "Could not install {}",
-
   "projectsProjects": "Projects",
   "projectsConnectToDiscover": "Connect a server to discover compose projects",
   "projectsRefreshTooltip": "Refresh",
@@ -1138,7 +1106,6 @@
   "projectsCouldNotStart": "Could not start container",
   "projectsProjectUpdated": "Project updated",
   "projectsCouldNotEdit": "Could not edit project",
-
   "editorGuided": "Guided",
   "editorAdvanced": "Advanced",
   "editorAddService": "Add service",
@@ -1162,7 +1129,6 @@
   "editorFoldersHelper": "One host-path:container-path mapping per line",
   "editorServicesLoaded": "Services were loaded from the existing Compose file. Put each port, variable, or folder on its own line.",
   "editorServicesHint": "Add one or more services. Put each port, variable, or folder on its own line.",
-
   "deployRunning": "Running",
   "deploySucceeded": "Succeeded",
   "deployFailed": "Failed",
@@ -1196,7 +1162,6 @@
   "taskProgressStatusCanceled": "Canceled",
   "deployLogLabel": "Log",
   "deploySuccessMessage": "\nCompleted successfully.\n",
-
   "filePickerChooseFiles": "Choose remote files",
   "filePickerChooseFile": "Choose remote file",
   "filePickerChooseFolders": "Choose remote folder",
@@ -1219,7 +1184,6 @@
   "filePickerFolder": "Folder",
   "filePickerOpenFolder": "Open folder",
   "filePickerUnknownSize": "Unknown size",
-
   "containerEnvCount": "Env vars",
   "containerLogsError": "Could not follow logs: {}",
   "containerNoDetailsAvailable": "No inspect details available.",
@@ -1230,7 +1194,6 @@
   "containerStatsWaiting": "Waiting for a stats sample…",
   "containerVolumes": "Volumes",
   "ServerName": "Server",
-
   "projectsChooseComposeFolder": "Choose compose folder",
   "projectsChooseComposeFolderFor": "Choose compose folder for {}",
   "projectsComposeFileLoaded": "Compose file loaded from the remote folder. It will be linked without starting or changing containers.",
@@ -1249,7 +1212,6 @@
   "projectsResourceCost": "Resource cost",
   "projectsServerGone": "The linked server no longer exists.",
   "projectsWaitingForFirstSample": "Waiting for the first stats sample…",
-
   "deploymentKindServer": "Server",
   "deploymentKindFolder": "Folder",
   "deploymentKindCompose": "Compose",
@@ -1258,8 +1220,9 @@
   "deploymentKindFirewall": "Firewall",
   "deploymentKindSystemd": "Systemd",
   "deploymentKindDatabase": "Database",
+  "deploymentKindGithubWorkflow": "GitHub workflow",
+  "deploymentGithubOpenRun": "Open run",
   "deploymentKindOther": "Other",
-
   "deploymentProjectsTitle": "Deployment projects",
   "deploymentProjectsSubtitleEmpty": "Collections of servers, stacks, and services",
   "deploymentProjectsCount": "{} project{} · {} resource{}",
@@ -1315,7 +1278,6 @@
   "deploymentEditorDescriptionLabel": "Description (optional)",
   "deploymentEditorCreate": "Create",
   "deploymentEditorSave": "Save",
-
   "deploymentDetailLoadError": "Could not load project: {}",
   "deploymentDetailUnavailable": "This managed project is no longer available.",
   "deploymentEditProject": "Edit project",

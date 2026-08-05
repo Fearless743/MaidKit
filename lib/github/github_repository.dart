@@ -20,9 +20,6 @@ class GitHubRepository {
   Stream<List<GitHubRepoPin>> watchRepoPins() =>
       _database.watchGitHubRepoPins();
 
-  Stream<List<GitHubProjectWorkflowLink>> watchProjectWorkflowLinks() =>
-      _database.watchGitHubProjectWorkflowLinks();
-
   Future<String?> tokenFor(String login) => _tokenStore.read(login);
 
   Future<void> saveToken(String login, String token) =>
@@ -99,38 +96,4 @@ class GitHubRepository {
   Future<void> unpinRepo(GitHubRepoPin pin) => (_database.delete(
     _database.gitHubRepoPins,
   )..where((table) => table.id.equals(pin.id))).go();
-
-  Future<List<GitHubProjectWorkflowLink>> linksForProject(int projectId) =>
-      (_database.select(
-        _database.gitHubProjectWorkflowLinks,
-      )..where((table) => table.projectId.equals(projectId))).get();
-
-  /// Links a project to a workflow. A project holds at most one link, so a
-  /// previous link is replaced.
-  Future<void> linkProjectWorkflow({
-    required int projectId,
-    required String owner,
-    required String name,
-    required String workflowName,
-  }) => _database.transaction(() async {
-    await (_database.delete(
-      _database.gitHubProjectWorkflowLinks,
-    )..where((table) => table.projectId.equals(projectId))).go();
-    await _database
-        .into(_database.gitHubProjectWorkflowLinks)
-        .insert(
-          GitHubProjectWorkflowLinksCompanion.insert(
-            projectId: projectId,
-            owner: owner,
-            name: name,
-            workflowName: workflowName,
-            linkedAt: DateTime.now().toUtc(),
-          ),
-        );
-  });
-
-  Future<void> unlinkProjectWorkflow(GitHubProjectWorkflowLink link) =>
-      (_database.delete(
-        _database.gitHubProjectWorkflowLinks,
-      )..where((table) => table.id.equals(link.id))).go();
 }

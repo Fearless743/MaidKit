@@ -204,7 +204,7 @@ void main() {
   });
 
   group('LocalMcpToolExecutor tool surface', () {
-    test('exposes the eighteen MaidKit resource tools', () {
+    test('exposes the sixteen MaidKit resource tools', () {
       final definitions = LocalMcpToolExecutor.definitions;
       final names = [for (final tool in definitions) tool['name']];
       expect(names, [
@@ -224,8 +224,6 @@ void main() {
         'github_list_runs',
         'github_get_run',
         'github_list_jobs',
-        'github_open_prs',
-        'github_get_release',
       ]);
       final runCommand = definitions.firstWhere(
         (tool) => tool['name'] == 'run_command',
