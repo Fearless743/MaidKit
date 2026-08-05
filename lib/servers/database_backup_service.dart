@@ -199,7 +199,12 @@ class DatabaseBackupService {
       }
 
       for (final record in servers) {
-        final server = Server.fromJson(record);
+        // Backups written before the serial-port feature omit the
+        // connectionType key; those servers were SSH by definition.
+        final server = Server.fromJson({
+          ...record,
+          'connectionType': record['connectionType'] ?? 'ssh',
+        });
         final credential = record['credential'];
         final encrypted = credential is String
             ? await _vault.encrypt(credential, context: 'server-credential')
@@ -242,6 +247,8 @@ class DatabaseBackupService {
                 environment: Value(server.environment),
                 initialSnippets: Value(server.initialSnippets),
                 tags: Value(server.tags),
+                connectionType: Value(server.connectionType),
+                serialConfig: Value(server.serialConfig),
               ),
             );
       }

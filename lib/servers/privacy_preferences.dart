@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'server_models.dart';
 
 abstract interface class PrivacySettings {
   bool get hideServerAddresses;
@@ -46,8 +47,12 @@ class InMemoryPrivacySettings implements PrivacySettings {
 
 /// The address line shown next to a server's name. When address hiding is on
 /// (screen recording / streaming), only the username is displayed so no IP
-/// ever appears on screen.
-String serverAddressLabel(Server server, {required bool hideAddresses}) =>
-    hideAddresses
-    ? server.username
-    : '${server.username}@${server.host}:${server.port}';
+/// ever appears on screen. Serial servers show the local device path instead.
+String serverAddressLabel(Server server, {required bool hideAddresses}) {
+  if (server.connectionType == ServerConnectionType.serial.name) {
+    return decodeSerialConfig(server.serialConfig)?.device ?? server.host;
+  }
+  return hideAddresses
+      ? server.username
+      : '${server.username}@${server.host}:${server.port}';
+}

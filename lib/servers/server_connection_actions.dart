@@ -151,6 +151,38 @@ Future<bool> openTerminalSession(
   }
 }
 
+/// Opens a terminal over [server]'s local serial port through the bridge
+/// helper. Returns whether the terminal tab was opened.
+Future<bool> openSerialTerminalSession(
+  BuildContext context,
+  WidgetRef ref,
+  Server server, {
+  String? paneId,
+}) async {
+  final loading = showMaidKitLoadingModal(
+    context,
+    message: 'serverOpeningSerialTerminal'.tr(args: [server.name]),
+  );
+  try {
+    await ref
+        .read(terminalTabsProvider.notifier)
+        .openSerial(server, paneId: paneId);
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      showStyledSnackBar(
+        message: error.toString(),
+        title: 'serverCannotOpenSerialTerminal'.tr(),
+        icon: Symbols.terminal,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+    }
+    return false;
+  } finally {
+    loading.dismiss();
+  }
+}
+
 Future<bool> _approveHostKey(BuildContext context, HostKeyPrompt prompt) async {
   return await showMaidKitOverlayDialog<bool>(
         barrierDismissible: false,

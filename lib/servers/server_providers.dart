@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:system_fonts/system_fonts.dart';
+import 'package:async/async.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/agent/mcp_client.dart';
@@ -30,6 +31,8 @@ import 'port_forwarding_models.dart';
 import 'privacy_preferences.dart';
 import 'server_repository.dart';
 import 'server_metrics_refresh_scheduler.dart';
+import 'serial_bridge_client.dart';
+import 'serial_connection_manager.dart';
 import 'ssh_connection_manager.dart';
 import 'server_models.dart';
 import 'terminal_session_adapter.dart';
@@ -853,9 +856,28 @@ final connectionManagerProvider = Provider<SshConnectionManager>((ref) {
   return manager;
 });
 
+/// The shared serial bridge client. Registration status is cached per client
+/// instance, so the editor's device picker and the connection manager agree on
+/// whether the helper has been approved.
+final serialBridgeClientProvider = Provider<SerialBridgeClient>(
+  (ref) => SerialBridgeClient(),
+);
+
+final serialConnectionManagerProvider = Provider<SerialConnectionManager>((
+  ref,
+) {
+  final manager = SerialConnectionManager(
+    () => ref.read(terminalSessionAdapterFactoryProvider),
+    bridgeClient: ref.watch(serialBridgeClientProvider),
+  );
+  ref.onDispose(manager.dispose);
+  return manager;
+});
+
 final sessionsProvider = StreamProvider<List<SshSessionInfo>>((ref) {
   final manager = ref.watch(connectionManagerProvider);
-  return _watchSessions(manager);
+  final serial = ref.watch(serialConnectionManagerProvider);
+  return _watchSessions(manager, serial);
 });
 
 final portForwardsProvider = StreamProvider<List<ActivePortForward>>((ref) {
@@ -872,9 +894,10 @@ Stream<List<ActivePortForward>> _watchPortForwards(
 
 Stream<List<SshSessionInfo>> _watchSessions(
   SshConnectionManager manager,
+  SerialConnectionManager serial,
 ) async* {
-  yield manager.current;
-  yield* manager.sessions;
+  yield [...manager.current, ...serial.current];
+  yield* StreamGroup.merge([manager.sessions, serial.sessions]);
 }
 
 final serversProvider = StreamProvider<List<Server>>((ref) {

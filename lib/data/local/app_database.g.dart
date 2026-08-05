@@ -307,6 +307,29 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _connectionTypeMeta = const VerificationMeta(
+    'connectionType',
+  );
+  @override
+  late final GeneratedColumn<String> connectionType = GeneratedColumn<String>(
+    'connection_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('ssh'),
+  );
+  static const VerificationMeta _serialConfigMeta = const VerificationMeta(
+    'serialConfig',
+  );
+  @override
+  late final GeneratedColumn<String> serialConfig = GeneratedColumn<String>(
+    'serial_config',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -336,6 +359,8 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     environment,
     initialSnippets,
     tags,
+    connectionType,
+    serialConfig,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -556,6 +581,24 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
       );
     }
+    if (data.containsKey('connection_type')) {
+      context.handle(
+        _connectionTypeMeta,
+        connectionType.isAcceptableOrUnknown(
+          data['connection_type']!,
+          _connectionTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('serial_config')) {
+      context.handle(
+        _serialConfigMeta,
+        serialConfig.isAcceptableOrUnknown(
+          data['serial_config']!,
+          _serialConfigMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -673,6 +716,14 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         DriftSqlType.string,
         data['${effectivePrefix}tags'],
       ),
+      connectionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}connection_type'],
+      )!,
+      serialConfig: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}serial_config'],
+      ),
     );
   }
 
@@ -710,6 +761,8 @@ class Server extends DataClass implements Insertable<Server> {
   final String? environment;
   final String? initialSnippets;
   final String? tags;
+  final String connectionType;
+  final String? serialConfig;
   const Server({
     required this.id,
     required this.name,
@@ -738,6 +791,8 @@ class Server extends DataClass implements Insertable<Server> {
     this.environment,
     this.initialSnippets,
     this.tags,
+    required this.connectionType,
+    this.serialConfig,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -811,6 +866,10 @@ class Server extends DataClass implements Insertable<Server> {
     if (!nullToAbsent || tags != null) {
       map['tags'] = Variable<String>(tags);
     }
+    map['connection_type'] = Variable<String>(connectionType);
+    if (!nullToAbsent || serialConfig != null) {
+      map['serial_config'] = Variable<String>(serialConfig);
+    }
     return map;
   }
 
@@ -881,6 +940,10 @@ class Server extends DataClass implements Insertable<Server> {
           ? const Value.absent()
           : Value(initialSnippets),
       tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
+      connectionType: Value(connectionType),
+      serialConfig: serialConfig == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serialConfig),
     );
   }
 
@@ -925,6 +988,8 @@ class Server extends DataClass implements Insertable<Server> {
       environment: serializer.fromJson<String?>(json['environment']),
       initialSnippets: serializer.fromJson<String?>(json['initialSnippets']),
       tags: serializer.fromJson<String?>(json['tags']),
+      connectionType: serializer.fromJson<String>(json['connectionType']),
+      serialConfig: serializer.fromJson<String?>(json['serialConfig']),
     );
   }
   @override
@@ -960,6 +1025,8 @@ class Server extends DataClass implements Insertable<Server> {
       'environment': serializer.toJson<String?>(environment),
       'initialSnippets': serializer.toJson<String?>(initialSnippets),
       'tags': serializer.toJson<String?>(tags),
+      'connectionType': serializer.toJson<String>(connectionType),
+      'serialConfig': serializer.toJson<String?>(serialConfig),
     };
   }
 
@@ -991,6 +1058,8 @@ class Server extends DataClass implements Insertable<Server> {
     Value<String?> environment = const Value.absent(),
     Value<String?> initialSnippets = const Value.absent(),
     Value<String?> tags = const Value.absent(),
+    String? connectionType,
+    Value<String?> serialConfig = const Value.absent(),
   }) => Server(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -1039,6 +1108,8 @@ class Server extends DataClass implements Insertable<Server> {
         ? initialSnippets.value
         : this.initialSnippets,
     tags: tags.present ? tags.value : this.tags,
+    connectionType: connectionType ?? this.connectionType,
+    serialConfig: serialConfig.present ? serialConfig.value : this.serialConfig,
   );
   Server copyWithCompanion(ServersCompanion data) {
     return Server(
@@ -1097,6 +1168,12 @@ class Server extends DataClass implements Insertable<Server> {
           ? data.initialSnippets.value
           : this.initialSnippets,
       tags: data.tags.present ? data.tags.value : this.tags,
+      connectionType: data.connectionType.present
+          ? data.connectionType.value
+          : this.connectionType,
+      serialConfig: data.serialConfig.present
+          ? data.serialConfig.value
+          : this.serialConfig,
     );
   }
 
@@ -1129,7 +1206,9 @@ class Server extends DataClass implements Insertable<Server> {
           ..write('proxyPasswordNonce: $proxyPasswordNonce, ')
           ..write('environment: $environment, ')
           ..write('initialSnippets: $initialSnippets, ')
-          ..write('tags: $tags')
+          ..write('tags: $tags, ')
+          ..write('connectionType: $connectionType, ')
+          ..write('serialConfig: $serialConfig')
           ..write(')'))
         .toString();
   }
@@ -1163,6 +1242,8 @@ class Server extends DataClass implements Insertable<Server> {
     environment,
     initialSnippets,
     tags,
+    connectionType,
+    serialConfig,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1194,7 +1275,9 @@ class Server extends DataClass implements Insertable<Server> {
           other.proxyPasswordNonce == this.proxyPasswordNonce &&
           other.environment == this.environment &&
           other.initialSnippets == this.initialSnippets &&
-          other.tags == this.tags);
+          other.tags == this.tags &&
+          other.connectionType == this.connectionType &&
+          other.serialConfig == this.serialConfig);
 }
 
 class ServersCompanion extends UpdateCompanion<Server> {
@@ -1225,6 +1308,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
   final Value<String?> environment;
   final Value<String?> initialSnippets;
   final Value<String?> tags;
+  final Value<String> connectionType;
+  final Value<String?> serialConfig;
   const ServersCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -1253,6 +1338,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.environment = const Value.absent(),
     this.initialSnippets = const Value.absent(),
     this.tags = const Value.absent(),
+    this.connectionType = const Value.absent(),
+    this.serialConfig = const Value.absent(),
   });
   ServersCompanion.insert({
     this.id = const Value.absent(),
@@ -1282,6 +1369,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.environment = const Value.absent(),
     this.initialSnippets = const Value.absent(),
     this.tags = const Value.absent(),
+    this.connectionType = const Value.absent(),
+    this.serialConfig = const Value.absent(),
   }) : name = Value(name),
        host = Value(host),
        username = Value(username);
@@ -1313,6 +1402,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Expression<String>? environment,
     Expression<String>? initialSnippets,
     Expression<String>? tags,
+    Expression<String>? connectionType,
+    Expression<String>? serialConfig,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1346,6 +1437,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
       if (environment != null) 'environment': environment,
       if (initialSnippets != null) 'initial_snippets': initialSnippets,
       if (tags != null) 'tags': tags,
+      if (connectionType != null) 'connection_type': connectionType,
+      if (serialConfig != null) 'serial_config': serialConfig,
     });
   }
 
@@ -1377,6 +1470,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Value<String?>? environment,
     Value<String?>? initialSnippets,
     Value<String?>? tags,
+    Value<String>? connectionType,
+    Value<String?>? serialConfig,
   }) {
     return ServersCompanion(
       id: id ?? this.id,
@@ -1407,6 +1502,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
       environment: environment ?? this.environment,
       initialSnippets: initialSnippets ?? this.initialSnippets,
       tags: tags ?? this.tags,
+      connectionType: connectionType ?? this.connectionType,
+      serialConfig: serialConfig ?? this.serialConfig,
     );
   }
 
@@ -1496,6 +1593,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     if (tags.present) {
       map['tags'] = Variable<String>(tags.value);
     }
+    if (connectionType.present) {
+      map['connection_type'] = Variable<String>(connectionType.value);
+    }
+    if (serialConfig.present) {
+      map['serial_config'] = Variable<String>(serialConfig.value);
+    }
     return map;
   }
 
@@ -1528,7 +1631,9 @@ class ServersCompanion extends UpdateCompanion<Server> {
           ..write('proxyPasswordNonce: $proxyPasswordNonce, ')
           ..write('environment: $environment, ')
           ..write('initialSnippets: $initialSnippets, ')
-          ..write('tags: $tags')
+          ..write('tags: $tags, ')
+          ..write('connectionType: $connectionType, ')
+          ..write('serialConfig: $serialConfig')
           ..write(')'))
         .toString();
   }
@@ -7806,6 +7911,8 @@ typedef $$ServersTableCreateCompanionBuilder =
       Value<String?> environment,
       Value<String?> initialSnippets,
       Value<String?> tags,
+      Value<String> connectionType,
+      Value<String?> serialConfig,
     });
 typedef $$ServersTableUpdateCompanionBuilder =
     ServersCompanion Function({
@@ -7836,6 +7943,8 @@ typedef $$ServersTableUpdateCompanionBuilder =
       Value<String?> environment,
       Value<String?> initialSnippets,
       Value<String?> tags,
+      Value<String> connectionType,
+      Value<String?> serialConfig,
     });
 
 class $$ServersTableFilterComposer
@@ -7979,6 +8088,16 @@ class $$ServersTableFilterComposer
 
   ColumnFilters<String> get tags => $composableBuilder(
     column: $table.tags,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get connectionType => $composableBuilder(
+    column: $table.connectionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get serialConfig => $composableBuilder(
+    column: $table.serialConfig,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8126,6 +8245,16 @@ class $$ServersTableOrderingComposer
     column: $table.tags,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get connectionType => $composableBuilder(
+    column: $table.connectionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get serialConfig => $composableBuilder(
+    column: $table.serialConfig,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ServersTableAnnotationComposer
@@ -8245,6 +8374,16 @@ class $$ServersTableAnnotationComposer
 
   GeneratedColumn<String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
+
+  GeneratedColumn<String> get connectionType => $composableBuilder(
+    column: $table.connectionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get serialConfig => $composableBuilder(
+    column: $table.serialConfig,
+    builder: (column) => column,
+  );
 }
 
 class $$ServersTableTableManager
@@ -8302,6 +8441,8 @@ class $$ServersTableTableManager
                 Value<String?> environment = const Value.absent(),
                 Value<String?> initialSnippets = const Value.absent(),
                 Value<String?> tags = const Value.absent(),
+                Value<String> connectionType = const Value.absent(),
+                Value<String?> serialConfig = const Value.absent(),
               }) => ServersCompanion(
                 id: id,
                 name: name,
@@ -8330,6 +8471,8 @@ class $$ServersTableTableManager
                 environment: environment,
                 initialSnippets: initialSnippets,
                 tags: tags,
+                connectionType: connectionType,
+                serialConfig: serialConfig,
               ),
           createCompanionCallback:
               ({
@@ -8360,6 +8503,8 @@ class $$ServersTableTableManager
                 Value<String?> environment = const Value.absent(),
                 Value<String?> initialSnippets = const Value.absent(),
                 Value<String?> tags = const Value.absent(),
+                Value<String> connectionType = const Value.absent(),
+                Value<String?> serialConfig = const Value.absent(),
               }) => ServersCompanion.insert(
                 id: id,
                 name: name,
@@ -8388,6 +8533,8 @@ class $$ServersTableTableManager
                 environment: environment,
                 initialSnippets: initialSnippets,
                 tags: tags,
+                connectionType: connectionType,
+                serialConfig: serialConfig,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

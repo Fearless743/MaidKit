@@ -65,6 +65,8 @@ class ServerDraft {
     this.environment = const {},
     this.initialSnippets = const [],
     this.tags = const [],
+    this.connectionType = ServerConnectionType.ssh,
+    this.serialConfig,
   });
 
   final String name;
@@ -91,6 +93,13 @@ class ServerDraft {
 
   /// Free-form labels shown on the server card and usable as filters.
   final List<String> tags;
+
+  /// Transport used to reach this server: `ssh` for a remote host, `serial`
+  /// for a local serial port bridged over loopback TCP.
+  final ServerConnectionType connectionType;
+
+  /// Serial-port settings, only used when [connectionType] is serial.
+  final SerialConfig? serialConfig;
 }
 
 /// JSON-encodes [environment] for storage, or null when it is empty.
@@ -133,6 +142,86 @@ List<String> decodeStringList(String? value) {
     for (final item in decoded)
       if (item is String && item.isNotEmpty) item,
   ];
+}
+
+enum ServerConnectionType { ssh, serial }
+
+enum SerialParity { none, even, odd }
+
+enum SerialFlowControl { none, hardware, software }
+
+/// Serial-port settings for a [ServerConnectionType.serial] server. The
+/// terminal reaches the device through the platform's local bridge helper,
+/// which tunnels the raw byte stream over loopback TCP.
+class SerialConfig {
+  const SerialConfig({
+    required this.device,
+    this.baudRate = 115200,
+    this.dataBits = 8,
+    this.parity = SerialParity.none,
+    this.stopBits = 1,
+    this.flowControl = SerialFlowControl.none,
+  });
+
+  final String device;
+  final int baudRate;
+  final int dataBits;
+  final SerialParity parity;
+  final int stopBits;
+  final SerialFlowControl flowControl;
+
+  Map<String, Object?> toJson() => {
+    'device': device,
+    'baudRate': baudRate,
+    'dataBits': dataBits,
+    'parity': parity.name,
+    'stopBits': stopBits,
+    'flowControl': flowControl.name,
+  };
+
+  factory SerialConfig.decode(String value) {
+    final json = jsonDecode(value) as Map<String, dynamic>;
+    final device = json['device'];
+    return SerialConfig(
+      device: device is String ? device : '',
+      baudRate: json['baudRate'] is int ? json['baudRate'] as int : 115200,
+      dataBits: json['dataBits'] is int ? json['dataBits'] as int : 8,
+      parity: _parseSerialParity(json['parity']),
+      stopBits: json['stopBits'] is int ? json['stopBits'] as int : 1,
+      flowControl: _parseSerialFlowControl(json['flowControl']),
+    );
+  }
+}
+
+SerialParity _parseSerialParity(Object? value) {
+  if (value is! String) return SerialParity.none;
+  for (final parity in SerialParity.values) {
+    if (parity.name == value) return parity;
+  }
+  return SerialParity.none;
+}
+
+SerialFlowControl _parseSerialFlowControl(Object? value) {
+  if (value is! String) return SerialFlowControl.none;
+  for (final control in SerialFlowControl.values) {
+    if (control.name == value) return control;
+  }
+  return SerialFlowControl.none;
+}
+
+/// JSON-encodes [config] for storage, or null when it is null.
+String? encodeSerialConfig(SerialConfig? config) =>
+    config == null ? null : jsonEncode(config.toJson());
+
+/// Decodes a stored serial-config JSON column. Null, empty, or malformed
+/// values decode to null; unknown enum names fall back to their defaults.
+SerialConfig? decodeSerialConfig(String? value) {
+  if (value == null || value.isEmpty) return null;
+  try {
+    return SerialConfig.decode(value);
+  } on FormatException {
+    return null;
+  }
 }
 
 enum ServerProxyType { none, http, socks5 }

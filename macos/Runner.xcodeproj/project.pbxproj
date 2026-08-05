@@ -243,6 +243,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				AB12CD34EF56AB12CD34EF56 /* Serial Bridge Helper */,
 				5AE3A24619F362444B914678 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
@@ -332,6 +333,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		AB12CD34EF56AB12CD34EF56 /* Serial Bridge Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nBIN=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/serial-bridge\"\nmkdir -p \"$(dirname \"$BIN\")\"\nSRC=\"$SRCROOT/SerialBridge/SerialBridge.swift\"\n# Modern swiftc derives the arch from -target (it rejects -arch); compile\n# each requested arch separately and lipo them into a universal binary when\n# ARCHS contains more than one entry.\nARCH_LIST=\"$ARCHS\"\nif [ -z \"$ARCH_LIST\" ]; then\n  ARCH_LIST=\"$(uname -m)\"\nfi\nSLICES=\"\"\nfor a in $ARCH_LIST; do\n  SLICE=\"${BIN}.${a}\"\n  xcrun --sdk macosx swiftc -O -target \"$a-apple-macos10.15\" -o \"$SLICE\" \"$SRC\"\n  SLICES=\"$SLICES $SLICE\"\ndone\nif [ -n \"$(echo \"$ARCH_LIST\" | tr ' ' '\\n' | sort -u | tail -n +2)\" ]; then\n  lipo -create -output \"$BIN\" $SLICES\n  rm -f $SLICES\nelse\n  mv -f $SLICES \"$BIN\"\nfi\n# Sign with the app identity but NO entitlements: the helper must be\n# unsandboxed so it can open serial devices on the user's behalf.\nIDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY:-$CODE_SIGN_IDENTITY}\"\nif [ -z \"$IDENTITY\" ] || [ \"$IDENTITY\" = \"-\" ]; then\n  codesign --force --sign - \"$BIN\"\nelse\n  codesign --force --sign \"$IDENTITY\" \"$BIN\"\nfi\n# Write the in-bundle LaunchAgent plist (BundleProgram is relative to the\n# app bundle; SMAppService.agent(plistName:) picks it up from here).\nPLIST_DIR=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents\"\nmkdir -p \"$PLIST_DIR\"\ncat > \"$PLIST_DIR/dev.solsynth.maidKit.serial-bridge.plist\" <<'PLIST_EOF'\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>Label</key>\n\t<string>dev.solsynth.maidKit.serial-bridge</string>\n\t<key>BundleProgram</key>\n\t<string>Contents/Resources/serial-bridge</string>\n\t<key>RunAtLoad</key>\n\t<true/>\n\t<key>KeepAlive</key>\n\t<true/>\n</dict>\n</plist>\nPLIST_EOF\n";
+		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

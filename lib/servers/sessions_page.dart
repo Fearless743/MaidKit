@@ -53,7 +53,10 @@ class SessionsWorkspace extends ConsumerWidget {
                       tabs: tabs,
                       // Full-workspace intro (no pane chrome / no top tab strip).
                       onOpenTerminal: (server) =>
-                          openTerminalSession(context, ref, server),
+                          server.connectionType ==
+                              ServerConnectionType.serial.name
+                          ? openSerialTerminalSession(context, ref, server)
+                          : openTerminalSession(context, ref, server),
                       onOpenFiles: (server) => _openFiles(context, ref, server),
                     ),
                   )
@@ -86,6 +89,7 @@ Future<void> _openFiles(
   Server server, {
   String? paneId,
 }) async {
+  if (server.connectionType == ServerConnectionType.serial.name) return;
   final manager = ref.read(connectionManagerProvider);
   if (manager.clientFor(server.id) == null &&
       !await connectForStatistics(context, ref, server)) {
@@ -326,12 +330,21 @@ class _SessionPaneView extends ConsumerWidget {
                       servers: servers,
                       tabs: tabs,
                       compact: true,
-                      onOpenTerminal: (server) => openTerminalSession(
-                        context,
-                        ref,
-                        server,
-                        paneId: paneId,
-                      ),
+                      onOpenTerminal: (server) =>
+                          server.connectionType ==
+                              ServerConnectionType.serial.name
+                          ? openSerialTerminalSession(
+                              context,
+                              ref,
+                              server,
+                              paneId: paneId,
+                            )
+                          : openTerminalSession(
+                              context,
+                              ref,
+                              server,
+                              paneId: paneId,
+                            ),
                       onOpenFiles: (server) =>
                           _openFiles(context, ref, server, paneId: paneId),
                     )

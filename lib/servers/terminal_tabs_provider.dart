@@ -288,6 +288,23 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     _watchTerminalDone(handle);
   }
 
+  /// Opens a terminal over [server]'s local serial port through the bridge
+  /// helper.
+  Future<void> openSerial(Server server, {String? paneId}) async {
+    if (paneId != null) focusPane(paneId);
+    final handle = await ref
+        .read(serialConnectionManagerProvider)
+        .openTerminal(server);
+    final tab = TerminalTab(
+      id: handle.id,
+      serverId: server.id,
+      serverName: server.name,
+      terminal: handle.adapter,
+    );
+    _insertTab(tab, targetPaneId: paneId);
+    _watchTerminalDone(handle);
+  }
+
   void openFileManagement(
     Server server, {
     String? initialPath,
@@ -507,6 +524,8 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     }
     if (tab is TerminalTab) {
       await ref.read(connectionManagerProvider).closeTerminal(tabId);
+      // Idempotent for SSH terminal ids, closes serial sessions.
+      await ref.read(serialConnectionManagerProvider).closeTerminal(tabId);
     }
     fileEditorCloseGuards.remove(tabId);
     _removeTab(tabId);

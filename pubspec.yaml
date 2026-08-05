@@ -33,6 +33,7 @@ dependencies:
 
   auto_route: ^11.1.0
   archive: ^4.0.9
+  async: ^2.13.1
   cryptography: ^2.9.0
   crypto: ^3.0.7
   dartssh2: ^2.22.5
@@ -102,6 +103,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  path_provider_platform_interface: ^2.1.2
 
 dependency_overrides:
   hooks: ^2.0.2

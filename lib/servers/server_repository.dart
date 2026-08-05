@@ -53,6 +53,8 @@ class ServerRepository {
             environment: Value(encodeEnvironmentMap(draft.environment)),
             initialSnippets: Value(encodeSnippetIdList(draft.initialSnippets)),
             tags: Value(encodeStringList(draft.tags)),
+            connectionType: Value(draft.connectionType.name),
+            serialConfig: Value(encodeSerialConfig(draft.serialConfig)),
           ),
         );
     return (_database.select(
@@ -104,6 +106,8 @@ class ServerRepository {
         environment: Value(encodeEnvironmentMap(draft.environment)),
         initialSnippets: Value(encodeSnippetIdList(draft.initialSnippets)),
         tags: Value(encodeStringList(draft.tags)),
+        connectionType: Value(draft.connectionType.name),
+        serialConfig: Value(encodeSerialConfig(draft.serialConfig)),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
@@ -331,6 +335,8 @@ class ServerRepository {
             'environment': server.environment,
             'initialSnippets': server.initialSnippets,
             'tags': server.tags,
+            'connectionType': server.connectionType,
+            'serialConfig': server.serialConfig,
           },
         )
         .toList();
@@ -382,6 +388,8 @@ class ServerRepository {
           environment: Value(value['environment'] as String?),
           initialSnippets: Value(value['initialSnippets'] as String?),
           tags: Value(value['tags'] as String?),
+          connectionType: Value(value['connectionType'] as String? ?? 'ssh'),
+          serialConfig: Value(value['serialConfig'] as String?),
           createdAt: Value(DateTime.parse(value['createdAt'] as String)),
           updatedAt: Value(DateTime.parse(value['updatedAt'] as String)),
           deletedAt: Value(

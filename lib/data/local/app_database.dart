@@ -37,6 +37,11 @@ class Servers extends Table {
   TextColumn get environment => text().nullable()();
   TextColumn get initialSnippets => text().nullable()();
   TextColumn get tags => text().nullable()();
+  // Connection transport: `ssh` for a remote host, `serial` for a local
+  // serial port bridged over loopback TCP by the platform helper. When the
+  // type is `serial`, [serialConfig] holds the JSON-encoded SerialConfig.
+  TextColumn get connectionType => text().withDefault(const Constant('ssh'))();
+  TextColumn get serialConfig => text().nullable()();
 }
 
 /// An encrypted SSH credential that may be linked to by more than one server.
@@ -249,7 +254,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -444,6 +449,10 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'DROP TABLE IF EXISTS github_project_workflow_links',
         );
+      }
+      if (from < 22) {
+        await m.addColumn(servers, servers.connectionType);
+        await m.addColumn(servers, servers.serialConfig);
       }
     },
   );

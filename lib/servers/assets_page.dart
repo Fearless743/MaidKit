@@ -136,6 +136,11 @@ class ServerAssetsSection extends ConsumerWidget {
             environment: decodeEnvironmentMap(server.environment),
             initialSnippets: decodeSnippetIdList(server.initialSnippets),
             tags: decodeStringList(server.tags),
+            connectionType:
+                ServerConnectionType.values
+                    .asNameMap()[server.connectionType] ??
+                ServerConnectionType.ssh,
+            serialConfig: decodeSerialConfig(server.serialConfig),
           ),
         ),
       );

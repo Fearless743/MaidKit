@@ -16,6 +16,7 @@ import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
+import 'serial_bridge_client.dart';
 import 'privacy_preferences.dart';
 import 'sessions_page.dart';
 import 'tailscale_service.dart';
@@ -59,7 +60,11 @@ class ServerDashboardTab extends ConsumerWidget {
     WidgetRef ref,
     Server server,
   ) async {
-    await connectForStatistics(context, ref, server);
+    if (server.connectionType == ServerConnectionType.serial.name) {
+      await openSerialTerminalSession(context, ref, server);
+    } else {
+      await connectForStatistics(context, ref, server);
+    }
   }
 
   Future<void> _reconnectAll(
@@ -101,6 +106,11 @@ class ServerDashboardTab extends ConsumerWidget {
             environment: decodeEnvironmentMap(server.environment),
             initialSnippets: decodeSnippetIdList(server.initialSnippets),
             tags: decodeStringList(server.tags),
+            connectionType:
+                ServerConnectionType.values
+                    .asNameMap()[server.connectionType] ??
+                ServerConnectionType.ssh,
+            serialConfig: decodeSerialConfig(server.serialConfig),
           ),
         ),
       );
@@ -152,6 +162,7 @@ class ServerDashboardTab extends ConsumerWidget {
     WidgetRef ref,
     Server server,
   ) async {
+    if (server.connectionType == ServerConnectionType.serial.name) return;
     final manager = ref.read(connectionManagerProvider);
     if (manager.clientFor(server.id) == null &&
         !await connectForStatistics(context, ref, server)) {
@@ -505,6 +516,7 @@ class _ServerCard extends ConsumerWidget {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     final hideAddresses = ref.watch(hideServerAddressesProvider);
+    final isSerial = server.connectionType == ServerConnectionType.serial.name;
     final connected = session?.status == SessionStatus.connected;
     final connecting = session?.status == SessionStatus.connecting;
     final failed = session?.status == SessionStatus.failed;
@@ -546,7 +558,8 @@ class _ServerCard extends ConsumerWidget {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (isTailnetAddress(server.host)) ...[
+                              if (!isSerial &&
+                                  isTailnetAddress(server.host)) ...[
                                 Tooltip(
                                   message: 'tailscaleViaTailnet'.tr(),
                                   child: Icon(
@@ -579,7 +592,9 @@ class _ServerCard extends ConsumerWidget {
                     IconButton(
                       tooltip: 'serversRefreshStatistics'.tr(),
                       visualDensity: VisualDensity.compact,
-                      onPressed: connected ? onRefresh : null,
+                      onPressed: isSerial
+                          ? null
+                          : (connected ? onRefresh : null),
                       icon: const Icon(Symbols.refresh),
                     ),
                   ],
@@ -589,7 +604,12 @@ class _ServerCard extends ConsumerWidget {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: connected
+                  child: isSerial
+                      ? _StatsMessage(
+                          icon: Symbols.usb,
+                          message: 'serversSerialConsole'.tr(),
+                        )
+                      : connected
                       ? _ServerStats(
                           stats: session?.stats,
                           systemInfo: session?.systemInfo,
@@ -638,7 +658,7 @@ class _ServerCard extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _ServerQuickActions(
                   onOpenTerminal: connecting ? null : onOpenTerminal,
-                  onOpenFiles: connecting ? null : onOpenFiles,
+                  onOpenFiles: connecting || isSerial ? null : onOpenFiles,
                 ),
               ),
             ],
@@ -1232,6 +1252,17 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
   bool _collectStats = true;
   bool _collectSystemInfo = true;
 
+  // Connection transport and serial-port settings.
+  ServerConnectionType _connectionType = ServerConnectionType.ssh;
+  final _serialDevice = TextEditingController();
+  List<String> _serialDevices = const [];
+  var _scanningSerialDevices = false;
+  int _serialBaud = 115200;
+  int _serialDataBits = 8;
+  SerialParity _serialParity = SerialParity.none;
+  int _serialStopBits = 1;
+  SerialFlowControl _serialFlowControl = SerialFlowControl.none;
+
   // Per-server proxy configuration.
   ServerProxyType _proxyType = ServerProxyType.none;
   final _proxyHost = TextEditingController();
@@ -1267,6 +1298,23 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
     }
     _collectStats = initial.collectStats;
     _collectSystemInfo = initial.collectSystemInfo;
+    _connectionType = initial.connectionType;
+    final serialConfig = initial.serialConfig;
+    if (serialConfig != null) {
+      _serialDevice.text = serialConfig.device;
+      _serialBaud = serialConfig.baudRate;
+      _serialDataBits = serialConfig.dataBits;
+      _serialParity = serialConfig.parity;
+      _serialStopBits = serialConfig.stopBits;
+      _serialFlowControl = serialConfig.flowControl;
+    }
+    if (_connectionType == ServerConnectionType.serial) {
+      // Populate the device picker with the machine's serial ports. Runs
+      // off the build phase; errors surface as a snackbar.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scanSerialDevices();
+      });
+    }
     final proxy = initial.proxy;
     if (proxy != null) {
       _proxyType = proxy.type;
@@ -1300,6 +1348,7 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
       _proxyUsername,
       _proxyPassword,
       _tagInput,
+      _serialDevice,
     ]) {
       controller.dispose();
     }
@@ -1315,6 +1364,44 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
     final bytes = result?.files.single.bytes;
     if (bytes != null) {
       setState(() => _secret.text = String.fromCharCodes(bytes));
+    }
+  }
+
+  /// Discovers serial devices through the platform bridge helper and fills
+  /// the device dropdown. A picked device replaces the current field value.
+  Future<void> _scanSerialDevices() async {
+    if (_scanningSerialDevices) return;
+    setState(() => _scanningSerialDevices = true);
+    try {
+      final devices = await ref.read(serialBridgeClientProvider).listDevices();
+      if (!mounted) return;
+      setState(() {
+        _serialDevices = devices;
+        // Auto-select when the field is still empty and a device exists.
+        if (_serialDevice.text.trim().isEmpty && devices.isNotEmpty) {
+          _serialDevice.text = devices.first;
+        }
+      });
+    } on SerialBridgeException catch (error) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: error.message,
+          title: 'serverSerialScanError'.tr(),
+          icon: Symbols.usb,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: 'serverSerialScanError'.tr(),
+          title: 'serverSerialScanError'.tr(),
+          icon: Symbols.usb,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _scanningSerialDevices = false);
     }
   }
 
@@ -1402,6 +1489,18 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
 
   void _save() {
     if (!_form.currentState!.validate()) return;
+    // The device picker is a DropdownMenu, which is not a FormField, so the
+    // empty-device check must run outside the form validator.
+    if (_connectionType == ServerConnectionType.serial &&
+        _serialDevice.text.trim().isEmpty) {
+      showStyledSnackBar(
+        message: 'serverSerialDeviceRequired'.tr(),
+        title: 'serverSerialDeviceRequired'.tr(),
+        icon: Symbols.usb,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+      return;
+    }
     final credential = !_useNewCredential
         ? null
         : _type == CredentialType.password
@@ -1442,6 +1541,17 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
         },
         initialSnippets: _snippetIds.toList(),
         tags: List.of(_tags),
+        connectionType: _connectionType,
+        serialConfig: _connectionType == ServerConnectionType.serial
+            ? SerialConfig(
+                device: _serialDevice.text.trim(),
+                baudRate: _serialBaud,
+                dataBits: _serialDataBits,
+                parity: _serialParity,
+                stopBits: _serialStopBits,
+                flowControl: _serialFlowControl,
+              )
+            : null,
       ),
     );
   }
@@ -1464,162 +1574,53 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
+              Text(
+                'serverConnectionType'.tr(),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<ServerConnectionType>(
+                segments: [
+                  ButtonSegment(
+                    value: ServerConnectionType.ssh,
+                    label: Text('serverConnectionSsh'.tr()),
+                  ),
+                  ButtonSegment(
+                    value: ServerConnectionType.serial,
+                    label: Text('serverConnectionSerial'.tr()),
+                  ),
+                ],
+                selected: {_connectionType},
+                onSelectionChanged: (value) {
+                  setState(() => _connectionType = value.first);
+                  if (value.first == ServerConnectionType.serial) {
+                    _scanSerialDevices();
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
                 decoration: InputDecoration(labelText: 'serverNameLabel'.tr()),
                 validator: _required,
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _host,
-                      decoration: InputDecoration(
-                        labelText: 'serverHostLabel'.tr(),
-                        suffixIcon: tailscaleRunning
-                            ? IconButton(
-                                tooltip: 'tailscalePickMachine'.tr(),
-                                icon: const Icon(Symbols.lan),
-                                onPressed: () => _pickTailscaleMachine(context),
-                              )
-                            : null,
-                      ),
-                      validator: _required,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 100,
-                    child: TextFormField(
-                      controller: _port,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'serverPortLabel'.tr(),
-                      ),
-                      validator: _validPort,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _user,
-                decoration: InputDecoration(
-                  labelText: 'serverUsernameLabel'.tr(),
-                ),
-                validator: _required,
-              ),
-              const SizedBox(height: 12),
-              if (widget.credentials.isNotEmpty) ...[
-                DropdownButtonFormField<int?>(
-                  initialValue: _useNewCredential ? null : _credentialId,
-                  decoration: InputDecoration(
-                    labelText: 'serverCredentialLabel'.tr(),
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: null,
-                      child: Text('serverCredentialNew'.tr()),
-                    ),
-                    ...widget.credentials.map(
-                      (credential) => DropdownMenuItem(
-                        value: credential.id,
-                        child: Text(credential.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) => setState(() {
-                    _credentialId = value;
-                    _useNewCredential = value == null;
-                  }),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (_useNewCredential) ...[
-                SegmentedButton<CredentialType>(
-                  segments: [
-                    ButtonSegment(
-                      value: CredentialType.password,
-                      label: Text('serverAuthPassword'.tr()),
-                    ),
-                    ButtonSegment(
-                      value: CredentialType.privateKey,
-                      label: Text('serverAuthPrivateKey'.tr()),
-                    ),
-                  ],
-                  selected: {_type},
-                  onSelectionChanged: (value) =>
-                      setState(() => _type = value.first),
-                ),
-                const SizedBox(height: 12),
-                if (_type == CredentialType.password)
-                  TextFormField(
-                    controller: _secret,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'serverPasswordLabel'.tr(),
-                    ),
-                    validator: _required,
-                  )
-                else ...[
-                  TextFormField(
-                    controller: _secret,
-                    minLines: 4,
-                    maxLines: 8,
-                    validator: _required,
-                    decoration: InputDecoration(
-                      labelText: 'serverPrivateKeyLabel'.tr(),
-                      suffixIcon: IconButton(
-                        onPressed: _pickKey,
-                        icon: const Icon(Symbols.upload_file),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passphrase,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'serverKeyPassphraseLabel'.tr(),
-                    ),
-                  ),
-                ],
-              ],
-              const SizedBox(height: 16),
-              Text(
-                'serverProxyLabel'.tr(),
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<ServerProxyType>(
-                segments: [
-                  ButtonSegment(
-                    value: ServerProxyType.none,
-                    label: Text('serverProxyNone'.tr()),
-                  ),
-                  ButtonSegment(
-                    value: ServerProxyType.http,
-                    label: Text('serverProxyHttp'.tr()),
-                  ),
-                  ButtonSegment(
-                    value: ServerProxyType.socks5,
-                    label: Text('serverProxySocks5'.tr()),
-                  ),
-                ],
-                selected: {_proxyType},
-                onSelectionChanged: (value) =>
-                    setState(() => _proxyType = value.first),
-              ),
-              if (_proxyType != ServerProxyType.none) ...[
-                const SizedBox(height: 12),
+              if (_connectionType == ServerConnectionType.ssh) ...[
                 Row(
                   children: [
                     Expanded(
                       child: TextFormField(
-                        controller: _proxyHost,
+                        controller: _host,
                         decoration: InputDecoration(
-                          labelText: 'serverProxyHostLabel'.tr(),
+                          labelText: 'serverHostLabel'.tr(),
+                          suffixIcon: tailscaleRunning
+                              ? IconButton(
+                                  tooltip: 'tailscalePickMachine'.tr(),
+                                  icon: const Icon(Symbols.lan),
+                                  onPressed: () =>
+                                      _pickTailscaleMachine(context),
+                                )
+                              : null,
                         ),
                         validator: _required,
                       ),
@@ -1628,10 +1629,10 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
                     SizedBox(
                       width: 100,
                       child: TextFormField(
-                        controller: _proxyPort,
+                        controller: _port,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          labelText: 'serverProxyPortLabel'.tr(),
+                          labelText: 'serverPortLabel'.tr(),
                         ),
                         validator: _validPort,
                       ),
@@ -1640,115 +1641,407 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: _proxyUsername,
+                  controller: _user,
                   decoration: InputDecoration(
-                    labelText: 'serverProxyUsernameLabel'.tr(),
+                    labelText: 'serverUsernameLabel'.tr(),
                   ),
+                  validator: _required,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _proxyPassword,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'serverProxyPasswordLabel'.tr(),
-                    helperText: widget.initial?.proxy != null
-                        ? 'serverProxyPasswordKeepHint'.tr()
-                        : null,
+                if (widget.credentials.isNotEmpty) ...[
+                  DropdownButtonFormField<int?>(
+                    initialValue: _useNewCredential ? null : _credentialId,
+                    decoration: InputDecoration(
+                      labelText: 'serverCredentialLabel'.tr(),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: null,
+                        child: Text('serverCredentialNew'.tr()),
+                      ),
+                      ...widget.credentials.map(
+                        (credential) => DropdownMenuItem(
+                          value: credential.id,
+                          child: Text(credential.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _credentialId = value;
+                      _useNewCredential = value == null;
+                    }),
                   ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              Text(
-                'serverEnvironmentLabel'.tr(),
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'serverEnvironmentHint'.tr(),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final row in _envRows) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: row.name,
-                        decoration: InputDecoration(
-                          labelText: 'serverEnvNameLabel'.tr(),
-                          isDense: true,
+                  const SizedBox(height: 12),
+                ],
+                if (_useNewCredential) ...[
+                  SegmentedButton<CredentialType>(
+                    segments: [
+                      ButtonSegment(
+                        value: CredentialType.password,
+                        label: Text('serverAuthPassword'.tr()),
+                      ),
+                      ButtonSegment(
+                        value: CredentialType.privateKey,
+                        label: Text('serverAuthPrivateKey'.tr()),
+                      ),
+                    ],
+                    selected: {_type},
+                    onSelectionChanged: (value) =>
+                        setState(() => _type = value.first),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_type == CredentialType.password)
+                    TextFormField(
+                      controller: _secret,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'serverPasswordLabel'.tr(),
+                      ),
+                      validator: _required,
+                    )
+                  else ...[
+                    TextFormField(
+                      controller: _secret,
+                      minLines: 4,
+                      maxLines: 8,
+                      validator: _required,
+                      decoration: InputDecoration(
+                        labelText: 'serverPrivateKeyLabel'.tr(),
+                        suffixIcon: IconButton(
+                          onPressed: _pickKey,
+                          icon: const Icon(Symbols.upload_file),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        controller: row.value,
-                        decoration: InputDecoration(
-                          labelText: 'serverEnvValueLabel'.tr(),
-                          isDense: true,
-                        ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _passphrase,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'serverKeyPassphraseLabel'.tr(),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'serverRemoveVariable'.tr(),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _removeEnvRow(row),
-                      icon: const Icon(Symbols.close, size: 18),
                     ),
                   ],
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  'serverProxyLabel'.tr(),
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 8),
-              ],
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _addEnvRow,
-                  icon: const Icon(Symbols.add, size: 18),
-                  label: Text('serverAddEnvVar'.tr()),
+                SegmentedButton<ServerProxyType>(
+                  segments: [
+                    ButtonSegment(
+                      value: ServerProxyType.none,
+                      label: Text('serverProxyNone'.tr()),
+                    ),
+                    ButtonSegment(
+                      value: ServerProxyType.http,
+                      label: Text('serverProxyHttp'.tr()),
+                    ),
+                    ButtonSegment(
+                      value: ServerProxyType.socks5,
+                      label: Text('serverProxySocks5'.tr()),
+                    ),
+                  ],
+                  selected: {_proxyType},
+                  onSelectionChanged: (value) =>
+                      setState(() => _proxyType = value.first),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'serverInitialSnippetsLabel'.tr(),
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'serverInitialSnippetsHint'.tr(),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (widget.snippets.isEmpty)
+                if (_proxyType != ServerProxyType.none) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _proxyHost,
+                          decoration: InputDecoration(
+                            labelText: 'serverProxyHostLabel'.tr(),
+                          ),
+                          validator: _required,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 100,
+                        child: TextFormField(
+                          controller: _proxyPort,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'serverProxyPortLabel'.tr(),
+                          ),
+                          validator: _validPort,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _proxyUsername,
+                    decoration: InputDecoration(
+                      labelText: 'serverProxyUsernameLabel'.tr(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _proxyPassword,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'serverProxyPasswordLabel'.tr(),
+                      helperText: widget.initial?.proxy != null
+                          ? 'serverProxyPasswordKeepHint'.tr()
+                          : null,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
                 Text(
-                  'serverNoSnippetsHint'.tr(),
+                  'serverEnvironmentLabel'.tr(),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'serverEnvironmentHint'.tr(),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                )
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                ),
+                const SizedBox(height: 8),
+                for (final row in _envRows) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: row.name,
+                          decoration: InputDecoration(
+                            labelText: 'serverEnvNameLabel'.tr(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: row.value,
+                          decoration: InputDecoration(
+                            labelText: 'serverEnvValueLabel'.tr(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'serverRemoveVariable'.tr(),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _removeEnvRow(row),
+                        icon: const Icon(Symbols.close, size: 18),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _addEnvRow,
+                    icon: const Icon(Symbols.add, size: 18),
+                    label: Text('serverAddEnvVar'.tr()),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'serverInitialSnippetsLabel'.tr(),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'serverInitialSnippetsHint'.tr(),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (widget.snippets.isEmpty)
+                  Text(
+                    'serverNoSnippetsHint'.tr(),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final snippet in widget.snippets)
+                        FilterChip(
+                          label: Text(snippet.name),
+                          selected: _snippetIds.contains(snippet.id),
+                          onSelected: (selected) => setState(() {
+                            if (selected) {
+                              _snippetIds.add(snippet.id);
+                            } else {
+                              _snippetIds.remove(snippet.id);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+              ] else ...[
+                DropdownMenu<String>(
+                  controller: _serialDevice,
+                  enableFilter: true,
+                  requestFocusOnTap: true,
+                  expandedInsets: EdgeInsets.zero,
+                  label: Text('serverSerialDeviceLabel'.tr()),
+                  helperText: 'serverSerialDeviceHint'.tr(),
+                  trailingIcon: _scanningSerialDevices
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                  dropdownMenuEntries: [
+                    for (final device in _serialDevices)
+                      DropdownMenuEntry(
+                        value: device,
+                        label: device,
+                        leadingIcon: const Icon(Symbols.usb, size: 18),
+                      ),
+                  ],
+                  onSelected: (value) {
+                    if (value != null) {
+                      _serialDevice.text = value;
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
                   children: [
-                    for (final snippet in widget.snippets)
-                      FilterChip(
-                        label: Text(snippet.name),
-                        selected: _snippetIds.contains(snippet.id),
-                        onSelected: (selected) => setState(() {
-                          if (selected) {
-                            _snippetIds.add(snippet.id);
-                          } else {
-                            _snippetIds.remove(snippet.id);
-                          }
-                        }),
+                    TextButton.icon(
+                      onPressed: _scanningSerialDevices
+                          ? null
+                          : _scanSerialDevices,
+                      icon: Icon(
+                        _scanningSerialDevices ? Symbols.sync : Symbols.refresh,
+                        size: 18,
+                      ),
+                      label: Text('serverSerialScan'.tr()),
+                    ),
+                    if (_serialDevices.isEmpty &&
+                        _serialDevice.text.trim().isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Text(
+                          'serverSerialNoDevices'.tr(),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
                       ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _serialBaud,
+                  decoration: InputDecoration(
+                    labelText: 'serverSerialBaudLabel'.tr(),
+                  ),
+                  items: [
+                    for (final value in [
+                      9600,
+                      19200,
+                      38400,
+                      57600,
+                      115200,
+                      230400,
+                      460800,
+                      921600,
+                    ])
+                      DropdownMenuItem(value: value, child: Text('$value')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _serialBaud = value ?? _serialBaud),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _serialDataBits,
+                  decoration: InputDecoration(
+                    labelText: 'serverSerialDataBitsLabel'.tr(),
+                  ),
+                  items: [
+                    for (final value in [5, 6, 7, 8])
+                      DropdownMenuItem(value: value, child: Text('$value')),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _serialDataBits = value ?? _serialDataBits,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SerialParity>(
+                  initialValue: _serialParity,
+                  decoration: InputDecoration(
+                    labelText: 'serverSerialParityLabel'.tr(),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: SerialParity.none,
+                      child: Text('serverSerialParityNone'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: SerialParity.even,
+                      child: Text('serverSerialParityEven'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: SerialParity.odd,
+                      child: Text('serverSerialParityOdd'.tr()),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _serialParity = value ?? _serialParity),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _serialStopBits,
+                  decoration: InputDecoration(
+                    labelText: 'serverSerialStopBitsLabel'.tr(),
+                  ),
+                  items: [
+                    for (final value in [1, 2])
+                      DropdownMenuItem(value: value, child: Text('$value')),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _serialStopBits = value ?? _serialStopBits,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SerialFlowControl>(
+                  initialValue: _serialFlowControl,
+                  decoration: InputDecoration(
+                    labelText: 'serverSerialFlowControlLabel'.tr(),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: SerialFlowControl.none,
+                      child: Text('serverSerialFlowNone'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: SerialFlowControl.hardware,
+                      child: Text('serverSerialFlowHardware'.tr()),
+                    ),
+                    DropdownMenuItem(
+                      value: SerialFlowControl.software,
+                      child: Text('serverSerialFlowSoftware'.tr()),
+                    ),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _serialFlowControl = value ?? _serialFlowControl,
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 'serverTagsLabel'.tr(),
@@ -1796,21 +2089,23 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
                 ],
               ),
               const SizedBox(height: 16),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('serverCollectStats'.tr()),
-                subtitle: Text('serverCollectStatsHint'.tr()),
-                value: _collectStats,
-                onChanged: (value) => setState(() => _collectStats = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('serverDiscoverSystemInfo'.tr()),
-                subtitle: Text('serverDiscoverSystemInfoHint'.tr()),
-                value: _collectSystemInfo,
-                onChanged: (value) =>
-                    setState(() => _collectSystemInfo = value),
-              ),
+              if (_connectionType == ServerConnectionType.ssh) ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('serverCollectStats'.tr()),
+                  subtitle: Text('serverCollectStatsHint'.tr()),
+                  value: _collectStats,
+                  onChanged: (value) => setState(() => _collectStats = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('serverDiscoverSystemInfo'.tr()),
+                  subtitle: Text('serverDiscoverSystemInfoHint'.tr()),
+                  value: _collectSystemInfo,
+                  onChanged: (value) =>
+                      setState(() => _collectSystemInfo = value),
+                ),
+              ],
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
