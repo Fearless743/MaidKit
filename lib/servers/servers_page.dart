@@ -11,6 +11,7 @@ import 'package:tailscale/tailscale.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
+import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'server_connection_actions.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
@@ -23,12 +24,17 @@ class ServerDashboardTab extends ConsumerWidget {
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final credentials = await ref.read(serverRepositoryProvider).credentials();
+    final snippets = await ref.read(snippetRepositoryProvider).all();
     if (!context.mounted) return;
     final draft = await showModalBottomSheet<ServerDraft>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => ServerEditorDialog(credentials: credentials),
+      builder: (_) => ServerEditorDialog(
+        credentials: credentials,
+        snippets: snippets,
+        existingGroups: serverGroupNames(ref),
+      ),
     );
     if (draft == null || !context.mounted) return;
     try {
@@ -73,6 +79,7 @@ class ServerDashboardTab extends ConsumerWidget {
           ? null
           : await repository.credentialFor(server);
       final credentials = await repository.credentials();
+      final snippets = await ref.read(snippetRepositoryProvider).all();
       if (!context.mounted) return;
       final draft = await showModalBottomSheet<ServerDraft>(
         context: context,
@@ -80,6 +87,8 @@ class ServerDashboardTab extends ConsumerWidget {
         useSafeArea: true,
         builder: (_) => ServerEditorDialog(
           credentials: credentials,
+          snippets: snippets,
+          existingGroups: serverGroupNames(ref),
           initial: ServerDraft(
             name: server.name,
             host: server.host,
@@ -89,6 +98,10 @@ class ServerDashboardTab extends ConsumerWidget {
             credentialId: server.credentialId,
             collectStats: server.collectStats,
             collectSystemInfo: server.collectSystemInfo,
+            environment: decodeEnvironmentMap(server.environment),
+            initialSnippets: decodeSnippetIdList(server.initialSnippets),
+            tags: decodeStringList(server.tags),
+            groupName: server.groupName,
           ),
         ),
       );
@@ -248,6 +261,8 @@ class _ServerGrid extends StatefulWidget {
 
 class _ServerGridState extends State<_ServerGrid> {
   var _isReconnecting = false;
+  String? _selectedGroup;
+  final _selectedTags = <String>{};
 
   Future<void> _reconnectAll(List<Server> servers) async {
     setState(() => _isReconnecting = true);
@@ -263,7 +278,33 @@ class _ServerGridState extends State<_ServerGrid> {
     final sessionsByServerId = {
       for (final session in widget.sessions) session.serverId: session,
     };
-    final disconnectedServers = widget.servers.where((server) {
+    final groupNames =
+        widget.servers
+            .map((server) => server.groupName)
+            .whereType<String>()
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final allTags =
+        widget.servers
+            .expand((server) => decodeStringList(server.tags))
+            .toSet()
+            .toList()
+          ..sort();
+    // A selected group may disappear when its last server is deleted or
+    // edited; fall back to no filter instead of rendering a stale dropdown.
+    final selectedGroup = groupNames.contains(_selectedGroup)
+        ? _selectedGroup
+        : null;
+    final visibleServers = widget.servers.where((server) {
+      final groupMatches =
+          selectedGroup == null || server.groupName == selectedGroup;
+      final tags = decodeStringList(server.tags).toSet();
+      final tagsMatch = _selectedTags.every(tags.contains);
+      return groupMatches && tagsMatch;
+    }).toList();
+    final disconnectedServers = visibleServers.where((server) {
       final status = sessionsByServerId[server.id]?.status;
       return status != SessionStatus.connected &&
           status != SessionStatus.connecting;
@@ -292,47 +333,111 @@ class _ServerGridState extends State<_ServerGrid> {
                 )
               : const SizedBox.shrink(key: ValueKey('servers-reconnect-none')),
         ),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(24),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 380,
-              mainAxisExtent: 320,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
+        if (groupNames.isNotEmpty || allTags.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (groupNames.isNotEmpty) ...[
+                  DropdownButton<String?>(
+                    value: selectedGroup,
+                    underline: const SizedBox.shrink(),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('serversFilterGroupAll'.tr()),
+                      ),
+                      for (final name in groupNames)
+                        DropdownMenuItem<String?>(
+                          value: name,
+                          child: Text(name),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _selectedGroup = value),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in allTags)
+                        FilterChip(
+                          label: Text(tag),
+                          visualDensity: VisualDensity.compact,
+                          selected: _selectedTags.contains(tag),
+                          onSelected: (selected) => setState(() {
+                            if (selected) {
+                              _selectedTags.add(tag);
+                            } else {
+                              _selectedTags.remove(tag);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            itemCount: widget.servers.length,
-            itemBuilder: (context, index) {
-              final server = widget.servers[index];
-              final session = sessionsByServerId[server.id];
-              return ContextMenuWidget(
-                menuProvider: (_) => Menu(
-                  children: [
-                    MenuAction(
-                      title: 'serversEditServer'.tr(),
-                      callback: () => widget.onEdit(server),
-                    ),
-                    MenuSeparator(),
-                    MenuAction(
-                      title: 'serversDeleteServer'.tr(),
-                      attributes: const MenuActionAttributes(destructive: true),
-                      callback: () => widget.onDelete(server),
-                    ),
-                  ],
-                ),
-                child: _ServerCard(
-                  server: server,
-                  session: session,
-                  onConnect: () => widget.onConnect(server),
-                  onOpenDetail: () => widget.onOpenDetail(server),
-                  onOpenTerminal: () => widget.onOpenTerminal(server),
-                  onOpenFiles: () => widget.onOpenFiles(server),
-                  onRefresh: () => widget.onRefresh(server),
-                ),
-              );
-            },
           ),
-        ),
+        if (visibleServers.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'serversNoMatches'.tr(),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.all(24),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 380,
+                mainAxisExtent: 320,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+              ),
+              itemCount: visibleServers.length,
+              itemBuilder: (context, index) {
+                final server = visibleServers[index];
+                final session = sessionsByServerId[server.id];
+                return ContextMenuWidget(
+                  menuProvider: (_) => Menu(
+                    children: [
+                      MenuAction(
+                        title: 'serversEditServer'.tr(),
+                        callback: () => widget.onEdit(server),
+                      ),
+                      MenuSeparator(),
+                      MenuAction(
+                        title: 'serversDeleteServer'.tr(),
+                        attributes: const MenuActionAttributes(
+                          destructive: true,
+                        ),
+                        callback: () => widget.onDelete(server),
+                      ),
+                    ],
+                  ),
+                  child: _ServerCard(
+                    server: server,
+                    session: session,
+                    onConnect: () => widget.onConnect(server),
+                    onOpenDetail: () => widget.onOpenDetail(server),
+                    onOpenTerminal: () => widget.onOpenTerminal(server),
+                    onOpenFiles: () => widget.onOpenFiles(server),
+                    onRefresh: () => widget.onRefresh(server),
+                  ),
+                );
+              },
+            ),
+          ),
       ],
     );
   }
@@ -467,6 +572,7 @@ class _ServerCard extends StatelessWidget {
                               color: colorScheme.onSurfaceVariant,
                             ),
                           ),
+                          _ServerBadges(server: server),
                         ],
                       ),
                     ),
@@ -538,6 +644,59 @@ class _ServerCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Group and tag chips shown under a server card's title.
+class _ServerBadges extends StatelessWidget {
+  const _ServerBadges({required this.server});
+
+  final Server server;
+
+  @override
+  Widget build(BuildContext context) {
+    final groupName = server.groupName;
+    final tags = decodeStringList(server.tags);
+    if ((groupName == null || groupName.isEmpty) && tags.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final chipTextStyle = textTheme.labelSmall?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+    );
+
+    Widget chip(String label, {IconData? icon}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: colorScheme.onSurfaceVariant),
+            const SizedBox(width: 3),
+          ],
+          Text(label, style: chipTextStyle),
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          if (groupName != null && groupName.isNotEmpty)
+            chip(groupName, icon: Symbols.folder),
+          for (final tag in tags.take(3)) chip(tag),
+          if (tags.length > 3) chip('+${tags.length - 3}'),
+        ],
       ),
     );
   }
@@ -1059,10 +1218,18 @@ class ServerEditorDialog extends StatefulWidget {
     super.key,
     required this.credentials,
     this.initial,
+    this.snippets = const [],
+    this.existingGroups = const [],
   });
 
   final ServerDraft? initial;
   final List<SavedCredential> credentials;
+
+  /// Saved snippets offered as initial-snippet choices for this server.
+  final List<ScriptSnippet> snippets;
+
+  /// Group names already used by other servers, offered for quick reuse.
+  final List<String> existingGroups;
   @override
   State<ServerEditorDialog> createState() => _AddServerDialogState();
 }
@@ -1089,6 +1256,14 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
   );
   final _proxyUsername = TextEditingController();
   final _proxyPassword = TextEditingController();
+
+  // Per-server environment variables, initial snippets, tags, and group.
+  final _envRows =
+      <({TextEditingController name, TextEditingController value})>[];
+  final _snippetIds = <int>{};
+  final _tags = <String>[];
+  final _tagInput = TextEditingController();
+  final _group = TextEditingController();
 
   @override
   void initState() {
@@ -1118,6 +1293,15 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
       // The stored password is not decrypted into the form; leaving the field
       // blank keeps the existing password when saving.
     }
+    _group.text = initial.groupName ?? '';
+    _tags.addAll(initial.tags);
+    _snippetIds.addAll(initial.initialSnippets);
+    for (final entry in initial.environment.entries) {
+      _envRows.add((
+        name: TextEditingController(text: entry.key),
+        value: TextEditingController(text: entry.value),
+      ));
+    }
   }
 
   @override
@@ -1133,8 +1317,14 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
       _proxyPort,
       _proxyUsername,
       _proxyPassword,
+      _tagInput,
+      _group,
     ]) {
       controller.dispose();
+    }
+    for (final row in _envRows) {
+      row.name.dispose();
+      row.value.dispose();
     }
     super.dispose();
   }
@@ -1192,6 +1382,38 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
     if (address != null) setState(() => _host.text = address);
   }
 
+  void _addEnvRow() {
+    setState(() {
+      _envRows.add((
+        name: TextEditingController(),
+        value: TextEditingController(),
+      ));
+    });
+  }
+
+  void _removeEnvRow(
+    ({TextEditingController name, TextEditingController value}) row,
+  ) {
+    setState(() => _envRows.remove(row));
+    row.name.dispose();
+    row.value.dispose();
+  }
+
+  void _addTag() {
+    final candidates = _tagInput.text
+        .split(RegExp(r'[,;]'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    if (candidates.isEmpty) return;
+    setState(() {
+      for (final tag in candidates) {
+        if (!_tags.contains(tag)) _tags.add(tag);
+      }
+      _tagInput.clear();
+    });
+  }
+
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'serverPortRequired'.tr() : null;
   String? _validPort(String? value) {
@@ -1236,6 +1458,14 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
                     ? null
                     : _proxyPassword.text,
               ),
+        environment: {
+          for (final row in _envRows)
+            if (row.name.text.trim().isNotEmpty)
+              row.name.text.trim(): row.value.text,
+        },
+        initialSnippets: _snippetIds.toList(),
+        tags: List.of(_tags),
+        groupName: _group.text.trim().isEmpty ? null : _group.text.trim(),
       ),
     );
   }
@@ -1442,6 +1672,166 @@ class _AddServerDialogState extends State<ServerEditorDialog> {
                       ? 'serverProxyPasswordKeepHint'.tr()
                       : null,
                 ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Text(
+              'serverEnvironmentLabel'.tr(),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'serverEnvironmentHint'.tr(),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final row in _envRows) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: row.name,
+                      decoration: InputDecoration(
+                        labelText: 'serverEnvNameLabel'.tr(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: row.value,
+                      decoration: InputDecoration(
+                        labelText: 'serverEnvValueLabel'.tr(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'serverRemoveVariable'.tr(),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _removeEnvRow(row),
+                    icon: const Icon(Symbols.close, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addEnvRow,
+                icon: const Icon(Symbols.add, size: 18),
+                label: Text('serverAddEnvVar'.tr()),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'serverInitialSnippetsLabel'.tr(),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'serverInitialSnippetsHint'.tr(),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (widget.snippets.isEmpty)
+              Text(
+                'serverNoSnippetsHint'.tr(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final snippet in widget.snippets)
+                    FilterChip(
+                      label: Text(snippet.name),
+                      selected: _snippetIds.contains(snippet.id),
+                      onSelected: (selected) => setState(() {
+                        if (selected) {
+                          _snippetIds.add(snippet.id);
+                        } else {
+                          _snippetIds.remove(snippet.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            const SizedBox(height: 16),
+            Text(
+              'serverTagsLabel'.tr(),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'serverTagsAddHint'.tr(),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_tags.isNotEmpty) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final tag in _tags)
+                    InputChip(
+                      label: Text(tag),
+                      onDeleted: () => setState(() => _tags.remove(tag)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _tagInput,
+                    decoration: InputDecoration(
+                      labelText: 'serverTagAdd'.tr(),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _addTag(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  onPressed: _addTag,
+                  icon: const Icon(Symbols.add, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _group,
+              decoration: InputDecoration(
+                labelText: 'serverGroupLabel'.tr(),
+                helperText: 'serverGroupHint'.tr(),
+              ),
+            ),
+            if (widget.existingGroups.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final group in widget.existingGroups)
+                    ActionChip(
+                      label: Text(group),
+                      onPressed: () => _group.text = group,
+                    ),
+                ],
               ),
             ],
             const SizedBox(height: 12),

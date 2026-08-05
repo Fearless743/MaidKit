@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
+import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'server_models.dart';
 import 'server_providers.dart';
 import 'session_layout.dart';
@@ -551,16 +552,26 @@ class TerminalTabsNotifier extends Notifier<TerminalTabsState> {
     String? knownHostKeyFingerprint,
     String? initialDirectory,
     ServerProxy? proxy,
-  }) => ref
-      .read(connectionManagerProvider)
-      .openTerminal(
-        server,
-        credential,
-        approve,
-        knownHostKeyFingerprint: knownHostKeyFingerprint,
-        initialDirectory: initialDirectory,
-        proxy: proxy,
-      );
+  }) async {
+    final repository = ref.read(snippetRepositoryProvider);
+    final initialScripts = <String>[];
+    for (final id in decodeSnippetIdList(server.initialSnippets)) {
+      final snippet = await repository.snippet(id);
+      if (snippet != null) initialScripts.add(snippet.script);
+    }
+    return ref
+        .read(connectionManagerProvider)
+        .openTerminal(
+          server,
+          credential,
+          approve,
+          knownHostKeyFingerprint: knownHostKeyFingerprint,
+          initialDirectory: initialDirectory,
+          proxy: proxy,
+          environment: decodeEnvironmentMap(server.environment),
+          initialScripts: initialScripts,
+        );
+  }
 
   void _insertTab(SessionTab tab, {String? targetPaneId}) {
     final preferredId = targetPaneId ?? state.focusedPaneId;

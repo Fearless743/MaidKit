@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
+import 'package:maid_kit/snippets/snippet_repository.dart';
 
 import 'credentials_page.dart';
 import 'server_models.dart';
@@ -86,12 +87,17 @@ class ServerAssetsSection extends ConsumerWidget {
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final credentials = await ref.read(serverRepositoryProvider).credentials();
+    final snippets = await ref.read(snippetRepositoryProvider).all();
     if (!context.mounted) return;
     final draft = await showModalBottomSheet<ServerDraft>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => ServerEditorDialog(credentials: credentials),
+      builder: (_) => ServerEditorDialog(
+        credentials: credentials,
+        snippets: snippets,
+        existingGroups: serverGroupNames(ref),
+      ),
     );
     if (draft == null) return;
     try {
@@ -108,6 +114,7 @@ class ServerAssetsSection extends ConsumerWidget {
           ? null
           : await repository.credentialFor(server);
       final credentials = await repository.credentials();
+      final snippets = await ref.read(snippetRepositoryProvider).all();
       if (!context.mounted) return;
       final draft = await showModalBottomSheet<ServerDraft>(
         context: context,
@@ -115,6 +122,8 @@ class ServerAssetsSection extends ConsumerWidget {
         useSafeArea: true,
         builder: (_) => ServerEditorDialog(
           credentials: credentials,
+          snippets: snippets,
+          existingGroups: serverGroupNames(ref),
           initial: ServerDraft(
             name: server.name,
             host: server.host,
@@ -124,6 +133,10 @@ class ServerAssetsSection extends ConsumerWidget {
             credentialId: server.credentialId,
             collectStats: server.collectStats,
             collectSystemInfo: server.collectSystemInfo,
+            environment: decodeEnvironmentMap(server.environment),
+            initialSnippets: decodeSnippetIdList(server.initialSnippets),
+            tags: decodeStringList(server.tags),
+            groupName: server.groupName,
           ),
         ),
       );

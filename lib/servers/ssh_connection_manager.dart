@@ -170,6 +170,8 @@ class SshConnectionManager {
     String? knownHostKeyFingerprint,
     String? initialDirectory,
     ServerProxy? proxy,
+    Map<String, String>? environment,
+    List<String>? initialScripts,
   }) async {
     final client = await _createClient(
       server,
@@ -182,6 +184,7 @@ class SshConnectionManager {
     try {
       shell = await client.shell(
         pty: const SSHPtyConfig(type: 'xterm-256color', width: 120, height: 36),
+        environment: environment,
       );
     } catch (_) {
       client.close();
@@ -230,6 +233,13 @@ class SshConnectionManager {
       // Move into the requested remote folder after the shell starts. Quote the
       // path so spaces and special characters remain literal.
       shell.write(utf8.encode('cd ${_shellSingleQuote(directory)}\n'));
+    }
+    // Configured initial snippets run once the shell is ready, after any
+    // requested directory change. They are written as typed commands so the
+    // user sees and can interrupt them.
+    for (final script in initialScripts ?? const <String>[]) {
+      if (script.trim().isEmpty) continue;
+      shell.write(utf8.encode('$script\n'));
     }
     return TerminalSessionHandle(
       id: terminalId,

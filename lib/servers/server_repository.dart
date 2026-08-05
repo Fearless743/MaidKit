@@ -50,6 +50,14 @@ class ServerRepository {
             proxyUsername: Value(draft.proxy?.username),
             encryptedProxyPassword: Value(proxyPassword?.bytes),
             proxyPasswordNonce: Value(proxyPassword?.nonce),
+            environment: Value(encodeEnvironmentMap(draft.environment)),
+            initialSnippets: Value(encodeSnippetIdList(draft.initialSnippets)),
+            tags: Value(encodeStringList(draft.tags)),
+            groupName: Value(
+              draft.groupName?.trim().isNotEmpty == true
+                  ? draft.groupName!.trim()
+                  : null,
+            ),
           ),
         );
     return (_database.select(
@@ -98,6 +106,14 @@ class ServerRepository {
             : proxyPassword == null
             ? const Value.absent()
             : Value(proxyPassword.nonce),
+        environment: Value(encodeEnvironmentMap(draft.environment)),
+        initialSnippets: Value(encodeSnippetIdList(draft.initialSnippets)),
+        tags: Value(encodeStringList(draft.tags)),
+        groupName: Value(
+          draft.groupName?.trim().isNotEmpty == true
+              ? draft.groupName!.trim()
+              : null,
+        ),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
@@ -322,6 +338,10 @@ class ServerRepository {
             'proxyUsername': server.proxyUsername,
             'encryptedProxyPassword': server.encryptedProxyPassword,
             'proxyPasswordNonce': server.proxyPasswordNonce,
+            'environment': server.environment,
+            'initialSnippets': server.initialSnippets,
+            'tags': server.tags,
+            'groupName': server.groupName,
           },
         )
         .toList();
@@ -370,6 +390,10 @@ class ServerRepository {
             value['encryptedProxyPassword'] as String?,
           ),
           proxyPasswordNonce: Value(value['proxyPasswordNonce'] as String?),
+          environment: Value(value['environment'] as String?),
+          initialSnippets: Value(value['initialSnippets'] as String?),
+          tags: Value(value['tags'] as String?),
+          groupName: Value(value['groupName'] as String?),
           createdAt: Value(DateTime.parse(value['createdAt'] as String)),
           updatedAt: Value(DateTime.parse(value['updatedAt'] as String)),
           deletedAt: Value(

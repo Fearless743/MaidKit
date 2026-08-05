@@ -861,6 +861,18 @@ final serversProvider = StreamProvider<List<Server>>((ref) {
   return ref.watch(serverRepositoryProvider).watchAll();
 });
 
+/// Group names already used by any saved server, for quick reuse in editors.
+List<String> serverGroupNames(WidgetRef ref) {
+  final servers = ref.read(serversProvider).asData?.value ?? const <Server>[];
+  return servers
+      .map((server) => server.groupName)
+      .whereType<String>()
+      .where((name) => name.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+}
+
 final serverMetricsRefreshSchedulerProvider =
     Provider<ServerMetricsRefreshScheduler>((ref) {
       final scheduler = ServerMetricsRefreshScheduler(

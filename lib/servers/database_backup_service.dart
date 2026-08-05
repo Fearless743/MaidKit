@@ -248,6 +248,10 @@ class DatabaseBackupService {
                 proxyUsername: Value(server.proxyUsername),
                 encryptedProxyPassword: Value(encryptedProxyPassword?.bytes),
                 proxyPasswordNonce: Value(encryptedProxyPassword?.nonce),
+                environment: Value(server.environment),
+                initialSnippets: Value(server.initialSnippets),
+                tags: Value(server.tags),
+                groupName: Value(server.groupName),
               ),
             );
       }

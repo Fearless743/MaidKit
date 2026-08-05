@@ -31,6 +31,14 @@ class Servers extends Table {
   TextColumn get proxyUsername => text().nullable()();
   TextColumn get encryptedProxyPassword => text().nullable()();
   TextColumn get proxyPasswordNonce => text().nullable()();
+  // Per-server configuration, JSON-encoded. Environment is a map of variable
+  // names to values, initialSnippets is a list of ScriptSnippets ids that run
+  // on terminal open, and tags is a list of free-form labels.
+  TextColumn get environment => text().nullable()();
+  TextColumn get initialSnippets => text().nullable()();
+  TextColumn get tags => text().nullable()();
+  // Optional folder-like grouping shown in the server catalog.
+  TextColumn get groupName => text().nullable()();
 }
 
 /// An encrypted SSH credential that may be linked to by more than one server.
@@ -186,6 +194,9 @@ class AgentSkills extends Table {
 /// here; the access token lives in the OS keychain under a key derived from
 /// [accountLogin] and never enters the vault database or cloud sync.
 class GitHubConnections extends Table {
+  @override
+  String get tableName => 'github_connections';
+
   IntColumn get id => integer().autoIncrement()();
   TextColumn get accountLogin => text().unique()();
   TextColumn get accountName => text().withDefault(const Constant(''))();
@@ -195,6 +206,9 @@ class GitHubConnections extends Table {
 
 /// Repositories pinned to the GitHub tab. Metadata only, safe to sync.
 class GitHubRepoPins extends Table {
+  @override
+  String get tableName => 'github_repo_pins';
+
   IntColumn get id => integer().autoIncrement()();
   IntColumn get connectionId => integer().references(GitHubConnections, #id)();
   TextColumn get owner => text()();
@@ -205,6 +219,9 @@ class GitHubRepoPins extends Table {
 /// Links a deployment project to a GitHub workflow whose latest run is shown
 /// on the project detail page. One link per project.
 class GitHubProjectWorkflowLinks extends Table {
+  @override
+  String get tableName => 'github_project_workflow_links';
+
   IntColumn get id => integer().autoIncrement()();
   IntColumn get projectId => integer().references(DeploymentProjects, #id)();
   TextColumn get owner => text()();
@@ -247,7 +264,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -439,6 +456,12 @@ class AppDatabase extends _$AppDatabase {
           'CREATE UNIQUE INDEX github_project_workflow_links_project_unique '
           'ON github_project_workflow_links (project_id)',
         );
+      }
+      if (from < 20) {
+        await m.addColumn(servers, servers.environment);
+        await m.addColumn(servers, servers.initialSnippets);
+        await m.addColumn(servers, servers.tags);
+        await m.addColumn(servers, servers.groupName);
       }
     },
   );

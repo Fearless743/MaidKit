@@ -62,6 +62,10 @@ class ServerDraft {
     this.collectStats = true,
     this.collectSystemInfo = true,
     this.proxy,
+    this.environment = const {},
+    this.initialSnippets = const [],
+    this.tags = const [],
+    this.groupName,
   });
 
   final String name;
@@ -79,6 +83,60 @@ class ServerDraft {
   /// Optional per-server proxy. During an edit, a null [ServerProxy.password]
   /// keeps the stored proxy password unchanged.
   final ServerProxy? proxy;
+
+  /// Environment variables exported into terminals opened on this server.
+  final Map<String, String> environment;
+
+  /// [ScriptSnippets] ids whose scripts run when a terminal opens.
+  final List<int> initialSnippets;
+
+  /// Free-form labels shown on the server card and usable as filters.
+  final List<String> tags;
+
+  /// Folder-like group the server belongs to in the catalog.
+  final String? groupName;
+}
+
+/// JSON-encodes [environment] for storage, or null when it is empty.
+String? encodeEnvironmentMap(Map<String, String> environment) =>
+    environment.isEmpty ? null : jsonEncode(environment);
+
+/// Decodes a stored environment JSON column.
+Map<String, String> decodeEnvironmentMap(String? value) {
+  if (value == null || value.isEmpty) return const {};
+  final decoded = jsonDecode(value);
+  if (decoded is! Map<String, dynamic>) return const {};
+  return decoded.map((key, item) => MapEntry(key, item.toString()));
+}
+
+/// JSON-encodes [ids] for storage, or null when it is empty.
+String? encodeSnippetIdList(List<int> ids) =>
+    ids.isEmpty ? null : jsonEncode(ids);
+
+/// Decodes a stored initial-snippets JSON column.
+List<int> decodeSnippetIdList(String? value) {
+  if (value == null || value.isEmpty) return const [];
+  final decoded = jsonDecode(value);
+  if (decoded is! List) return const [];
+  return [
+    for (final item in decoded)
+      if (item is int) item,
+  ];
+}
+
+/// JSON-encodes [values] for storage, or null when it is empty.
+String? encodeStringList(List<String> values) =>
+    values.isEmpty ? null : jsonEncode(values);
+
+/// Decodes a stored JSON string-list column (tags).
+List<String> decodeStringList(String? value) {
+  if (value == null || value.isEmpty) return const [];
+  final decoded = jsonDecode(value);
+  if (decoded is! List) return const [];
+  return [
+    for (final item in decoded)
+      if (item is String && item.isNotEmpty) item,
+  ];
 }
 
 enum ServerProxyType { none, http, socks5 }
