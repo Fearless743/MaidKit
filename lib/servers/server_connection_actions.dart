@@ -159,6 +159,17 @@ Future<bool> openSerialTerminalSession(
   Server server, {
   String? paneId,
 }) async {
+  if (!serialPortsSupported) {
+    if (context.mounted) {
+      showStyledSnackBar(
+        message: 'serverSerialNotSupported'.tr(),
+        title: 'serverCannotOpenSerialTerminal'.tr(),
+        icon: Symbols.terminal,
+        accentColor: Theme.of(context).colorScheme.error,
+      );
+    }
+    return false;
+  }
   final loading = showMaidKitLoadingModal(
     context,
     message: 'serverOpeningSerialTerminal'.tr(args: [server.name]),

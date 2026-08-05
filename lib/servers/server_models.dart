@@ -146,6 +146,13 @@ List<String> decodeStringList(String? value) {
 
 enum ServerConnectionType { ssh, serial }
 
+/// Whether serial-port servers are offered in the UI and can be connected.
+///
+/// Disabled while the macOS bridge helper flow (SMAppService approval,
+/// helper registration) is unfinished. Set to `true` when the helper path is
+/// solid; Windows/Linux will need their own transport before enabling.
+const bool serialPortsSupported = false;
+
 enum SerialParity { none, even, odd }
 
 enum SerialFlowControl { none, hardware, software }

@@ -1308,7 +1308,8 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
       _serialStopBits = serialConfig.stopBits;
       _serialFlowControl = serialConfig.flowControl;
     }
-    if (_connectionType == ServerConnectionType.serial) {
+    if (_connectionType == ServerConnectionType.serial &&
+        serialPortsSupported) {
       // Populate the device picker with the machine's serial ports. Runs
       // off the build phase; errors surface as a snackbar.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1370,6 +1371,17 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
   /// Discovers serial devices through the platform bridge helper and fills
   /// the device dropdown. A picked device replaces the current field value.
   Future<void> _scanSerialDevices() async {
+    if (!serialPortsSupported) {
+      if (mounted) {
+        showStyledSnackBar(
+          message: 'serverSerialNotSupported'.tr(),
+          title: 'serverSerialScanError'.tr(),
+          icon: Symbols.usb,
+          accentColor: Theme.of(context).colorScheme.error,
+        );
+      }
+      return;
+    }
     if (_scanningSerialDevices) return;
     setState(() => _scanningSerialDevices = true);
     try {
@@ -1567,7 +1579,9 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
     return SizedBox(
       width: 560,
       child: SheetScaffold(
-        titleText: 'serversAddSheetTitle'.tr(),
+        titleText: _connectionType == ServerConnectionType.serial
+            ? 'serversAddSerialSheetTitle'.tr()
+            : 'serversAddSheetTitle'.tr(),
         heightFactor: 0.78,
         child: Form(
           key: _form,
@@ -1585,10 +1599,13 @@ class _AddServerDialogState extends ConsumerState<ServerEditorDialog> {
                     value: ServerConnectionType.ssh,
                     label: Text('serverConnectionSsh'.tr()),
                   ),
-                  ButtonSegment(
-                    value: ServerConnectionType.serial,
-                    label: Text('serverConnectionSerial'.tr()),
-                  ),
+                  if (serialPortsSupported ||
+                      widget.initial?.connectionType ==
+                          ServerConnectionType.serial)
+                    ButtonSegment(
+                      value: ServerConnectionType.serial,
+                      label: Text('serverConnectionSerial'.tr()),
+                    ),
                 ],
                 selected: {_connectionType},
                 onSelectionChanged: (value) {
