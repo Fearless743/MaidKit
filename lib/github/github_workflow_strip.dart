@@ -10,10 +10,10 @@ import 'github_models.dart';
 import 'github_providers.dart';
 import 'github_ui.dart';
 
-/// Pinned-repo workflow status card for the Servers dashboard: one row per
-/// workflow (its latest run) with status, trigger message, timestamp, and
-/// outcome. Tapping a row opens the run detail. Hidden until a GitHub account
-/// is connected and repos are pinned.
+/// Pinned-repo workflow status card for the Servers dashboard: a header plus
+/// a grid of tiles, one per pinned repo (its newest run), styled like the
+/// server cards. Tapping a tile opens the run detail. Hidden until a GitHub
+/// account is connected and repos are pinned.
 class GithubWorkflowStatusStrip extends ConsumerWidget {
   const GithubWorkflowStatusStrip({super.key});
 
@@ -25,8 +25,8 @@ class GithubWorkflowStatusStrip extends ConsumerWidget {
     if (snapshot == null || snapshot.repos.isEmpty) {
       return const SizedBox.shrink();
     }
-    // One row per pinned repo: its newest run. Older runs of other workflows
-    // still count toward the failure badge below.
+    // One tile per pinned repo: its newest run. Older runs of other workflows
+    // still count toward the failure badge in the header.
     final latestByRepo =
         <String, ({String owner, String name, WorkflowRun run})>{};
     for (final repo in snapshot.repos) {
@@ -74,12 +74,27 @@ class GithubWorkflowStatusStrip extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            for (final entry in entries)
-              _WorkflowStatusRow(
-                owner: entry.owner,
-                name: entry.name,
-                run: entry.run,
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 340,
+                  mainAxisExtent: 112,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                ),
+                children: [
+                  for (final entry in entries)
+                    _WorkflowStatusTile(
+                      owner: entry.owner,
+                      name: entry.name,
+                      run: entry.run,
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -87,8 +102,8 @@ class GithubWorkflowStatusStrip extends ConsumerWidget {
   }
 }
 
-class _WorkflowStatusRow extends StatelessWidget {
-  const _WorkflowStatusRow({
+class _WorkflowStatusTile extends StatelessWidget {
+  const _WorkflowStatusTile({
     required this.owner,
     required this.name,
     required this.run,
@@ -107,79 +122,98 @@ class _WorkflowStatusRow extends StatelessWidget {
       run.status,
       run.conclusion,
     );
-    return InkWell(
-      onTap: () => context.router.push(
-        GitHubRunDetailRoute(owner: owner, name: name, runId: run.id, run: run),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => context.router.push(
+          GitHubRunDetailRoute(
+            owner: owner,
+            name: name,
+            runId: run.id,
+            run: run,
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.outlineVariant),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          run.name.isEmpty ? '$owner/$name' : run.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        [
-                          '$owner/$name',
-                          if (run.headBranch.isNotEmpty) run.headBranch,
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                  Icon(icon, size: 16, color: color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      run.name.isEmpty ? '$owner/$name' : run.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
                   ),
-                  const SizedBox(height: 2),
+                  if (run.runNumber > 0)
+                    Text(
+                      '#${run.runNumber}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                [
+                  '$owner/$name',
+                  if (run.headBranch.isNotEmpty) run.headBranch,
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: Text(
+                  run.displayTitle.isEmpty
+                      ? 'githubNoRuns'.tr()
+                      : run.displayTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      githubRunDateTime(
+                        context,
+                        run.updatedAt ?? run.createdAt,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Text(
-                    run.displayTitle.isEmpty
-                        ? 'githubNoRuns'.tr()
-                        : run.displayTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
+                    githubTimeAgo(context, run.updatedAt ?? run.createdAt),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.outline,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (run.runNumber > 0)
-                  Text('#${run.runNumber}', style: theme.textTheme.labelSmall),
-                Text(
-                  githubRunDateTime(context, run.updatedAt ?? run.createdAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  githubTimeAgo(context, run.updatedAt ?? run.createdAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.outline,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 4),
-            const Icon(Symbols.chevron_right, size: 18),
-          ],
+            ],
+          ),
         ),
       ),
     );
