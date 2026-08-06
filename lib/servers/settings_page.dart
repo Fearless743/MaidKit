@@ -1256,7 +1256,7 @@ class SettingsPage extends ConsumerWidget {
 
 enum _ImportDestination { newVault, replaceCurrent }
 
-enum _VaultTileAction { rename, delete }
+enum _VaultTileAction { rename, delete, link }
 
 enum _SettingsTilePosition { only, first, middle, last }
 
@@ -1649,6 +1649,94 @@ class _VaultCloudBindingTile extends ConsumerWidget {
   final Future<void> Function()? onRename;
   final Future<void> Function()? onDelete;
 
+  /// Whether the vault has a WebDAV sync configuration.
+  bool _webdavBound(WidgetRef ref) =>
+      ref.watch(cloudSyncConfigurationForVaultProvider(vaultId))
+              .asData
+              ?.value !=
+          null;
+
+  List<Widget> _buildActions(
+    BuildContext context,
+    WidgetRef ref, {
+    required Future<void> Function()? onExport,
+    required Future<void> Function()? onImport,
+    required Future<void> Function()? onSync,
+  }) {
+    final connection = ref.watch(webdavConnectionProvider).asData?.value;
+    return [
+      OutlinedButton.icon(
+        onPressed: onExport,
+        icon: const Icon(Symbols.file_download),
+        label: const Text('settingsExportData').tr(),
+      ),
+      const SizedBox(width: 8),
+      OutlinedButton.icon(
+        onPressed: onImport,
+        icon: const Icon(Symbols.file_upload),
+        label: const Text('settingsImportData').tr(),
+      ),
+      if (connection != null) ...[
+        const SizedBox(width: 8),
+        FilledButton.tonalIcon(
+          onPressed: _webdavBound(ref) && onSync != null ? onSync : null,
+          icon: const Icon(Symbols.sync),
+          label: const Text('settingsVaultSyncNow').tr(),
+        ),
+      ],
+    ];
+  }
+
+  Future<void> _linkToWebDav(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (sheetContext) => SheetScaffold(
+        titleText: 'settingsVaultLinkToWebDav'.tr(),
+        heightFactor: 0.32,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text('settingsVaultLinkToWebDavHint'.tr()),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('commonCancel').tr(),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  child: const Text('settingsVaultLinkToWebDav').tr(),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      final service = ref.read(cloudSyncServiceForVaultProvider(vaultId));
+      await service.enable();
+      ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
+      await onSync?.call();
+      if (context.mounted) {
+        _showMessage('settingsVaultLinkedToWebDav'.tr());
+      }
+    } on CloudSyncException catch (error) {
+      if (context.mounted) _showMessage(error.message);
+    } catch (error) {
+      if (context.mounted) {
+        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final binding = ref.watch(cloudSyncConfigurationForVaultProvider(vaultId));
@@ -1688,6 +1776,9 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                   onSelected: (action) {
                     if (action == _VaultTileAction.rename) onRename?.call();
                     if (action == _VaultTileAction.delete) onDelete?.call();
+                    if (action == _VaultTileAction.link) {
+                      _linkToWebDav(context, ref);
+                    }
                   },
                   itemBuilder: (context) => [
                     if (onRename != null)
@@ -1699,6 +1790,11 @@ class _VaultCloudBindingTile extends ConsumerWidget {
                       PopupMenuItem(
                         value: _VaultTileAction.delete,
                         child: Text('settingsVaultDelete'.tr()),
+                      ),
+                    if (onSync != null)
+                      PopupMenuItem(
+                        value: _VaultTileAction.link,
+                        child: Text('settingsVaultLinkToWebDav'.tr()),
                       ),
                   ],
                 ),
@@ -1713,27 +1809,13 @@ class _VaultCloudBindingTile extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: onExport == null ? null : () => onExport!(),
-                    icon: const Icon(Symbols.file_download),
-                    label: const Text('settingsExportData').tr(),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: onImport == null ? null : () => onImport!(),
-                    icon: const Icon(Symbols.file_upload),
-                    label: const Text('settingsImportData').tr(),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.tonalIcon(
-                    onPressed: configuration == null || onSync == null
-                        ? null
-                        : () => onSync!(),
-                    icon: const Icon(Symbols.sync),
-                    label: const Text('settingsVaultSyncNow').tr(),
-                  ),
-                ],
+                children: _buildActions(
+                  context,
+                  ref,
+                  onExport: onExport,
+                  onImport: onImport,
+                  onSync: onSync,
+                ),
               ),
             ).alignment(.centerLeft),
         ],
