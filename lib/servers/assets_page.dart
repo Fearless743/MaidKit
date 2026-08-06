@@ -6,7 +6,6 @@ import 'package:island_ui_foundation/island_ui_foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
-import 'package:maid_kit/github/github_section.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 
@@ -26,8 +25,6 @@ class AssetsPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       children: const [
         ServerAssetsSection(),
-        SizedBox(height: 32),
-        GitHubSection(),
         SizedBox(height: 32),
         CredentialsPage(),
       ],

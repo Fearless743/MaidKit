@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
-  desktop_webview_window
   file_saver
   flutter_secure_storage_linux
   irondash_engine_context
@@ -12,7 +11,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   super_native_extensions
   url_launcher_linux
   window_manager
-  window_to_front
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

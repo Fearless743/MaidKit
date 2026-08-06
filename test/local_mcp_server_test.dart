@@ -221,9 +221,6 @@ void main() {
         'get_skill',
         'get_review_mode',
         'set_review_mode',
-        'github_list_runs',
-        'github_get_run',
-        'github_list_jobs',
       ]);
       final runCommand = definitions.firstWhere(
         (tool) => tool['name'] == 'run_command',
@@ -233,12 +230,6 @@ void main() {
       final properties = schema['properties'] as Map<String, dynamic>;
       expect(properties['server_id']['type'], 'integer');
       expect(properties['command']['type'], 'string');
-
-      final listRuns = definitions.firstWhere(
-        (tool) => tool['name'] == 'github_list_runs',
-      );
-      final listRunsSchema = listRuns['inputSchema'] as Map<String, dynamic>;
-      expect(listRunsSchema['required'], ['owner', 'name']);
     });
   });
 

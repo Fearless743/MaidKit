@@ -10,7 +10,6 @@ import 'package:super_context_menu/super_context_menu.dart';
 import 'package:tailscale/tailscale.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
-import 'package:maid_kit/github/github_workflow_strip.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 import 'server_connection_actions.dart';
@@ -356,7 +355,6 @@ class _ServerGridState extends State<_ServerGrid> {
           Expanded(
             child: CustomScrollView(
               slivers: [
-                const SliverToBoxAdapter(child: GithubWorkflowStatusStrip()),
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: _NoServersMatch()),
@@ -368,7 +366,6 @@ class _ServerGridState extends State<_ServerGrid> {
           Expanded(
             child: CustomScrollView(
               slivers: [
-                const SliverToBoxAdapter(child: GithubWorkflowStatusStrip()),
                 SliverPadding(
                   padding: const EdgeInsets.all(24),
                   sliver: SliverGrid(

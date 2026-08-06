@@ -5,7 +5,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:maid_kit/agent/agent_input_focus.dart';
-import 'package:maid_kit/github/github_providers.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/deploy_terminal.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
@@ -55,7 +54,6 @@ class _ServerTabsShell extends ConsumerWidget {
           ),
         );
     final isAgentInputFocused = ref.watch(agentInputFocusedProvider);
-    final githubHasFailures = ref.watch(githubHasFailuresProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -86,7 +84,7 @@ class _ServerTabsShell extends ConsumerWidget {
                             const SizedBox(height: 8),
                             const DeploySessionsRailButton(),
                             const SizedBox(height: 8),
-                            _CloudAccountRailButton(
+                            _WebDavRailButton(
                               onPressed: () => tabsRouter.setActiveIndex(5),
                             ),
                             IconButton(
@@ -104,13 +102,10 @@ class _ServerTabsShell extends ConsumerWidget {
                           label: Text('tabServers').tr(),
                         ),
                         NavigationRailDestination(
-                          icon: Badge(
-                            isLabelVisible: githubHasFailures,
-                            child: const Icon(Symbols.inventory_2),
-                          ),
-                          selectedIcon: Badge(
-                            isLabelVisible: githubHasFailures,
-                            child: const Icon(Symbols.inventory_2, fill: 1),
+                          icon: const Icon(Symbols.inventory_2),
+                          selectedIcon: const Icon(
+                            Symbols.inventory_2,
+                            fill: 1,
                           ),
                           label: Text('tabAssets').tr(),
                         ),
@@ -168,14 +163,8 @@ class _ServerTabsShell extends ConsumerWidget {
                         label: 'tabServers'.tr(),
                       ),
                       NavigationDestination(
-                        icon: Badge(
-                          isLabelVisible: githubHasFailures,
-                          child: const Icon(Symbols.inventory_2),
-                        ),
-                        selectedIcon: Badge(
-                          isLabelVisible: githubHasFailures,
-                          child: const Icon(Symbols.inventory_2, fill: 1),
-                        ),
+                        icon: const Icon(Symbols.inventory_2),
+                        selectedIcon: const Icon(Symbols.inventory_2, fill: 1),
                         label: 'tabAssets'.tr(),
                       ),
                       NavigationDestination(
@@ -210,30 +199,24 @@ class _ServerTabsShell extends ConsumerWidget {
   }
 }
 
-class _CloudAccountRailButton extends ConsumerWidget {
-  const _CloudAccountRailButton({required this.onPressed});
+class _WebDavRailButton extends ConsumerWidget {
+  const _WebDavRailButton({required this.onPressed});
 
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(cloudUserProvider).asData?.value;
+    final connected = ref.watch(webdavConnectionProvider).asData?.value != null;
     final scheme = Theme.of(context).colorScheme;
     return IconButton(
-      tooltip: 'settingsAccount'.tr(),
+      tooltip: 'settingsWebDav'.tr(),
       onPressed: onPressed,
       icon: CircleAvatar(
         radius: 14,
         backgroundColor: scheme.surfaceContainerHighest,
-        foregroundImage: user?.avatarUrl == null
-            ? null
-            : NetworkImage(user!.avatarUrl!),
-        child: user == null
-            ? const Icon(Symbols.person, size: 18)
-            : Text(
-                user.initials,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
+        child: connected
+            ? Icon(Symbols.cloud_done, size: 18, color: scheme.primary)
+            : Icon(Symbols.cloud, size: 18, color: scheme.onSurfaceVariant),
       ),
     );
   }

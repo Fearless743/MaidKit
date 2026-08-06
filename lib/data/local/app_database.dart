@@ -193,34 +193,6 @@ class AgentSkills extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
-/// A GitHub account the user signed in with. Only non-secret identity is kept
-/// here; the access token lives in the OS keychain under a key derived from
-/// [accountLogin] and never enters the vault database or cloud sync.
-class GitHubConnections extends Table {
-  @override
-  String get tableName => 'github_connections';
-
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get accountLogin => text().unique()();
-  TextColumn get accountName => text().withDefault(const Constant(''))();
-  TextColumn get avatarUrl => text().withDefault(const Constant(''))();
-  DateTimeColumn get createdAt => dateTime()();
-}
-
-/// Repositories pinned to the GitHub tab. Metadata only, safe to sync.
-class GitHubRepoPins extends Table {
-  @override
-  String get tableName => 'github_repo_pins';
-
-  IntColumn get id => integer().autoIncrement()();
-  IntColumn get connectionId => integer().references(GitHubConnections, #id)();
-  TextColumn get owner => text()();
-  TextColumn get name => text()();
-  DateTimeColumn get pinnedAt => dateTime()();
-}
-
-/// Links a deployment project to a GitHub workflow whose latest run is shown
-/// on the project detail page.
 @DriftDatabase(
   tables: [
     Servers,
@@ -236,8 +208,6 @@ class GitHubRepoPins extends Table {
     AgentProviderModels,
     McpServers,
     AgentSkills,
-    GitHubConnections,
-    GitHubRepoPins,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -266,10 +236,6 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'CREATE UNIQUE INDEX compose_project_links_location_unique '
         'ON compose_project_links (server_id, directory, scope)',
-      );
-      await customStatement(
-        'CREATE UNIQUE INDEX github_repo_pins_unique '
-        'ON github_repo_pins (connection_id, owner, name)',
       );
     },
     onUpgrade: (m, from, to) async {
@@ -431,8 +397,26 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(servers, servers.proxyPasswordNonce);
       }
       if (from < 19) {
-        await m.createTable(gitHubConnections);
-        await m.createTable(gitHubRepoPins);
+        // GitHub tables were removed in a later schema; keep the historical
+        // shape here so upgrades from older versions still migrate cleanly.
+        await customStatement('''
+          CREATE TABLE github_connections (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            account_login TEXT NOT NULL UNIQUE,
+            account_name TEXT NOT NULL DEFAULT '',
+            avatar_url TEXT NOT NULL DEFAULT '',
+            created_at DATETIME NOT NULL
+          )
+        ''');
+        await customStatement('''
+          CREATE TABLE github_repo_pins (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            connection_id INTEGER NOT NULL REFERENCES github_connections (id),
+            owner TEXT NOT NULL,
+            name TEXT NOT NULL,
+            pinned_at DATETIME NOT NULL
+          )
+        ''');
         await customStatement(
           'CREATE UNIQUE INDEX github_repo_pins_unique '
           'ON github_repo_pins (connection_id, owner, name)',
@@ -496,11 +480,4 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<AgentSkill>> watchAgentSkills() => (select(
     agentSkills,
   )..orderBy([(table) => OrderingTerm.asc(table.name)])).watch();
-
-  Stream<List<GitHubConnection>> watchGitHubConnections() => (select(
-    gitHubConnections,
-  )..orderBy([(table) => OrderingTerm.asc(table.accountLogin)])).watch();
-
-  Stream<List<GitHubRepoPin>> watchGitHubRepoPins() =>
-      select(gitHubRepoPins).watch();
 }

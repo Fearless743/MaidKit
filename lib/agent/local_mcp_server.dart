@@ -17,8 +17,6 @@ import 'package:maid_kit/agent/ssh_agent_service.dart';
 import 'package:maid_kit/servers/server_models.dart';
 import 'package:maid_kit/servers/server_providers.dart';
 import 'package:maid_kit/shared/presentation/maidkit_alert.dart';
-import 'package:maid_kit/github/github_mcp_tools.dart';
-import 'package:maid_kit/github/github_providers.dart';
 import 'package:maid_kit/snippets/snippet_repository.dart';
 
 /// Lifecycle of the in-app MCP server exposed to other local agents.
@@ -88,8 +86,7 @@ class LocalMcpServerPreferences {
 
 /// The tool surface the protocol serves. Split from the HTTP/JSON-RPC layer
 /// so tests can drive the protocol with a fake tool set. Resolves
-/// asynchronously because the surface can depend on runtime state (e.g. the
-/// GitHub tools are hidden until a GitHub account is signed in).
+/// asynchronously because the surface can depend on runtime state.
 abstract interface class LocalMcpToolInvoker {
   Future<List<Map<String, dynamic>>> get toolDefinitions;
 
@@ -424,18 +421,8 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
   final Ref ref;
 
   @override
-  Future<List<Map<String, dynamic>>> get toolDefinitions async {
-    // GitHub tools are hidden from other agents until this device has a
-    // signed-in GitHub account with a device token; otherwise they would
-    // advertise tools that always fail.
-    final cwt = await ref.read(githubTokenForConnectionProvider.future);
-    if (cwt != null) return _toolDefinitions;
-    return [
-      for (final tool in _toolDefinitions)
-        if (!GitHubMcpToolHandlers.isGitHubTool(tool['name'] as String? ?? ''))
-          tool,
-    ];
-  }
+  Future<List<Map<String, dynamic>>> get toolDefinitions async =>
+      _toolDefinitions;
 
   /// The tool surface this executor serves, kept static so tests can inspect
   /// it without constructing a Riverpod-backed instance.
@@ -642,7 +629,6 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         'required': ['mode'],
       },
     },
-    ...GitHubMcpToolHandlers.definitions,
   ];
 
   /// Largest tool result handed to the calling agent. Mirrors the chat
@@ -703,12 +689,6 @@ class LocalMcpToolExecutor implements LocalMcpToolInvoker {
         text = jsonEncode({'mode': _currentReviewMode().wireName});
       case 'set_review_mode':
         text = await _setReviewMode(arguments, callerLabel: callerLabel);
-      case 'github_list_runs':
-      case 'github_get_run':
-      case 'github_list_jobs':
-        text = jsonEncode(
-          await GitHubMcpToolHandlers(ref).call(name, arguments),
-        );
       default:
         throw ArgumentError('Unknown tool: $name');
     }

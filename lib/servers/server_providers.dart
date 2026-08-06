@@ -20,8 +20,6 @@ import 'package:maid_kit/agent/conversation_store.dart';
 import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
 import 'package:maid_kit/agent/agent_selection.dart';
-import 'package:maid_kit/agent/billing_service.dart';
-import 'package:maid_kit/agent/personality_service.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 import 'app_theme_preferences.dart';
 import 'ghostty_terminal_session_adapter.dart';
@@ -72,38 +70,9 @@ final cloudSyncConfigurationForVaultProvider =
           .configuration();
     });
 
-final cloudUserProvider = FutureProvider<CloudUser?>((ref) {
-  return ref.watch(cloudSyncServiceProvider).currentUser();
-});
-
-final cloudWorkspacesProvider = FutureProvider<List<CloudWorkspace>>((ref) {
-  return ref.watch(cloudSyncServiceProvider).listWorkspaces();
-});
-
-final personalityBillingPolicyProvider = FutureProvider<BillingPolicy?>((
-  ref,
-) async {
-  final accessToken = await ref.watch(cloudSyncServiceProvider).accessToken();
-  if (accessToken == null) return null;
-  return const PersonalityBillingService().getMyBilling(
-    baseUrl: PersonalityBillingService.productionBaseUrl,
-    accessToken: accessToken,
-  );
-});
-
-final personalityAgentsProvider = FutureProvider<List<PersonalityAgent>>((
-  ref,
-) async {
-  final accessToken = await ref.watch(cloudSyncServiceProvider).accessToken();
-  if (accessToken == null) return const [];
-  try {
-    return await const PersonalityService().listAgents(
-      baseUrl: PersonalityService.productionBaseUrl,
-      accessToken: accessToken,
-    );
-  } catch (_) {
-    return const [];
-  }
+/// The configured WebDAV connection, or null when not configured.
+final webdavConnectionProvider = FutureProvider<WebDavConnection?>((ref) {
+  return ref.watch(cloudSyncServiceProvider).connection();
 });
 
 final databaseProvider = Provider.autoDispose<AppDatabase>((ref) {
@@ -444,29 +413,6 @@ class AgentPersonalityNotifier extends AsyncNotifier<String> {
       return settings.savePersonality(personality);
     });
     state = AsyncData(personality.trim());
-  }
-}
-
-final agentPersonalityAgentProvider =
-    AsyncNotifierProvider<AgentPersonalityAgentNotifier, String>(
-      AgentPersonalityAgentNotifier.new,
-    );
-
-class AgentPersonalityAgentNotifier extends AsyncNotifier<String> {
-  @override
-  Future<String> build() async =>
-      (await AgentPersonalityAgentPreferences.load()).agentId;
-
-  Future<void> setAgentId(String agentId) async {
-    final normalized = agentId.trim();
-    await AgentPersonalityAgentPreferences.load().then((settings) {
-      return settings.saveAgentId(normalized);
-    });
-    state = AsyncData(
-      normalized.isEmpty
-          ? AgentPersonalityAgentPreferences.defaultAgentId
-          : normalized,
-    );
   }
 }
 

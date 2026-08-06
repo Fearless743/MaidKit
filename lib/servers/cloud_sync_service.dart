@@ -1,12 +1,9 @@
 import 'dart:convert';
-import 'dart:math';
+import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:uuid/uuid.dart';
+import 'package:webdav_client/webdav_client.dart' as webdav;
 
 import '../shared/presentation/maidkit_alert.dart';
 
@@ -23,8 +20,13 @@ class CloudSyncConfiguration {
     this.lastContentFingerprint,
   });
 
+  /// The WebDAV connection identifier ('webdav'). Kept for compatibility with
+  /// the previous Solarpass configuration shape.
   final String workspaceId;
+
+  /// Display name of the WebDAV connection.
   final String workspaceName;
+
   final String workspaceSlug;
   final String blobId;
   final int revision;
@@ -48,10 +50,10 @@ class CloudSyncConfiguration {
 
   factory CloudSyncConfiguration.fromJson(Map<String, dynamic> json) =>
       CloudSyncConfiguration(
-        workspaceId: json['workspaceId'] as String,
-        workspaceName: json['workspaceName'] as String,
-        workspaceSlug: json['workspaceSlug'] as String,
-        blobId: json['blobId'] as String? ?? const Uuid().v4(),
+        workspaceId: json['workspaceId'] as String? ?? 'webdav',
+        workspaceName: json['workspaceName'] as String? ?? 'WebDAV',
+        workspaceSlug: json['workspaceSlug'] as String? ?? 'webdav',
+        blobId: json['blobId'] as String? ?? '',
         revision: (json['revision'] as num?)?.toInt() ?? 0,
         pendingDownload: json['pendingDownload'] == true,
         lastSyncedAt: DateTime.tryParse(
@@ -61,6 +63,7 @@ class CloudSyncConfiguration {
       );
 }
 
+/// A WebDAV vault directory discovered on the server.
 class CloudWorkspace {
   const CloudWorkspace({
     required this.id,
@@ -75,10 +78,11 @@ class CloudWorkspace {
   factory CloudWorkspace.fromJson(Map<String, dynamic> json) => CloudWorkspace(
     id: json['id']?.toString() ?? '',
     slug: json['slug']?.toString() ?? '',
-    name: json['name']?.toString() ?? 'Untitled workspace',
+    name: json['name']?.toString() ?? 'Untitled vault',
   );
 }
 
+/// A remote vault blob found on the WebDAV server.
 class CloudVaultBlob {
   const CloudVaultBlob({
     required this.id,
@@ -102,47 +106,6 @@ class CloudVaultBlob {
   );
 }
 
-class CloudUser {
-  const CloudUser({required this.name, required this.handle, this.avatarUrl});
-
-  final String name;
-  final String handle;
-  final String? avatarUrl;
-
-  String get initials {
-    final value = name.trim();
-    return value.isEmpty ? '?' : value.substring(0, 1).toUpperCase();
-  }
-
-  factory CloudUser.fromJson(Map<String, dynamic> json) {
-    final profile = json['profile'] is Map
-        ? Map<String, dynamic>.from(json['profile'] as Map)
-        : const <String, dynamic>{};
-    final picture = profile['picture'] ?? json['picture'];
-    final pictureData = picture is Map
-        ? Map<String, dynamic>.from(picture)
-        : const <String, dynamic>{};
-    final storageUrl =
-        pictureData['storage_url']?.toString() ??
-        pictureData['storageUrl']?.toString() ??
-        pictureData['url']?.toString();
-    final id = pictureData['id']?.toString();
-    final handle = json['name']?.toString() ?? '';
-    final displayName = json['nick']?.toString();
-    return CloudUser(
-      name: displayName?.isNotEmpty == true
-          ? displayName!
-          : handle.isNotEmpty
-          ? '@$handle'
-          : 'Solar Network user',
-      handle: handle.isEmpty ? '' : '@$handle',
-      avatarUrl:
-          storageUrl ??
-          (id == null ? null : '${CloudSyncService.apiBase}/drive/files/$id'),
-    );
-  }
-}
-
 class CloudSyncException implements Exception {
   const CloudSyncException(this.message);
   final String message;
@@ -153,7 +116,8 @@ class CloudSyncException implements Exception {
 
 enum CloudSyncConflictResolution { downloadRemote, overwriteRemote }
 
-/// Raised before either copy is changed when Flywheel has a newer revision.
+/// Raised before either copy is changed when the WebDAV remote has a newer
+/// revision.
 class CloudSyncConflictException extends CloudSyncException {
   const CloudSyncConflictException({this.remoteRevision})
     : super('This vault has a newer cloud version.');
@@ -161,53 +125,38 @@ class CloudSyncConflictException extends CloudSyncException {
   final int? remoteRevision;
 }
 
-String _apiErrorMessage(DioException error) {
-  final data = error.response?.data;
-  if (data is Map) {
-    final values = Map<String, dynamic>.from(data);
-    final message = values['detail'] ?? values['message'] ?? values['error'];
-    if (message != null && message.toString().isNotEmpty) {
-      return message.toString();
-    }
-  }
-  final status = error.response?.statusCode;
-  return status == null
-      ? 'Unable to reach Solarpass. Check your connection and try again.'
-      : 'Solarpass request failed (HTTP $status).';
-}
-
-/// Solarpass authorization and Flywheel encrypted-blob transport.
+/// WebDAV transport for the encrypted vault archive.
+///
+/// Each vault syncs to a single `vault.mkb` archive plus a `vault.json`
+/// sidecar that records the revision. Remote layout:
+///
+///   `maidkit-vaults/<blobId>/vault.mkb`
+///   `maidkit-vaults/<blobId>/vault.json`
+///
+/// [blobId] is a stable per-vault identifier so multiple devices sharing one
+/// WebDAV server can discover and adopt the same remote vault. The archive is
+/// client-side encrypted with the vault passphrase (see [DatabaseBackupService]
+/// and [VaultService.encryptPortable]); the server only ever sees ciphertext.
+///
+/// The WebDAV connection (server URL + credentials) is stored once in the
+/// OS keychain under `maidkit_webdav_connection` and shared by all vaults.
 class CloudSyncService {
   CloudSyncService({
     required String vaultId,
     FlutterSecureStorage? secureStorage,
-    Dio? dio,
   }) : _vaultKey = base64UrlEncode(utf8.encode(vaultId)),
-       _storage = secureStorage ?? const FlutterSecureStorage(),
-       _dio = dio ?? Dio();
+       _storage = secureStorage ?? const FlutterSecureStorage();
 
-  static const apiBase = 'https://api.solian.app';
-  static const appId = 'dev.solsynth.maidkit';
-  static const _clientId = 'maidkit';
-  static const _callbackScheme = 'maidkit';
-  static const _redirectUri = '$_callbackScheme://oauth/callback';
-  // On Windows/Linux flutter_web_auth_2's default in-app WebView2 window runs
-  // a second Flutter engine that crashes the app; the browser + loopback
-  // callback flow is used instead there. The port must stay fixed so the
-  // redirect URI can be registered with the Solarpass OIDC client.
-  static const _loopbackPort = 42871;
-  static const _loopbackCallbackScheme = 'http://127.0.0.1:$_loopbackPort';
-  static const _loopbackRedirectUri = '$_loopbackCallbackScheme/oauth/callback';
-  static const _sessionKey = 'maidkit_solar_network_oauth_session';
-  static const _schemeVersion = 1;
+  static const _connectionKey = 'maidkit_webdav_connection';
+  static const _configurationKeyPrefix = 'maidkit_webdav_sync';
+  static const _vaultRoot = 'maidkit-vaults';
+  static const _vaultFileName = 'vault.mkb';
+  static const _metadataFileName = 'vault.json';
 
   final String _vaultKey;
   final FlutterSecureStorage _storage;
-  final Dio _dio;
 
-  String get _configurationKey => 'maidkit_cloud_sync_$_vaultKey';
-  String _flywheelAppPath(String workspaceId) =>
-      '/flywheel/workspaces/$workspaceId/apps/$appId';
+  String get _configurationKey => '${_configurationKeyPrefix}_$_vaultKey';
 
   Future<CloudSyncConfiguration?> configuration() async {
     final raw = await _storage.read(key: _configurationKey);
@@ -224,151 +173,64 @@ class CloudSyncService {
 
   Future<void> disable() => _storage.delete(key: _configurationKey);
 
-  Future<CloudUser?> currentUser() async {
-    final session = await _validSession();
-    if (session == null) return null;
-    final response = await _authorizedGet('/passport/accounts/me', session);
-    final data = response.data;
-    return data is Map
-        ? CloudUser.fromJson(Map<String, dynamic>.from(data))
-        : null;
-  }
+  /// Whether WebDAV connection credentials have been configured.
+  Future<bool> isConnected() async =>
+      (await _storage.read(key: _connectionKey)) != null;
 
-  /// Returns a current Solarpass access token for first-party services.
-  /// The token remains in secure storage and is refreshed when necessary.
-  Future<String?> accessToken() async => (await _validSession())?.accessToken;
-
-  Future<CloudUser> signIn() async {
+  /// The configured WebDAV connection, or null when not configured.
+  Future<WebDavConnection?> connection() async {
+    final raw = await _storage.read(key: _connectionKey);
+    if (raw == null) return null;
     try {
-      await _signIn();
-      final user = await currentUser();
-      if (user == null) {
-        throw const CloudSyncException('Unable to load the signed-in account.');
-      }
-      return user;
-    } on DioException catch (error) {
-      throw CloudSyncException(_apiErrorMessage(error));
+      final values = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      return WebDavConnection.fromJson(values);
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<void> signOut() async {
-    await _storage.delete(key: _sessionKey);
-  }
+  /// Stores the WebDAV connection credentials in the OS keychain.
+  Future<void> saveConnection(WebDavConnection connection) => _storage.write(
+    key: _connectionKey,
+    value: jsonEncode(connection.toJson()),
+  );
 
-  Future<List<CloudWorkspace>> listWorkspaces() async {
-    final session = await _validSession();
-    return session == null ? const [] : _listWorkspaces(session);
-  }
+  Future<void> clearConnection() => _storage.delete(key: _connectionKey);
 
-  Future<List<CloudWorkspace>> signInAndListWorkspaces() async {
-    try {
-      final session = await _validSession();
-      if (session == null) {
-        return _listWorkspaces(await _signIn());
-      }
-      try {
-        return await _listWorkspaces(session);
-      } on DioException catch (error) {
-        if (error.response?.statusCode != 401) rethrow;
-        // The stored session was rejected (revoked or rotated server-side).
-        // Drop it and authorize again so the user can sign in interactively.
-        await signOut();
-        return _listWorkspaces(await _signIn());
-      }
-    } on DioException catch (error) {
-      throw CloudSyncException(_apiErrorMessage(error));
-    }
-  }
-
-  Future<List<CloudWorkspace>> _listWorkspaces(_Session session) async {
-    final response = await _authorizedGet('/valve/workspaces', session);
-    final entries = response.data;
-    if (entries is! List) {
-      throw const CloudSyncException('Invalid workspace response.');
-    }
-    return entries
-        .whereType<Map>()
-        .map(
-          (entry) => CloudWorkspace.fromJson(Map<String, dynamic>.from(entry)),
-        )
-        .where((workspace) => workspace.id.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  Future<List<CloudVaultBlob>> listVaultBlobs(CloudWorkspace workspace) async {
-    try {
-      final session = await _validSession();
-      if (session == null) {
-        throw const CloudSyncException(
-          'Sign in is required to list cloud vaults.',
-        );
-      }
-      final response = await _authorizedGet(
-        '${_flywheelAppPath(workspace.id)}/blobs',
-        session,
-      );
-      final entries = response.data;
-      if (entries is! List) {
-        throw const CloudSyncException('Invalid cloud vault response.');
-      }
-      return entries
-          .whereType<Map>()
-          .map(
-            (value) =>
-                CloudVaultBlob.fromJson(Map<String, dynamic>.from(value)),
-          )
-          .where((blob) => blob.id.isNotEmpty && blob.revision > 0)
-          .toList(growable: false);
-    } on DioException catch (error) {
-      throw CloudSyncException(_apiErrorMessage(error));
-    }
-  }
-
-  Future<CloudSyncConfiguration> enable(
-    CloudWorkspace workspace, {
+  /// Configures sync for this vault against a remote blob directory.
+  ///
+  /// When [existingBlob] is provided, the vault adopts that remote directory
+  /// (used when downloading an existing remote vault).
+  Future<CloudSyncConfiguration> enable({
     CloudVaultBlob? existingBlob,
+    CloudWorkspace? workspace,
   }) async {
-    try {
-      final session = await _validSession();
-      if (session == null) {
-        throw const CloudSyncException(
-          'Sign in is required to enable cloud sync.',
-        );
-      }
-      final planResponse = await _authorizedGet(
-        '/valve/workspaces/${workspace.id}/plan/status',
-        session,
-      );
-      final plan = ((planResponse.data as Map?)?['plan'] as num?)?.toInt() ?? 0;
-      if (plan < 1) {
-        throw const CloudSyncException(
-          'Cloud sync requires a Pro or Enterprise workspace.',
-        );
-      }
-      final previous = await this.configuration();
-      final reuseCurrentBlob =
-          existingBlob == null && previous?.workspaceId == workspace.id;
-      final configuration = CloudSyncConfiguration(
-        workspaceId: workspace.id,
-        workspaceName: workspace.name,
-        workspaceSlug: workspace.slug,
-        blobId:
-            existingBlob?.id ??
-            (reuseCurrentBlob ? previous!.blobId : const Uuid().v4()),
-        revision: reuseCurrentBlob ? previous!.revision : 0,
-        pendingDownload: existingBlob != null,
-        lastContentFingerprint: reuseCurrentBlob
-            ? previous!.lastContentFingerprint
-            : null,
-      );
-      await _storage.write(
-        key: _configurationKey,
-        value: jsonEncode(configuration.toJson()),
-      );
-      return configuration;
-    } on DioException catch (error) {
-      throw CloudSyncException(_apiErrorMessage(error));
-    }
+    final previous = await this.configuration();
+    final reuseCurrentBlob =
+        existingBlob == null &&
+        previous?.workspaceId == 'webdav' &&
+        previous?.blobId.isNotEmpty == true;
+    final blobId =
+        existingBlob?.id ??
+        (reuseCurrentBlob ? previous!.blobId : const Uuid().v4());
+    final configuration = CloudSyncConfiguration(
+      workspaceId: 'webdav',
+      workspaceName: workspace?.name ?? 'WebDAV',
+      workspaceSlug: workspace?.slug ?? 'webdav',
+      blobId: blobId,
+      revision: reuseCurrentBlob
+          ? previous!.revision
+          : existingBlob?.revision ?? 0,
+      pendingDownload: existingBlob != null,
+      lastContentFingerprint: reuseCurrentBlob
+          ? previous!.lastContentFingerprint
+          : null,
+    );
+    await _storage.write(
+      key: _configurationKey,
+      value: jsonEncode(configuration.toJson()),
+    );
+    return configuration;
   }
 
   Future<void> completePendingDownload() async {
@@ -387,17 +249,41 @@ class CloudSyncService {
     );
   }
 
-  /// Uploads/downloads a client-encrypted archive. Flywheel never decrypts it.
-  ///
-  /// The server revision is always read first. When the cloud is newer and no
-  /// [conflictResolution] is given, the user is asked whether to take the cloud
-  /// copy or keep the local one.
+  /// Lists remote vault directories on the configured WebDAV server.
+  Future<List<CloudVaultBlob>> listVaultBlobs() async {
+    try {
+      final client = await _client();
+      final blobs = <CloudVaultBlob>[];
+      final entries = await client.readDir(_vaultRoot);
+      for (final entry in entries) {
+        if (entry.isDir != true) continue;
+        final blobId = entry.name;
+        if (blobId == null || blobId.isEmpty) continue;
+        final revision = await _readRevision(client, blobId);
+        if (revision <= 0) continue;
+        blobs.add(
+          CloudVaultBlob(
+            id: blobId,
+            revision: revision,
+            updatedAt: entry.mTime,
+          ),
+        );
+      }
+      blobs.sort((a, b) => b.revision.compareTo(a.revision));
+      return blobs;
+    } catch (error) {
+      throw CloudSyncException(_friendly(error));
+    }
+  }
+
+  /// Uploads/downloads a client-encrypted archive. The remote revision is
+  /// always read first. When the remote is newer and no [conflictResolution]
+  /// is given, the user is asked whether to take the remote copy or keep the
+  /// local one.
   ///
   /// When [contentFingerprint] is provided, the upload is skipped if it matches
   /// the fingerprint stored at the last successful sync and the local revision
-  /// was not superseded: the local database is unchanged, so no new blob is
-  /// written. The function is invoked again after a remote download so the
-  /// stored fingerprint always reflects the vault's current content.
+  /// was not superseded.
   Future<CloudSyncConfiguration> sync({
     required String archive,
     required Future<void> Function(String archive) applyArchive,
@@ -407,46 +293,25 @@ class CloudSyncService {
   }) async {
     final configuration = await this.configuration();
     if (configuration == null) {
-      throw const CloudSyncException(
-        'Link this vault to a cloud workspace first.',
-      );
+      throw const CloudSyncException('Link this vault to WebDAV sync first.');
     }
     try {
-      final session = await _validSession();
-      if (session == null) {
-        throw const CloudSyncException(
-          'Sign in is required to sync this vault.',
-        );
-      }
-      var revision = configuration.revision;
+      final client = await _client();
       var remoteRevision = 0;
       try {
-        final metadata = await _authorizedGet(
-          '${_flywheelAppPath(configuration.workspaceId)}/blobs/'
-          '${configuration.blobId}',
-          session,
-        );
-        final data = metadata.data as Map?;
-        remoteRevision =
-            ((data?['current_revision'] ?? data?['currentRevision']) as num?)
-                ?.toInt() ??
-            0;
-      } on DioException catch (error) {
-        if (error.response?.statusCode != 404) rethrow;
+        remoteRevision = await _readRevision(client, configuration.blobId);
+      } catch (_) {
+        remoteRevision = 0;
       }
+      var revision = configuration.revision;
       if (remoteRevision > revision) {
         final resolution =
             conflictResolution ?? await _resolveConflict(remoteRevision);
         if (resolution == CloudSyncConflictResolution.downloadRemote) {
-          final content = await _dio.get<List<int>>(
-            '$apiBase${_flywheelAppPath(configuration.workspaceId)}/blobs/'
-            '${configuration.blobId}/content',
-            options: Options(
-              headers: {'Authorization': 'Bearer ${session.accessToken}'},
-              responseType: ResponseType.bytes,
-            ),
+          final bytes = await client.read(
+            '$_vaultRoot/${configuration.blobId}/$_vaultFileName',
           );
-          final remoteArchive = utf8.decode(content.data ?? const []);
+          final remoteArchive = utf8.decode(bytes);
           await applyArchive(remoteArchive);
           final updated = _updatedConfiguration(
             configuration,
@@ -456,37 +321,19 @@ class CloudSyncService {
           await _saveConfiguration(updated);
           return updated;
         }
-        // Normal sync is local-authoritative. It keeps this vault's stable
-        // blob ID and creates the next revision from the latest remote one.
         revision = remoteRevision;
       }
       final fingerprint = await contentFingerprint?.call();
       if (fingerprint != null &&
           fingerprint == configuration.lastContentFingerprint &&
           revision == configuration.revision) {
-        // The local database is unchanged since the last sync and no newer
-        // remote revision was adopted, so there is nothing to upload.
         return configuration;
       }
-      final response = await _dio.put<Map<String, dynamic>>(
-        '$apiBase${_flywheelAppPath(configuration.workspaceId)}/blobs/'
-        '${configuration.blobId}',
-        data: FormData.fromMap({
-          // Flywheel binds these multipart fields to its C# [FromForm]
-          // properties. JSON's snake_case convention does not apply here.
-          'File': MultipartFile.fromBytes(
-            utf8.encode(archive),
-            filename: 'vault.mkb',
-          ),
-          'SchemeVersion': _schemeVersion,
-          'ExpectedRevision': revision,
-        }),
-        options: Options(
-          headers: {'Authorization': 'Bearer ${session.accessToken}'},
-        ),
+      await client.write(
+        '$_vaultRoot/${configuration.blobId}/$_vaultFileName',
+        Uint8List.fromList(utf8.encode(archive)),
       );
-      revision =
-          (response.data?['revision'] as num?)?.toInt() ?? (revision + 1);
+      await _writeRevision(client, configuration.blobId, revision);
       final updated = _updatedConfiguration(
         configuration,
         revision: revision,
@@ -494,30 +341,13 @@ class CloudSyncService {
       );
       await _saveConfiguration(updated);
       return updated;
-    } on DioException catch (error) {
-      if (error.response?.statusCode == 409 && conflictRetryCount < 1) {
-        // Another device won the race after metadata was read. Re-read its
-        // revision and retry the local-authoritative upload once through the
-        // same normal sync path.
-        return sync(
-          archive: archive,
-          applyArchive: applyArchive,
-          contentFingerprint: contentFingerprint,
-          conflictResolution: CloudSyncConflictResolution.overwriteRemote,
-          conflictRetryCount: conflictRetryCount + 1,
-        );
-      }
-      if (error.response?.statusCode == 409) {
-        throw const CloudSyncException(
-          'This cloud vault changed again while syncing. Try once more.',
-        );
-      }
-      throw CloudSyncException(_apiErrorMessage(error));
+    } on CloudSyncException {
+      rethrow;
+    } catch (error) {
+      throw CloudSyncException(_friendly(error));
     }
   }
 
-  /// Asks the user whether to adopt the newer cloud revision or keep the
-  /// local copy. Without an app overlay (headless), the local copy wins.
   Future<CloudSyncConflictResolution> _resolveConflict(
     int remoteRevision,
   ) async {
@@ -551,191 +381,111 @@ class CloudSyncService {
         value: jsonEncode(configuration.toJson()),
       );
 
-  Future<_Session> _signIn() async {
-    final configuration = await _discover();
-    final verifier = _randomUrlSafe(64);
-    final state = _randomUrlSafe(32);
-    final challenge = base64UrlEncode(
-      sha256.convert(utf8.encode(verifier)).bytes,
-    ).replaceAll('=', '');
-    // Windows/Linux: use the system browser with a loopback callback instead
-    // of the in-app WebView2 window, which crashes the app (its title bar
-    // runs a second Flutter engine without the window_manager plugin).
-    final useLoopback =
-        !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.linux);
-    final redirectUri = useLoopback ? _loopbackRedirectUri : _redirectUri;
-    final url = configuration.authorizationEndpoint.replace(
-      queryParameters: {
-        'response_type': 'code',
-        'client_id': _clientId,
-        'redirect_uri': redirectUri,
-        'scope': '*',
-        'state': state,
-        'code_challenge': challenge,
-        'code_challenge_method': 'S256',
-      },
-    );
-    final callback = Uri.parse(
-      await FlutterWebAuth2.authenticate(
-        url: url.toString(),
-        callbackUrlScheme: useLoopback
-            ? _loopbackCallbackScheme
-            : _callbackScheme,
-        options: useLoopback
-            ? const FlutterWebAuth2Options(useWebview: false)
-            : const FlutterWebAuth2Options(),
-      ),
-    );
-    if (callback.queryParameters['state'] != state) {
+  Future<webdav.Client> _client() async {
+    final raw = await _storage.read(key: _connectionKey);
+    if (raw == null) {
       throw const CloudSyncException(
-        'The authorization response could not be verified.',
+        'WebDAV is not configured. Open Settings to set up your server.',
       );
     }
-    final error = callback.queryParameters['error'];
-    if (error != null) {
-      throw CloudSyncException(
-        callback.queryParameters['error_description'] ?? error,
-      );
+    final connection = WebDavConnection.tryParse(raw);
+    if (connection == null) {
+      throw const CloudSyncException('Invalid WebDAV configuration.');
     }
-    final code = callback.queryParameters['code'];
-    if (code == null || code.isEmpty) {
-      throw const CloudSyncException(
-        'The authorization server did not return an authorization code.',
-      );
-    }
-    final session = await _exchange(configuration.tokenEndpoint, {
-      'grant_type': 'authorization_code',
-      'client_id': _clientId,
-      'code': code,
-      'redirect_uri': redirectUri,
-      'code_verifier': verifier,
-    });
-    await _saveSession(session);
-    return session;
+    final client = webdav.newClient(
+      connection.url,
+      user: connection.username,
+      password: connection.password,
+    );
+    client.setConnectTimeout(15000);
+    client.setSendTimeout(30000);
+    client.setReceiveTimeout(60000);
+    return client;
   }
 
-  Future<_Session?> _validSession() async {
-    final session = await _readSession();
-    if (session == null || !session.needsRefresh) return session;
-    if (session.refreshToken == null || session.refreshToken!.isEmpty) {
-      return null;
+  Future<int> _readRevision(webdav.Client client, String blobId) async {
+    final path = '$_vaultRoot/$blobId';
+    final entries = await client.readDir(path);
+    for (final entry in entries) {
+      if (entry.name == _metadataFileName) {
+        final bytes = await client.read('$path/$_metadataFileName');
+        try {
+          final values = Map<String, dynamic>.from(
+            jsonDecode(utf8.decode(bytes)) as Map,
+          );
+          return (values['revision'] as num?)?.toInt() ?? 0;
+        } catch (_) {
+          return 0;
+        }
+      }
     }
+    return 0;
+  }
+
+  Future<void> _writeRevision(
+    webdav.Client client,
+    String blobId,
+    int revision,
+  ) async {
+    await client.write(
+      '$_vaultRoot/$blobId/$_metadataFileName',
+      Uint8List.fromList(utf8.encode(jsonEncode({'revision': revision}))),
+    );
+  }
+
+  String _friendly(Object error) {
+    final message = error.toString();
+    if (message.contains('401') || message.contains('403')) {
+      return 'WebDAV authentication failed. Check your server URL and credentials.';
+    }
+    if (message.contains('404')) {
+      return 'The WebDAV vault was not found on the server.';
+    }
+    if (message.contains('Connection') ||
+        message.contains('Socket') ||
+        message.contains('Timeout')) {
+      return 'Unable to reach the WebDAV server. Check your connection and try again.';
+    }
+    return 'WebDAV request failed: $message';
+  }
+}
+
+/// WebDAV server connection credentials stored in the OS keychain.
+class WebDavConnection {
+  const WebDavConnection({
+    required this.url,
+    required this.username,
+    required this.password,
+    this.name = 'WebDAV',
+  });
+
+  final String url;
+  final String username;
+  final String password;
+  final String name;
+
+  Map<String, Object?> toJson() => {
+    'url': url,
+    'username': username,
+    'password': password,
+    'name': name,
+  };
+
+  factory WebDavConnection.fromJson(Map<String, dynamic> json) =>
+      WebDavConnection(
+        url: json['url']?.toString() ?? '',
+        username: json['username']?.toString() ?? '',
+        password: json['password']?.toString() ?? '',
+        name: json['name']?.toString() ?? 'WebDAV',
+      );
+
+  static WebDavConnection? tryParse(String raw) {
     try {
-      final refreshed = await _exchange((await _discover()).tokenEndpoint, {
-        'grant_type': 'refresh_token',
-        'client_id': _clientId,
-        'refresh_token': session.refreshToken!,
-      }, previous: session);
-      await _saveSession(refreshed);
-      return refreshed;
-    } on DioException {
-      return null;
-    }
-  }
-
-  Future<_OidcConfiguration> _discover() async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '$apiBase/.well-known/openid-configuration',
-    );
-    final data = response.data;
-    if (data == null) {
-      throw const CloudSyncException('Unable to load sign-in configuration.');
-    }
-    return _OidcConfiguration.fromJson(data);
-  }
-
-  Future<Response<dynamic>> _authorizedGet(String path, _Session session) =>
-      _dio.get<dynamic>(
-        '$apiBase$path',
-        options: Options(
-          headers: {'Authorization': 'Bearer ${session.accessToken}'},
-        ),
-      );
-
-  Future<_Session> _exchange(
-    Uri endpoint,
-    Map<String, String> fields, {
-    _Session? previous,
-  }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      endpoint.toString(),
-      data: fields,
-      options: Options(contentType: Headers.formUrlEncodedContentType),
-    );
-    final data = response.data ?? const <String, dynamic>{};
-    final accessToken = (data['access_token'] ?? data['token']) as String?;
-    if (accessToken == null || accessToken.isEmpty) {
-      throw const CloudSyncException(
-        'The token response did not include an access token.',
-      );
-    }
-    return _Session(
-      accessToken: accessToken,
-      refreshToken: data['refresh_token'] as String? ?? previous?.refreshToken,
-      expiresAt: data['expires_in'] is num
-          ? DateTime.now().add(
-              Duration(seconds: (data['expires_in'] as num).toInt()),
-            )
-          : null,
-    );
-  }
-
-  Future<_Session?> _readSession() async {
-    final raw = await _storage.read(key: _sessionKey);
-    if (raw == null) return null;
-    try {
-      return _Session.fromJson(
+      return WebDavConnection.fromJson(
         Map<String, dynamic>.from(jsonDecode(raw) as Map),
       );
     } catch (_) {
-      await _storage.delete(key: _sessionKey);
       return null;
     }
   }
-
-  Future<void> _saveSession(_Session session) =>
-      _storage.write(key: _sessionKey, value: jsonEncode(session.toJson()));
-
-  String _randomUrlSafe(int length) => base64UrlEncode(
-    List<int>.generate(length, (_) => Random.secure().nextInt(256)),
-  ).replaceAll('=', '');
-}
-
-class _OidcConfiguration {
-  const _OidcConfiguration(this.authorizationEndpoint, this.tokenEndpoint);
-  final Uri authorizationEndpoint;
-  final Uri tokenEndpoint;
-  factory _OidcConfiguration.fromJson(Map<String, dynamic> json) =>
-      _OidcConfiguration(
-        Uri.parse(json['authorization_endpoint'] as String),
-        Uri.parse(json['token_endpoint'] as String),
-      );
-}
-
-class _Session {
-  const _Session({
-    required this.accessToken,
-    this.refreshToken,
-    this.expiresAt,
-  });
-  final String accessToken;
-  final String? refreshToken;
-  final DateTime? expiresAt;
-  bool get needsRefresh =>
-      expiresAt != null &&
-      DateTime.now().isAfter(expiresAt!.subtract(const Duration(seconds: 30)));
-  Map<String, Object?> toJson() => {
-    'access_token': accessToken,
-    'refresh_token': refreshToken,
-    'expires_at': expiresAt?.toUtc().toIso8601String(),
-  };
-  factory _Session.fromJson(Map<String, dynamic> json) => _Session(
-    accessToken: json['access_token'] as String,
-    refreshToken: json['refresh_token'] as String?,
-    expiresAt: DateTime.tryParse(
-      json['expires_at'] as String? ?? '',
-    )?.toLocal(),
-  );
 }

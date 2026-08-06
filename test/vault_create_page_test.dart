@@ -11,8 +11,15 @@ class _FailingCloudSyncService extends CloudSyncService {
   _FailingCloudSyncService() : super(vaultId: 'test');
 
   @override
-  Future<List<CloudWorkspace>> signInAndListWorkspaces() async {
-    throw const CloudSyncException('Sign-in unavailable.');
+  Future<WebDavConnection?> connection() async => const WebDavConnection(
+    url: 'https://dav.example.com',
+    username: 'user',
+    password: 'pass',
+  );
+
+  @override
+  Future<List<CloudVaultBlob>> listVaultBlobs() async {
+    throw const CloudSyncException('WebDAV request failed.');
   }
 }
 
@@ -24,7 +31,7 @@ void main() {
     EasyLocalization.logger.enableBuildModes = [];
   });
 
-  testWidgets('shows the sign-in error on the cloud choices view', (
+  testWidgets('shows the WebDAV error on the cloud choices view', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -47,7 +54,7 @@ void main() {
     await tester.tap(find.text('vaultCreateFromCloudAction'.tr()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sign-in unavailable.'), findsOneWidget);
+    expect(find.text('WebDAV request failed.'), findsOneWidget);
     expect(find.text('commonCancel'.tr()), findsOneWidget);
   });
 }

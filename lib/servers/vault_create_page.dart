@@ -9,8 +9,8 @@ import 'server_providers.dart';
 
 /// Full-screen vault onboarding reached from the locked vault gate.
 ///
-/// The user either creates a brand-new local vault file or signs in to
-/// Solarpass to download an existing cloud vault.
+/// The user either creates a brand-new local vault file or downloads an
+/// existing encrypted vault from a configured WebDAV server.
 class VaultCreatePage extends ConsumerStatefulWidget {
   const VaultCreatePage({super.key});
 
@@ -247,15 +247,18 @@ class _VaultCreatePageState extends ConsumerState<VaultCreatePage> {
     });
     try {
       final accountService = ref.read(cloudSyncServiceProvider);
-      final workspaces = await accountService.signInAndListWorkspaces();
-      if (!mounted) return;
-      final workspace = await _chooseCloudWorkspace(workspaces);
-      if (workspace == null || !mounted) return;
-      final blobs = await accountService.listVaultBlobs(workspace);
+      if (await accountService.connection() == null) {
+        throw StateError('vaultWebDavNotConfigured'.tr());
+      }
+      final blobs = await accountService.listVaultBlobs();
       if (!mounted) return;
       final blob = await _chooseCloudVault(blobs);
       if (blob == null || !mounted) return;
-      final name = await _chooseVaultName(initialValue: workspace.name);
+      final name = await _chooseVaultName(
+        initialValue: 'settingsVaultCloudVault'.tr(
+          args: [blob.revision.toString()],
+        ),
+      );
       if (name == null || !mounted) return;
 
       final path = await ref
@@ -263,7 +266,7 @@ class _VaultCreatePageState extends ConsumerState<VaultCreatePage> {
           .createVaultPath(name: name);
       await ref.read(vaultLabelsProvider.notifier).rename(path, name);
       final sync = ref.read(cloudSyncServiceForVaultProvider(path));
-      await sync.enable(workspace, existingBlob: blob);
+      await sync.enable(existingBlob: blob);
       ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
       await ref.read(activeVaultFileProvider.notifier).select(path);
       if (mounted) Navigator.of(context).pop(false);
@@ -273,34 +276,6 @@ class _VaultCreatePageState extends ConsumerState<VaultCreatePage> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
-  Future<CloudWorkspace?> _chooseCloudWorkspace(
-    List<CloudWorkspace> workspaces,
-  ) => showModalBottomSheet<CloudWorkspace>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    useRootNavigator: true,
-    builder: (sheetContext) => SheetScaffold(
-      titleText: 'vaultCloudWorkspaceTitle'.tr(),
-      heightFactor: 0.6,
-      child: workspaces.isEmpty
-          ? ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [const Text('settingsCloudSyncNoWorkspaces').tr()],
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [
-                for (final workspace in workspaces)
-                  ListTile(
-                    title: Text(workspace.name),
-                    onTap: () => Navigator.of(sheetContext).pop(workspace),
-                  ),
-              ],
-            ),
-    ),
-  );
 
   Future<CloudVaultBlob?> _chooseCloudVault(List<CloudVaultBlob> blobs) =>
       showModalBottomSheet<CloudVaultBlob>(

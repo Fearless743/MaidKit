@@ -14,12 +14,9 @@ import 'package:styled_widget/styled_widget.dart';
 import 'package:system_fonts/system_fonts.dart';
 
 import 'package:maid_kit/data/local/app_database.dart';
-import 'package:maid_kit/agent/agent_personality.dart';
 import 'package:maid_kit/agent/local_mcp_server.dart';
 import 'package:maid_kit/agent/mcp_review_mode.dart';
 import 'package:maid_kit/agent/agent_run_policy.dart';
-import 'package:maid_kit/agent/billing_service.dart';
-import 'package:maid_kit/agent/personality_service.dart';
 import 'package:maid_kit/routing/app_router.gr.dart';
 import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
@@ -65,12 +62,9 @@ class SettingsPage extends ConsumerWidget {
     final activeVaultFile = ref.watch(activeVaultFileProvider);
     final vaultFiles = ref.watch(vaultFilesProvider);
     final vaultLabels = ref.watch(vaultLabelsProvider);
-    final cloudUser = ref.watch(cloudUserProvider);
+    final webdavConnection = ref.watch(webdavConnectionProvider);
     final runPolicyAsync = ref.watch(agentRunPolicyProvider);
     final agentPersonalityAsync = ref.watch(agentPersonalityProvider);
-    final agentPersonalityAgentAsync = ref.watch(agentPersonalityAgentProvider);
-    final personalityAgentsAsync = ref.watch(personalityAgentsProvider);
-    final billingPolicyAsync = ref.watch(personalityBillingPolicyProvider);
 
     final selectedAdapterOption = adapterOptions.firstWhere(
       (option) => option.id == selectedAdapter,
@@ -584,9 +578,9 @@ class SettingsPage extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
               _SettingsSection(
-                titleKey: 'settingsAccount',
+                titleKey: 'settingsWebDav',
                 padding: EdgeInsets.zero,
-                child: cloudUser.when(
+                child: webdavConnection.when(
                   loading: () => ListTile(
                     contentPadding: _sectionTilePadding,
                     shape: RoundedRectangleBorder(
@@ -597,9 +591,9 @@ class SettingsPage extends ConsumerWidget {
                     leading: const CircleAvatar(child: Icon(Symbols.person)),
                     title: const Text('…'),
                   ),
-                  error: (_, _) => _cloudLoginTile(context, ref),
-                  data: (user) => user == null
-                      ? _cloudLoginTile(context, ref)
+                  error: (_, _) => _webdavLoginTile(context, ref),
+                  data: (connection) => connection == null
+                      ? _webdavLoginTile(context, ref)
                       : Column(
                           children: [
                             ListTile(
@@ -609,225 +603,22 @@ class SettingsPage extends ConsumerWidget {
                                   _SettingsTilePosition.only,
                                 ),
                               ),
-                              leading: _CloudAvatar(user: user),
-                              title: Text(user.name),
-                              subtitle: user.handle.isEmpty
-                                  ? null
-                                  : Text(user.handle),
+                              leading: const CircleAvatar(
+                                child: Icon(Symbols.cloud_sync),
+                              ),
+                              title: Text(connection.name),
+                              subtitle: Text(connection.url),
                               trailing: IconButton(
                                 icon: const Icon(Symbols.logout),
-                                tooltip: 'settingsCloudSignOut'.tr(),
+                                tooltip: 'settingsWebDavDisconnect'.tr(),
                                 onPressed: () =>
-                                    _signOutFromCloud(context, ref),
+                                    _webdavDisconnect(context, ref),
                               ),
                             ),
                           ],
                         ),
                 ),
               ),
-              if (cloudUser.asData?.value != null) ...[
-                const SizedBox(height: 24),
-                _SettingsSection(
-                  titleKey: 'settingsSolarNetworkAi',
-                  padding: EdgeInsets.zero,
-                  child: billingPolicyAsync.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: LinearProgressIndicator(),
-                    ),
-                    error: (error, _) => Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'settingsBillingError'.tr(args: [error.toString()]),
-                      ),
-                    ),
-                    data: (policy) => policy == null
-                        ? const SizedBox.shrink()
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (policy.blacklisted)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    12,
-                                    16,
-                                    0,
-                                  ),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.errorContainer,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Symbols.warning_amber,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'settingsBillingBlacklisted'.tr(),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  16,
-                                  16,
-                                  0,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'settingsAgentPersonalityAgent',
-                                    ).tr(),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'settingsAgentPersonalityAgentHint',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyMedium,
-                                    ).tr(),
-                                    const SizedBox(height: 12),
-                                    agentPersonalityAgentAsync.when(
-                                      loading: () =>
-                                          const LinearProgressIndicator(),
-                                      error: (error, _) =>
-                                          Text(error.toString()),
-                                      data: (agentId) =>
-                                          _PersonalityAgentDropdown(
-                                            agentId: agentId,
-                                            agents:
-                                                personalityAgentsAsync
-                                                    .asData
-                                                    ?.value ??
-                                                const [],
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('settingsBillingUsage').tr(),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'settingsBillingUsageHint',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyMedium,
-                                    ).tr(),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              ListTile(
-                                contentPadding: _sectionTilePadding,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: _sectionTileBorderRadius(
-                                    _SettingsTilePosition.first,
-                                  ),
-                                ),
-                                title: const Text(
-                                  'settingsBillingHourlyGolds',
-                                ).tr(),
-                                trailing: _UsageTrailing(
-                                  usage: policy.hourlyGolds,
-                                ),
-                              ),
-                              ListTile(
-                                contentPadding: _sectionTilePadding,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: _sectionTileBorderRadius(
-                                    _SettingsTilePosition.middle,
-                                  ),
-                                ),
-                                title: const Text(
-                                  'settingsBillingHourlyBits',
-                                ).tr(),
-                                trailing: _UsageTrailing(
-                                  usage: policy.hourlyPoints,
-                                ),
-                              ),
-                              ListTile(
-                                contentPadding: _sectionTilePadding,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: _sectionTileBorderRadius(
-                                    _SettingsTilePosition.middle,
-                                  ),
-                                ),
-                                title: const Text(
-                                  'settingsBillingDailyGolds',
-                                ).tr(),
-                                trailing: _UsageTrailing(
-                                  usage: policy.dailyGolds,
-                                ),
-                              ),
-                              ListTile(
-                                contentPadding: _sectionTilePadding,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: _sectionTileBorderRadius(
-                                    _SettingsTilePosition.last,
-                                  ),
-                                ),
-                                title: const Text(
-                                  'settingsBillingDailyBits',
-                                ).tr(),
-                                trailing: _UsageTrailing(
-                                  usage: policy.dailyPoints,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  0,
-                                  16,
-                                  16,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'settingsBillingSettleHint'.tr(),
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    FilledButton.tonalIcon(
-                                      onPressed: () =>
-                                          _settleBilling(context, ref),
-                                      icon: const Icon(Symbols.payments),
-                                      label: const Text(
-                                        'settingsBillingSettleNow',
-                                      ).tr(),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
               _SettingsSection(
                 titleKey: 'settingsVaults',
@@ -967,26 +758,6 @@ class SettingsPage extends ConsumerWidget {
     await ref.read(agentPersonalityProvider.notifier).setPersonality(updated);
   }
 
-  Future<void> _settleBilling(BuildContext context, WidgetRef ref) async {
-    final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
-    if (accessToken == null) {
-      if (context.mounted) _showMessage('settingsCloudSignInRequired'.tr());
-      return;
-    }
-    try {
-      await const PersonalityBillingService().settle(
-        baseUrl: PersonalityBillingService.productionBaseUrl,
-        accessToken: accessToken,
-      );
-      ref.invalidate(personalityBillingPolicyProvider);
-      if (context.mounted) _showMessage('settingsBillingSettleSuccess'.tr());
-    } on PersonalityBillingException catch (error) {
-      if (context.mounted) _showMessage(error.message);
-    } catch (_) {
-      if (context.mounted) _showMessage('commonSomethingWentWrong'.tr());
-    }
-  }
-
   Future<void> _editTerminalTheme(
     BuildContext context,
     WidgetRef ref, {
@@ -1010,26 +781,35 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
-  Widget _cloudLoginTile(BuildContext context, WidgetRef ref) => ListTile(
+  Widget _webdavLoginTile(BuildContext context, WidgetRef ref) => ListTile(
     contentPadding: _sectionTilePadding,
     shape: RoundedRectangleBorder(
       borderRadius: _sectionTileBorderRadius(_SettingsTilePosition.only),
     ),
-    leading: const CircleAvatar(child: Icon(Symbols.person)),
-    title: const Text('settingsCloudSignIn').tr(),
-    subtitle: const Text('settingsCloudSignInHint').tr(),
+    leading: const CircleAvatar(child: Icon(Symbols.cloud_sync)),
+    title: const Text('settingsWebDavSetUp').tr(),
+    subtitle: const Text('settingsWebDavSetUpHint').tr(),
     trailing: FilledButton(
-      onPressed: () => _signInToCloud(context, ref),
-      child: const Text('settingsCloudSignInAction').tr(),
+      onPressed: () => _webdavSetUp(context, ref),
+      child: const Text('settingsWebDavSetUpAction').tr(),
     ),
-    onTap: () => _signInToCloud(context, ref),
+    onTap: () => _webdavSetUp(context, ref),
   );
 
-  Future<void> _signInToCloud(BuildContext context, WidgetRef ref) async {
+  Future<void> _webdavSetUp(BuildContext context, WidgetRef ref) async {
+    final connection = await showModalBottomSheet<WebDavConnection>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (_) => const _WebDavConnectionSheet(),
+    );
+    if (connection == null || !context.mounted) return;
     try {
-      await ref.read(cloudSyncServiceProvider).signIn();
-      ref.invalidate(cloudUserProvider);
-      ref.invalidate(cloudWorkspacesProvider);
+      final service = ref.read(cloudSyncServiceProvider);
+      await service.saveConnection(connection);
+      ref.invalidate(webdavConnectionProvider);
+      if (context.mounted) _showMessage('settingsWebDavConnected'.tr());
     } on CloudSyncException catch (error) {
       if (context.mounted) _showMessage(error.message);
     } catch (_) {
@@ -1037,19 +817,19 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
-  Future<void> _signOutFromCloud(BuildContext context, WidgetRef ref) async {
+  Future<void> _webdavDisconnect(BuildContext context, WidgetRef ref) async {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       useRootNavigator: true,
       builder: (sheetContext) => SheetScaffold(
-        titleText: 'settingsCloudSignOut'.tr(),
+        titleText: 'settingsWebDavDisconnect'.tr(),
         heightFactor: 0.32,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
-            Text('settingsCloudSignOutHint'.tr()),
+            Text('settingsWebDavDisconnectHint'.tr()),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -1061,7 +841,7 @@ class SettingsPage extends ConsumerWidget {
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () => Navigator.pop(sheetContext, true),
-                  child: const Text('settingsCloudSignOut').tr(),
+                  child: const Text('settingsWebDavDisconnect').tr(),
                 ),
               ],
             ),
@@ -1071,15 +851,9 @@ class SettingsPage extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(cloudSyncServiceProvider).signOut();
-      ref.invalidate(cloudUserProvider);
-      ref.invalidate(cloudWorkspacesProvider);
-      for (final vaultId in ref.read(vaultFilesProvider)) {
-        ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
-      }
-      if (context.mounted) _showMessage('settingsCloudSignOutSuccess'.tr());
-    } on CloudSyncException catch (error) {
-      if (context.mounted) _showMessage(error.message);
+      await ref.read(cloudSyncServiceProvider).clearConnection();
+      ref.invalidate(webdavConnectionProvider);
+      if (context.mounted) _showMessage('settingsWebDavDisconnected'.tr());
     } catch (_) {
       if (context.mounted) _showMessage('commonSomethingWentWrong'.tr());
     }
@@ -1398,14 +1172,14 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _showVaultOnboarding(BuildContext context, WidgetRef ref) async {
-    final choice = await showModalBottomSheet<_VaultOnboardingChoice>(
+    await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       useRootNavigator: true,
       builder: (sheetContext) => SheetScaffold(
         titleText: 'settingsVaultCreate'.tr(),
-        heightFactor: 0.46,
+        heightFactor: 0.4,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
@@ -1413,15 +1187,10 @@ class SettingsPage extends ConsumerWidget {
               leading: const Icon(Symbols.lock),
               title: const Text('settingsVaultCreateLocal').tr(),
               subtitle: const Text('settingsVaultCreateLocalHint').tr(),
-              onTap: () =>
-                  Navigator.of(sheetContext).pop(_VaultOnboardingChoice.local),
-            ),
-            ListTile(
-              leading: const Icon(Symbols.cloud_download),
-              title: const Text('settingsVaultDownloadCloud').tr(),
-              subtitle: const Text('settingsVaultDownloadCloudHint').tr(),
-              onTap: () =>
-                  Navigator.of(sheetContext).pop(_VaultOnboardingChoice.cloud),
+              onTap: () async {
+                Navigator.of(sheetContext).pop();
+                await _createLocalVault(context, ref);
+              },
             ),
             const SizedBox(height: 8),
             Row(
@@ -1437,109 +1206,7 @@ class SettingsPage extends ConsumerWidget {
         ),
       ),
     );
-    if (choice == _VaultOnboardingChoice.local && context.mounted) {
-      await _createLocalVault(context, ref);
-    } else if (choice == _VaultOnboardingChoice.cloud && context.mounted) {
-      await _downloadCloudVault(context, ref);
-    }
   }
-
-  Future<void> _downloadCloudVault(BuildContext context, WidgetRef ref) async {
-    try {
-      final accountService = ref.read(cloudSyncServiceProvider);
-      final workspaces = await accountService.signInAndListWorkspaces();
-      if (!context.mounted) return;
-      final workspace = await _chooseCloudWorkspace(context, workspaces);
-      if (workspace == null || !context.mounted) return;
-      final blobs = await accountService.listVaultBlobs(workspace);
-      if (!context.mounted) return;
-      final blob = await _chooseCloudVault(context, blobs);
-      if (blob == null || !context.mounted) return;
-      final name = await _chooseVaultNameSheet(
-        context,
-        initialValue: workspace.name,
-      );
-      if (name == null || !context.mounted) return;
-
-      final path = await ref
-          .read(vaultFileStorageProvider)
-          .createVaultPath(name: name);
-      final sync = ref.read(cloudSyncServiceForVaultProvider(path));
-      await sync.enable(workspace, existingBlob: blob);
-      ref.invalidate(cloudSyncConfigurationForVaultProvider(path));
-      await ref.read(activeVaultFileProvider.notifier).select(path);
-    } on CloudSyncException catch (error) {
-      if (context.mounted) _showMessage(error.message);
-    } catch (error) {
-      if (context.mounted) {
-        _showMessage('settingsBackupError'.tr(args: [error.toString()]));
-      }
-    }
-  }
-
-  Future<CloudWorkspace?> _chooseCloudWorkspace(
-    BuildContext context,
-    List<CloudWorkspace> workspaces,
-  ) => showModalBottomSheet<CloudWorkspace>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    useRootNavigator: true,
-    builder: (sheetContext) => SheetScaffold(
-      titleText: 'vaultCloudWorkspaceTitle'.tr(),
-      heightFactor: 0.6,
-      child: workspaces.isEmpty
-          ? ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [const Text('settingsCloudSyncNoWorkspaces').tr()],
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [
-                for (final workspace in workspaces)
-                  ListTile(
-                    title: Text(workspace.name),
-                    onTap: () => Navigator.of(sheetContext).pop(workspace),
-                  ),
-              ],
-            ),
-    ),
-  );
-
-  Future<CloudVaultBlob?> _chooseCloudVault(
-    BuildContext context,
-    List<CloudVaultBlob> blobs,
-  ) => showModalBottomSheet<CloudVaultBlob>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    useRootNavigator: true,
-    builder: (sheetContext) => SheetScaffold(
-      titleText: 'settingsVaultDownloadCloud'.tr(),
-      heightFactor: 0.6,
-      child: blobs.isEmpty
-          ? ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [const Text('settingsVaultNoCloudVaults').tr()],
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [
-                for (final blob in blobs)
-                  ListTile(
-                    leading: const Icon(Symbols.lock),
-                    title: Text(
-                      'settingsVaultCloudVault'.tr(
-                        args: [blob.revision.toString()],
-                      ),
-                    ),
-                    subtitle: Text(blob.id),
-                    onTap: () => Navigator.of(sheetContext).pop(blob),
-                  ),
-              ],
-            ),
-    ),
-  );
 
   Future<void> _syncVault(
     BuildContext context,
@@ -1589,81 +1256,11 @@ class SettingsPage extends ConsumerWidget {
 
 enum _ImportDestination { newVault, replaceCurrent }
 
-enum _VaultOnboardingChoice { local, cloud }
-
-enum _VaultTileAction { changeCloudBinding, rename, delete }
+enum _VaultTileAction { rename, delete }
 
 enum _SettingsTilePosition { only, first, middle, last }
 
 const _sectionTilePadding = EdgeInsets.symmetric(horizontal: 16);
-
-String _usageLabel(BillingUsage? usage) {
-  if (usage == null) return '—';
-  final max = usage.max;
-  return max == null
-      ? _formatUsage(usage.used)
-      : '${_formatUsage(usage.used)} / ${_formatUsage(max)}';
-}
-
-String _formatUsage(double value) {
-  if (value == value.roundToDouble()) return value.round().toString();
-  return value.toStringAsFixed(2);
-}
-
-class _UsageTrailing extends StatelessWidget {
-  const _UsageTrailing({required this.usage});
-
-  final BillingUsage? usage;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(_usageLabel(usage)),
-        const SizedBox(width: 6),
-        _UsageRing(usage: usage),
-      ],
-    );
-  }
-}
-
-class _UsageRing extends StatelessWidget {
-  const _UsageRing({required this.usage});
-
-  final BillingUsage? usage;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final used = usage?.used ?? 0;
-    final max = usage?.max;
-    final progress = (max == null || max <= 0)
-        ? 0.0
-        : (used / max).clamp(0.0, 1.0);
-    return SizedBox(
-      width: 28,
-      height: 28,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CircularProgressIndicator(
-            value: progress,
-            strokeWidth: 3,
-            strokeCap: StrokeCap.round,
-            backgroundColor: theme.colorScheme.surfaceContainerHighest,
-          ),
-          Center(
-            child: Text(
-              max == null ? '—' : '${(progress * 100).round()}%',
-              style: theme.textTheme.labelSmall,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 BorderRadius _sectionTileBorderRadius(_SettingsTilePosition position) {
   const radius = Radius.circular(12);
@@ -1916,17 +1513,114 @@ void _showMessage(String message) {
   showSnackBar(message);
 }
 
-class _CloudAvatar extends StatelessWidget {
-  const _CloudAvatar({required this.user});
-
-  final CloudUser user;
+/// Bottom sheet that collects the WebDAV server URL and credentials.
+class _WebDavConnectionSheet extends StatefulWidget {
+  const _WebDavConnectionSheet();
 
   @override
-  Widget build(BuildContext context) => CircleAvatar(
-    foregroundImage: user.avatarUrl == null
-        ? null
-        : NetworkImage(user.avatarUrl!),
-    child: Text(user.initials),
+  State<_WebDavConnectionSheet> createState() => _WebDavConnectionSheetState();
+}
+
+class _WebDavConnectionSheetState extends State<_WebDavConnectionSheet> {
+  final _name = TextEditingController();
+  final _url = TextEditingController();
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _url.dispose();
+    _username.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final url = _url.text.trim();
+    if (url.isEmpty) {
+      setState(() => _error = 'settingsWebDavUrlRequired'.tr());
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !uri.hasScheme ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      setState(() => _error = 'settingsWebDavUrlInvalid'.tr());
+      return;
+    }
+    Navigator.of(context).pop(
+      WebDavConnection(
+        url: url,
+        username: _username.text.trim(),
+        password: _password.text,
+        name: _name.text.trim().isEmpty ? 'WebDAV' : _name.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SheetScaffold(
+    titleText: 'settingsWebDav'.tr(),
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        Text('settingsWebDavSetUpHint'.tr()),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _name,
+          decoration: InputDecoration(labelText: 'settingsWebDavName'.tr()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _url,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(
+            labelText: 'settingsWebDavUrl'.tr(),
+            hintText: 'https://dav.example.com',
+          ),
+          onSubmitted: (_) => _submit(),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _username,
+          decoration: InputDecoration(labelText: 'settingsWebDavUsername'.tr()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _password,
+          obscureText: true,
+          decoration: InputDecoration(labelText: 'settingsWebDavPassword'.tr()),
+          onSubmitted: (_) => _submit(),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('commonCancel').tr(),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _submit,
+              child: const Text('commonSave').tr(),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }
 
@@ -1992,17 +1686,10 @@ class _VaultCloudBindingTile extends ConsumerWidget {
               children: [
                 PopupMenuButton<_VaultTileAction>(
                   onSelected: (action) {
-                    if (action == _VaultTileAction.changeCloudBinding) {
-                      _bindWorkspace(context, ref);
-                    }
                     if (action == _VaultTileAction.rename) onRename?.call();
                     if (action == _VaultTileAction.delete) onDelete?.call();
                   },
                   itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: _VaultTileAction.changeCloudBinding,
-                      child: Text('settingsVaultChangeCloudBinding'.tr()),
-                    ),
                     if (onRename != null)
                       PopupMenuItem(
                         value: _VaultTileAction.rename,
@@ -2051,100 +1738,6 @@ class _VaultCloudBindingTile extends ConsumerWidget {
             ).alignment(.centerLeft),
         ],
       ),
-    );
-  }
-
-  Future<void> _bindWorkspace(BuildContext context, WidgetRef ref) async {
-    try {
-      final service = ref.read(cloudSyncServiceForVaultProvider(vaultId));
-      final workspaces = await service.signInAndListWorkspaces();
-      if (!context.mounted) return;
-      final selected = ref
-          .read(cloudSyncConfigurationForVaultProvider(vaultId))
-          .asData
-          ?.value;
-      final workspace = await showModalBottomSheet<CloudWorkspace>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        useRootNavigator: true,
-        builder: (sheetContext) => SheetScaffold(
-          title: Text(title),
-          heightFactor: 0.6,
-          child: workspaces.isEmpty
-              ? ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [const Text('settingsCloudSyncNoWorkspaces').tr()],
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [
-                    for (final workspace in workspaces)
-                      ListTile(
-                        title: Text(workspace.name),
-                        trailing: selected?.workspaceId == workspace.id
-                            ? const Icon(Symbols.check)
-                            : null,
-                        onTap: () => Navigator.of(sheetContext).pop(workspace),
-                      ),
-                  ],
-                ),
-        ),
-      );
-      if (workspace == null) return;
-      await service.enable(workspace);
-      ref.invalidate(cloudSyncConfigurationForVaultProvider(vaultId));
-      ref.invalidate(cloudUserProvider);
-    } on CloudSyncException catch (error) {
-      if (context.mounted) showSnackBar(error.message);
-    } catch (_) {
-      if (context.mounted) showSnackBar('commonSomethingWentWrong'.tr());
-    }
-  }
-}
-
-class _PersonalityAgentDropdown extends ConsumerWidget {
-  const _PersonalityAgentDropdown({
-    required this.agentId,
-    required this.agents,
-  });
-
-  final String agentId;
-  final List<PersonalityAgent> agents;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final options = <String>{
-      agentId,
-      for (final agent in agents)
-        if (agent.id.isNotEmpty) agent.id,
-    };
-    final selected = options.contains(agentId) ? agentId : options.first;
-    return DropdownButtonFormField<String>(
-      initialValue: selected,
-      decoration: InputDecoration(
-        labelText: 'settingsAgentPersonalityAgentLabel'.tr(),
-        helperText: 'settingsAgentPersonalityAgentFieldHint'.tr(
-          args: [AgentPersonalityAgentPreferences.defaultAgentId],
-        ),
-      ),
-      items: [
-        for (final id in options)
-          DropdownMenuItem(
-            value: id,
-            child: Text(
-              agents
-                      .where((agent) => agent.id == id)
-                      .firstOrNull
-                      ?.displayName ??
-                  id,
-            ),
-          ),
-      ],
-      onChanged: (id) {
-        if (id == null) return;
-        ref.read(agentPersonalityAgentProvider.notifier).setAgentId(id);
-      },
     );
   }
 }

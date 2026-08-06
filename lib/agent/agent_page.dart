@@ -26,7 +26,6 @@ import 'package:maid_kit/agent/skill_repository.dart';
 import 'package:maid_kit/agent/skill_registry.dart';
 import 'agent_input_focus.dart';
 import 'conversation_store.dart';
-import 'personality_service.dart';
 import 'agent_repository.dart';
 import 'agent_run_policy.dart';
 import 'ssh_agent_service.dart';
@@ -95,7 +94,6 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   int? _conversationId;
   bool _ghost = false;
   bool _working = false;
-  bool _personalityProviderProvisioned = false;
   AgentCancelToken? _activeToken;
   // MCP tools and skills gathered when a turn starts. Reused for the
   // continuation after an approved action so the model always sees the same
@@ -860,42 +858,13 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   }
 
   Future<AgentConfiguration?> _configuration() async {
-    final configuration = await ref
+    return ref
         .read(agentRepositoryProvider)
         .configuration(_activeProviderId, _activeModelId);
-    if (configuration?.baseUrl != PersonalityService.productionBaseUrl) {
-      return configuration;
-    }
-    final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
-    if (accessToken == null) return configuration;
-    final fixedAgentId = await ref.read(agentPersonalityAgentProvider.future);
-    return AgentConfiguration(
-      providerId: configuration!.providerId,
-      providerName: configuration.providerName,
-      apiKey: accessToken,
-      baseUrl: configuration.baseUrl,
-      model: fixedAgentId,
-    );
-  }
-
-  Future<void> _ensurePersonalityProvider() async {
-    final accessToken = await ref.read(cloudSyncServiceProvider).accessToken();
-    if (accessToken == null || !mounted) return;
-    final fixedAgentId = await ref.read(agentPersonalityAgentProvider.future);
-    if (!mounted) return;
-    await ref
-        .read(agentRepositoryProvider)
-        .ensurePersonalityProvider(accessToken, models: [fixedAgentId]);
   }
 
   @override
   Widget build(BuildContext context) {
-    final cloudUser = ref.watch(cloudUserProvider).asData?.value;
-    if (cloudUser != null && !_personalityProviderProvisioned) {
-      _personalityProviderProvisioned = true;
-      unawaited(_ensurePersonalityProvider());
-    }
-    if (cloudUser == null) _personalityProviderProvisioned = false;
     final servers =
         ref.watch(serversProvider).asData?.value ?? const <Server>[];
     final mcpServers =
@@ -1011,8 +980,6 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     final selectedModel = selectedModelId == null
         ? null
         : models.where((model) => model.id == selectedModelId).firstOrNull;
-    final isManagedPersonalityProvider =
-        selectedProvider?.baseUrl == PersonalityService.productionBaseUrl;
     final modelEntries = <_DropdownEntry>[
       for (final model in models)
         _DropdownEntry(value: model.id, label: model.model),
@@ -1043,44 +1010,42 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             label: 'agentEditProvider'.tr(),
             icon: Symbols.edit,
             onSelected: () => _showProviderEditor(selectedProvider!),
-            enabled: selectedProvider != null && !isManagedPersonalityProvider,
+            enabled: selectedProvider != null,
           ),
           _DropdownAction(
             label: 'agentDeleteProviderAction'.tr(),
             icon: Symbols.delete_outline,
             onSelected: () => _deleteProvider(selectedProvider!),
-            enabled: selectedProvider != null && !isManagedPersonalityProvider,
+            enabled: selectedProvider != null,
           ),
         ],
       ),
-      if (!isManagedPersonalityProvider) ...[
-        const SizedBox(width: 8),
-        _AppBarDropdown(
-          label: 'agentModel'.tr(),
-          value: selectedModelId,
-          entries: modelEntries,
-          enabled: !_working && selectedProviderId != null,
-          compact: compact,
-          onChanged: (id) => setState(() {
-            _activeModelId = id;
-            _persistSelection();
-          }),
-          actions: [
-            _DropdownAction(
-              label: 'agentAddModel'.tr(),
-              icon: Symbols.add,
-              onSelected: () => _showAddModelSheet(selectedProvider!),
-              enabled: selectedProvider != null,
-            ),
-            _DropdownAction(
-              label: 'agentRemoveModel'.tr(),
-              icon: Symbols.delete_outline,
-              onSelected: () => _deleteModel(selectedModel!),
-              enabled: selectedModel != null,
-            ),
-          ],
-        ),
-      ],
+      const SizedBox(width: 8),
+      _AppBarDropdown(
+        label: 'agentModel'.tr(),
+        value: selectedModelId,
+        entries: modelEntries,
+        enabled: !_working && selectedProviderId != null,
+        compact: compact,
+        onChanged: (id) => setState(() {
+          _activeModelId = id;
+          _persistSelection();
+        }),
+        actions: [
+          _DropdownAction(
+            label: 'agentAddModel'.tr(),
+            icon: Symbols.add,
+            onSelected: () => _showAddModelSheet(selectedProvider!),
+            enabled: selectedProvider != null,
+          ),
+          _DropdownAction(
+            label: 'agentRemoveModel'.tr(),
+            icon: Symbols.delete_outline,
+            onSelected: () => _deleteModel(selectedModel!),
+            enabled: selectedModel != null,
+          ),
+        ],
+      ),
       const SizedBox(width: 8),
     ];
   }
