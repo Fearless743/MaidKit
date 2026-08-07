@@ -1031,6 +1031,8 @@
   "serversNotConnected": "Not connected",
   "serversReconnectAll": "Reconnect all",
   "serversRefreshStatistics": "Refresh statistics",
+  "serversSearchHint": "Search by name, host, or tag",
+  "serversClearSearch": "Clear search",
   "serversSaveError": "Could not save the server.",
   "serversSerialConsole": "Serial console",
   "serversStatsUnavailable": "Performance statistics are unavailable on this host.",

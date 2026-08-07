@@ -271,6 +271,19 @@ class _ServerGrid extends StatefulWidget {
 class _ServerGridState extends State<_ServerGrid> {
   var _isReconnecting = false;
   final _selectedTags = <String>{};
+  final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _reconnectAll(List<Server> servers) async {
     setState(() => _isReconnecting = true);
@@ -292,9 +305,14 @@ class _ServerGridState extends State<_ServerGrid> {
             .toSet()
             .toList()
           ..sort();
+    final query = _searchController.text.trim().toLowerCase();
     final visibleServers = widget.servers.where((server) {
       final tags = decodeStringList(server.tags).toSet();
-      return _selectedTags.every(tags.contains);
+      if (!_selectedTags.every(tags.contains)) return false;
+      if (query.isEmpty) return true;
+      return server.name.toLowerCase().contains(query) ||
+          server.host.toLowerCase().contains(query) ||
+          tags.any((tag) => tag.toLowerCase().contains(query));
     }).toList();
     final disconnectedServers = visibleServers.where((server) {
       final status = sessionsByServerId[server.id]?.status;
@@ -351,6 +369,26 @@ class _ServerGridState extends State<_ServerGrid> {
               ),
             ),
           ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'serversSearchHint'.tr(),
+              prefixIcon: const Icon(Symbols.search, size: 20),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'serversClearSearch'.tr(),
+                      onPressed: () => _searchController.clear(),
+                      icon: const Icon(Symbols.close, size: 18),
+                    ),
+              filled: false,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
         if (visibleServers.isEmpty)
           Expanded(
             child: CustomScrollView(
