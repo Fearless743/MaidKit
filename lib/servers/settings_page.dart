@@ -22,6 +22,7 @@ import 'package:maid_kit/shared/presentation/app_scaffold.dart';
 
 import 'database_backup_service.dart';
 import 'cloud_sync_service.dart';
+import 'server_models.dart';
 import 'server_providers.dart';
 import 'tailscale_settings_section.dart';
 import 'terminal_adapter_preferences.dart';
@@ -47,6 +48,7 @@ class SettingsPage extends ConsumerWidget {
     final terminalDarkTheme = ref.watch(terminalDarkThemeProvider);
     final connectOnStartup = ref.watch(connectOnStartupProvider);
     final hideServerAddresses = ref.watch(hideServerAddressesProvider);
+    final viewMode = ref.watch(serverViewModeProvider);
     final refreshInterval = ref.watch(serverMetricsRefreshIntervalProvider);
     final focusedRefreshInterval = ref.watch(
       focusedServerRefreshIntervalProvider,
@@ -139,6 +141,43 @@ class SettingsPage extends ConsumerWidget {
                           ),
                           const SizedBox(height: 16),
                           const _LanguageSwitcher(),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<ServerViewMode>(
+                            initialValue: viewMode,
+                            decoration: InputDecoration(
+                              labelText: 'settingsServerViewMode'.tr(),
+                              helperText: 'settingsServerViewModeHint'.tr(),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: ServerViewMode.grid,
+                                child: Row(
+                                  children: [
+                                    const Icon(Symbols.grid_view, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text('serversViewGrid'.tr()),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: ServerViewMode.list,
+                                child: Row(
+                                  children: [
+                                    const Icon(Symbols.view_list, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text('serversViewList'.tr()),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                ref
+                                    .read(serverViewModeProvider.notifier)
+                                    .setMode(value);
+                              }
+                            },
+                          ),
                         ],
                       ),
                     ),

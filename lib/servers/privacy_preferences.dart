@@ -7,16 +7,27 @@ abstract interface class PrivacySettings {
   bool get hideServerAddresses;
 
   Future<void> saveHideServerAddresses(bool value);
+
+  ServerViewMode get serverViewMode;
+
+  Future<void> saveServerViewMode(ServerViewMode value);
 }
 
 class PrivacyPreferences implements PrivacySettings {
-  PrivacyPreferences(this._preferences, this.hideServerAddresses);
+  PrivacyPreferences(
+    this._preferences,
+    this.hideServerAddresses,
+    this.serverViewMode,
+  );
 
   static const _hideServerAddressesKey = 'hide_server_addresses';
+  static const _serverViewModeKey = 'server_view_mode';
 
   final SharedPreferencesAsync _preferences;
   @override
   final bool hideServerAddresses;
+  @override
+  final ServerViewMode serverViewMode;
 
   static Future<PrivacyPreferences> load({
     SharedPreferencesAsync? preferences,
@@ -25,12 +36,18 @@ class PrivacyPreferences implements PrivacySettings {
     return PrivacyPreferences(
       store,
       await store.getBool(_hideServerAddressesKey) ?? false,
+      ServerViewMode.values.asNameMap()[await store.getString(_serverViewModeKey)] ??
+          ServerViewMode.grid,
     );
   }
 
   @override
   Future<void> saveHideServerAddresses(bool value) =>
       _preferences.setBool(_hideServerAddressesKey, value);
+
+  @override
+  Future<void> saveServerViewMode(ServerViewMode value) =>
+      _preferences.setString(_serverViewModeKey, value.name);
 }
 
 class InMemoryPrivacySettings implements PrivacySettings {
@@ -40,8 +57,16 @@ class InMemoryPrivacySettings implements PrivacySettings {
   bool hideServerAddresses;
 
   @override
+  ServerViewMode serverViewMode = ServerViewMode.grid;
+
+  @override
   Future<void> saveHideServerAddresses(bool value) async {
     hideServerAddresses = value;
+  }
+
+  @override
+  Future<void> saveServerViewMode(ServerViewMode value) async {
+    serverViewMode = value;
   }
 }
 

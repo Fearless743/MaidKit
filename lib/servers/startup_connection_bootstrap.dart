@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'server_models.dart';
 import 'server_providers.dart';
 
 class StartupConnectionBootstrap extends ConsumerStatefulWidget {
@@ -22,7 +23,10 @@ class _StartupConnectionBootstrapState
   @override
   Widget build(BuildContext context) {
     final enabled = ref.watch(connectOnStartupProvider);
-    if (enabled && !_started) {
+    // Skip auto-connecting when the dashboard is in list view: the list is a
+    // static catalog and does not show live connection status.
+    final isList = ref.watch(serverViewModeProvider) == ServerViewMode.list;
+    if (enabled && !isList && !_started) {
       _started = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_connectSavedServers());

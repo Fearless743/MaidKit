@@ -528,6 +528,25 @@ class HideServerAddressesNotifier extends Notifier<bool> {
   }
 }
 
+class ServerViewModeNotifier extends Notifier<ServerViewMode> {
+  @override
+  ServerViewMode build() => ref.read(privacySettingsProvider).serverViewMode;
+
+  Future<void> setMode(ServerViewMode value) async {
+    await ref.read(privacySettingsProvider).saveServerViewMode(value);
+    state = value;
+  }
+
+  /// True while in list mode. The dashboard list is a static catalog — it
+  /// does not auto-connect servers or show live connection status.
+  bool get isListView =>
+      ref.read(privacySettingsProvider).serverViewMode == ServerViewMode.list;
+}
+
+final serverViewModeProvider = NotifierProvider<ServerViewModeNotifier, ServerViewMode>(
+  ServerViewModeNotifier.new,
+);
+
 final serverMetricsRefreshIntervalProvider =
     NotifierProvider<ServerMetricsRefreshIntervalNotifier, Duration>(
       ServerMetricsRefreshIntervalNotifier.new,

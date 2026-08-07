@@ -370,3 +370,6 @@ class HostKeyPrompt {
   final String fingerprint;
   final bool replacesExisting;
 }
+
+/// How the servers dashboard renders its server collection.
+enum ServerViewMode { grid, list }

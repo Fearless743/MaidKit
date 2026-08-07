@@ -322,26 +322,39 @@ class _ServerGridState extends State<_ServerGrid> {
 
     return Column(
       children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 240),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) => SizeTransition(
-            sizeFactor: animation,
-            alignment: Alignment.topCenter,
-            child: FadeTransition(opacity: animation, child: child),
-          ),
-          child: disconnectedServers.length > 1
-              ? Padding(
-                  key: const ValueKey('servers-reconnect-all'),
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-                  child: _ReconnectAllCard(
-                    count: disconnectedServers.length,
-                    isReconnecting: _isReconnecting,
-                    onPressed: () => _reconnectAll(disconnectedServers),
-                  ),
-                )
-              : const SizedBox.shrink(key: ValueKey('servers-reconnect-none')),
+        Consumer(
+          builder: (context, ref, _) {
+            final viewMode = ref.watch(serverViewModeProvider);
+            return AnimatedSwitcher(
+              duration: const Duration(milliseconds: 240),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => SizeTransition(
+                sizeFactor: animation,
+                alignment: Alignment.topCenter,
+                child: FadeTransition(opacity: animation, child: child),
+              ),
+              // The grid mode keeps the banner pinned above the cards; the
+              // list mode renders it as the trailing row instead (see below).
+              child: viewMode == ServerViewMode.list
+                  ? const SizedBox.shrink(
+                      key: ValueKey('servers-reconnect-list'),
+                    )
+                  : disconnectedServers.length > 1
+                  ? Padding(
+                      key: const ValueKey('servers-reconnect-all'),
+                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                      child: _ReconnectAllCard(
+                        count: disconnectedServers.length,
+                        isReconnecting: _isReconnecting,
+                        onPressed: () => _reconnectAll(disconnectedServers),
+                      ),
+                    )
+                  : const SizedBox.shrink(
+                      key: ValueKey('servers-reconnect-none'),
+                    ),
+            );
+          },
         ),
         if (allTags.isNotEmpty)
           Padding(
@@ -402,52 +415,102 @@ class _ServerGridState extends State<_ServerGrid> {
           )
         else
           Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.all(24),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 380,
-                          mainAxisExtent: 320,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                        ),
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final server = visibleServers[index];
-                      final session = sessionsByServerId[server.id];
-                      return ContextMenuWidget(
-                        menuProvider: (_) => Menu(
-                          children: [
-                            MenuAction(
-                              title: 'serversEditServer'.tr(),
-                              callback: () => widget.onEdit(server),
-                            ),
-                            MenuSeparator(),
-                            MenuAction(
-                              title: 'serversDeleteServer'.tr(),
-                              attributes: const MenuActionAttributes(
-                                destructive: true,
+            child: Consumer(
+              builder: (context, ref, _) {
+                final viewMode = ref.watch(serverViewModeProvider);
+                return CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      // Reserve room at the bottom so the extended FAB does not
+                      // cover the last server rows in the compact list mode.
+                      padding: viewMode == ServerViewMode.list
+                          ? const EdgeInsets.fromLTRB(24, 24, 24, 88)
+                          : const EdgeInsets.all(24),
+                      sliver: switch (viewMode) {
+                        ServerViewMode.grid => SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 380,
+                                mainAxisExtent: 320,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
                               ),
-                              callback: () => widget.onDelete(server),
-                            ),
-                          ],
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final server = visibleServers[index];
+                            final session = sessionsByServerId[server.id];
+                            return ContextMenuWidget(
+                              menuProvider: (_) => Menu(
+                                children: [
+                                  MenuAction(
+                                    title: 'serversEditServer'.tr(),
+                                    callback: () => widget.onEdit(server),
+                                  ),
+                                  MenuSeparator(),
+                                  MenuAction(
+                                    title: 'serversDeleteServer'.tr(),
+                                    attributes: const MenuActionAttributes(
+                                      destructive: true,
+                                    ),
+                                    callback: () => widget.onDelete(server),
+                                  ),
+                                ],
+                              ),
+                              child: _ServerCard(
+                                server: server,
+                                session: session,
+                                onConnect: () => widget.onConnect(server),
+                                onOpenDetail: () => widget.onOpenDetail(server),
+                                onOpenTerminal: () =>
+                                    widget.onOpenTerminal(server),
+                                onOpenFiles: () => widget.onOpenFiles(server),
+                                onRefresh: () => widget.onRefresh(server),
+                              ),
+                            );
+                          }, childCount: visibleServers.length),
                         ),
-                        child: _ServerCard(
-                          server: server,
-                          session: session,
-                          onConnect: () => widget.onConnect(server),
-                          onOpenDetail: () => widget.onOpenDetail(server),
-                          onOpenTerminal: () => widget.onOpenTerminal(server),
-                          onOpenFiles: () => widget.onOpenFiles(server),
-                          onRefresh: () => widget.onRefresh(server),
+                        ServerViewMode.list => SliverList.separated(
+                          itemCount: visibleServers.length,
+                          itemBuilder: (context, index) {
+                            final server = visibleServers[index];
+                            final session = sessionsByServerId[server.id];
+                            return ContextMenuWidget(
+                              menuProvider: (_) => Menu(
+                                children: [
+                                  MenuAction(
+                                    title: 'serversEditServer'.tr(),
+                                    callback: () => widget.onEdit(server),
+                                  ),
+                                  MenuSeparator(),
+                                  MenuAction(
+                                    title: 'serversDeleteServer'.tr(),
+                                    attributes: const MenuActionAttributes(
+                                      destructive: true,
+                                    ),
+                                    callback: () => widget.onDelete(server),
+                                  ),
+                                ],
+                              ),
+                              child: _ServerListTile(
+                                server: server,
+                                session: session,
+                                onOpenDetail: () => widget.onOpenDetail(server),
+                                onOpenTerminal: () =>
+                                    widget.onOpenTerminal(server),
+                                onOpenFiles: () => widget.onOpenFiles(server),
+                              ),
+                            );
+                          },
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 4),
                         ),
-                      );
-                    }, childCount: visibleServers.length),
-                  ),
-                ),
-              ],
+                      },
+                    ),
+                  ],
+                );
+              },
             ),
           ),
       ],
@@ -700,6 +763,175 @@ class _ServerCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Compact list row rendered when the servers dashboard is in list view mode.
+class _ServerListTile extends ConsumerWidget {
+  const _ServerListTile({
+    required this.server,
+    required this.session,
+    required this.onOpenDetail,
+    required this.onOpenTerminal,
+    required this.onOpenFiles,
+  });
+
+  final Server server;
+  final SshSessionInfo? session;
+  final VoidCallback onOpenDetail;
+  final VoidCallback onOpenTerminal;
+  final VoidCallback onOpenFiles;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final hideAddresses = ref.watch(hideServerAddressesProvider);
+    final isSerial = server.connectionType == ServerConnectionType.serial.name;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenDetail,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            server.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.titleSmall?.copyWith(
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        if (!isSerial && isTailnetAddress(server.host)) ...[
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            message: 'tailscaleViaTailnet'.tr(),
+                            child: Icon(
+                              Symbols.lan,
+                              size: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      serverAddressLabel(server, hideAddresses: hideAddresses),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_serverTagsList.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      for (final tag in _serverTagsList.take(2))
+                        _ServerListTag(label: tag),
+                      if (_serverTagsList.length > 2)
+                        _ServerListTag(label: '+${_serverTagsList.length - 2}'),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(width: 12),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ServerListIconAction(
+                    tooltip: 'sessionsNewTerminal'.tr(),
+                    icon: Symbols.terminal,
+                    onPressed: onOpenTerminal,
+                  ),
+                  const SizedBox(width: 4),
+                  _ServerListIconAction(
+                    tooltip: 'sessionsOpenFileManagement'.tr(),
+                    icon: Symbols.folder,
+                    onPressed: isSerial ? null : onOpenFiles,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> get _serverTagsList => decodeStringList(server.tags);
+}
+
+/// Small tag pill rendered inside the compact list row.
+class _ServerListTag extends StatelessWidget {
+  const _ServerListTag({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact icon action button used in the list row's trailing actions.
+class _ServerListIconAction extends StatelessWidget {
+  const _ServerListIconAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
     );
   }
 }
